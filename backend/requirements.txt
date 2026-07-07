@@ -10,3 +10,4 @@ pymupdf
 supabase
 python-multipart
 python-dotenv
+pywin32

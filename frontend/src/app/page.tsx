@@ -17,6 +17,7 @@ import {
   Search,
   Type
 } from "lucide-react";
+import JSZip from "jszip";
 
 // ─── Certificate Font Catalogue ─────────────────────────────────────────────
 interface FontOption {
@@ -185,7 +186,8 @@ interface Point {
 interface CertRow {
   name: string;
   college: string;
-  batch: string;
+  year: string;
+  month?: string;
   department?: string;
   cert_code?: string;
   pdf_url?: string;
@@ -221,11 +223,10 @@ const FIELD_CFG: Record<string, { border: string; bg: string; text: string; labe
 };
 
 export default function AdminDashboard() {
-  // App state
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  // App state (1 = upload assets, 2 = generation run)
+  const [step, setStep] = useState<1 | 2>(1);
   const [backendUrl, setBackendUrl] = useState<string>(() => {
     if (typeof window === "undefined") return "http://localhost:5000";
-
     return localStorage.getItem("cert_generator_backend_url") || "http://localhost:5000";
   });
   
@@ -233,128 +234,49 @@ export default function AdminDashboard() {
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [excelFile, setExcelFile] = useState<File | null>(null);
   
-  // Loaded Template details
+  // Loaded Template ID
   const [templateId, setTemplateId] = useState<string>("");
-  const [previewUrl, setPreviewUrl] = useState<string>("");
-  const [pageWidthPt, setPageWidthPt] = useState<number>(0);
-  const [pageHeightPt, setPageHeightPt] = useState<number>(0);
-  
-  // Layout field boxes — stored as left-edge x, top-edge y, width w, height h (all 0–1 fractions)
-  const [nameBox,       setNameBox]       = useState<FieldBox>({ x: 0.18, y: 0.41, w: 0.44, h: 0.06 });
-  const [collegeBox,    setCollegeBox]    = useState<FieldBox>({ x: 0.12, y: 0.51, w: 0.55, h: 0.05 });
-  const [yearBox,       setYearBox]       = useState<FieldBox>({ x: 0.40, y: 0.61, w: 0.20, h: 0.05 });
-  const [qrPos, setQrPos] = useState<Point>({ x: 0.75, y: 0.75 });
-  const [qrSize, setQrSize] = useState<number>(0.12);
-  const [zoomScale, setZoomScale] = useState<number>(1.0);
-
-  // Extra field boxes
-  const [departmentBox, setDepartmentBox] = useState<FieldBox>({ x: 0.25, y: 0.46, w: 0.36, h: 0.05 });
-  const [roleBox,       setRoleBox]       = useState<FieldBox>({ x: 0.32, y: 0.56, w: 0.24, h: 0.05 });
-  const [projectBox,    setProjectBox]    = useState<FieldBox>({ x: 0.20, y: 0.68, w: 0.40, h: 0.05 });
-  const [monthBox,      setMonthBox]      = useState<FieldBox>({ x: 0.18, y: 0.74, w: 0.18, h: 0.05 });
-  const [dateBox,       setDateBox]       = useState<FieldBox>({ x: 0.55, y: 0.74, w: 0.22, h: 0.05 });
-  const [detectedFields, setDetectedFields] = useState<string[]>(["name", "college", "year"]);
-
-  // Helper: get / set any FieldBox by field name
-  const getBox = useCallback((field: string): FieldBox => {
-    switch (field) {
-      case "name":       return nameBox;
-      case "college":    return collegeBox;
-      case "year":       return yearBox;
-      case "department": return departmentBox;
-      case "role":       return roleBox;
-      case "project":    return projectBox;
-      case "month":      return monthBox;
-      case "date":       return dateBox;
-      default:           return { x: 0.3, y: 0.5, w: 0.3, h: 0.05 };
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nameBox, collegeBox, yearBox, departmentBox, roleBox, projectBox, monthBox, dateBox]);
-
-  const setBox = useCallback((field: string, box: FieldBox) => {
-    switch (field) {
-      case "name":       setNameBox(box);       break;
-      case "college":    setCollegeBox(box);    break;
-      case "year":       setYearBox(box);       break;
-      case "department": setDepartmentBox(box); break;
-      case "role":       setRoleBox(box);       break;
-      case "project":    setProjectBox(box);    break;
-      case "month":      setMonthBox(box);      break;
-      case "date":       setDateBox(box);       break;
-    }
-  }, []);
-
-  // Canvas pixel dimensions for font-size calculation
-  const [canvasDims, setCanvasDims] = useState({ w: 800, h: 600 });
-
-  // Auto-calculate preview font size to fill text box
-  const calcFontSize = useCallback((text: string, box: FieldBox): number => {
-    const boxW = box.w * canvasDims.w;
-    const boxH = box.h * canvasDims.h;
-    const fromH = boxH * 0.58;
-    const fromW = (boxW * 0.82) / Math.max(1, text.length * 0.58);
-    return Math.max(7, Math.min(fromH, fromW));
-  }, [canvasDims]);
-
-
-  // Font settings — one font per field
-  const [fontSettings, setFontSettings] = useState<Record<string, string>>({
-    name: "Playfair Display",
-    college: "Open Sans",
-    year: "Open Sans",
-    department: "Open Sans",
-    role: "Open Sans",
-    project: "Open Sans",
-    month: "Open Sans",
-    date: "Open Sans",
-  });
-
-  const setFieldFont = useCallback((field: string, font: string) => {
-    setFontSettings(prev => ({ ...prev, [field]: font }));
-  }, []);
-
-  // Dragging state: which field + operation (move box or resize box)
-  const [dragging, setDragging] = useState<{ field: string; op: "move" | "resize" | "qr" | "qr-resize" } | null>(null);
-  const [dragOffset, setDragOffset] = useState<{ ox: number; oy: number }>({ ox: 0, oy: 0 });
   
   // Generator states
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [isSavingLayout, setIsSavingLayout] = useState<boolean>(false);
   const [excelDownloadUrl, setExcelDownloadUrl] = useState<string>("");
   const [generationResults, setGenerationResults] = useState<CertRow[]>([]);
   const [genStats, setGenStats] = useState({ success: 0, failed: 0, total: 0 });
   const [errorMsg, setErrorMsg] = useState<string>("");
+  const [isZipping, setIsZipping] = useState<boolean>(false);
+  const [zipProgress, setZipProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
 
-  // Refs
-  const canvasRef = useRef<HTMLDivElement>(null);
-
-  // Track canvas pixel size whenever preview loads or window resizes
-  useEffect(() => {
-    const update = () => {
-      if (canvasRef.current) {
-        setCanvasDims({ w: canvasRef.current.clientWidth, h: canvasRef.current.clientHeight });
+  const handleDownloadAllZip = async () => {
+    const rows = generationResults.filter((r) => r.pdf_url && r.status === "active");
+    if (rows.length === 0) return;
+    setIsZipping(true);
+    setZipProgress({ done: 0, total: rows.length });
+    try {
+      const zip = new JSZip();
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        try {
+          const res = await fetch(row.pdf_url!);
+          const blob = await res.arrayBuffer();
+          const safeName = (row.name || `certificate_${i + 1}`).replace(/[^a-zA-Z0-9_\- ]/g, "_");
+          zip.file(`${safeName}.pdf`, blob);
+        } catch {
+          // skip failed fetches silently
+        }
+        setZipProgress({ done: i + 1, total: rows.length });
       }
-    };
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previewUrl, zoomScale]);
-
-  // ── Load Google Fonts for browser preview ──────────────────────────────────
-  useEffect(() => {
-    const googleFonts = CERTIFICATE_FONTS.filter(f => f.google);
-    const families = googleFonts
-      .map(f => `family=${f.value.replace(/ /g, '+')}:wght@400;700`)
-      .join("&");
-    const existing = document.getElementById("cert-google-fonts");
-    if (existing) return;
-    const link = document.createElement("link");
-    link.id = "cert-google-fonts";
-    link.rel = "stylesheet";
-    link.href = `https://fonts.googleapis.com/css2?${families}&display=swap`;
-    document.head.appendChild(link);
-  }, []);
+      const content = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `certificates_${new Date().toISOString().slice(0, 10)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setIsZipping(false);
+      setZipProgress({ done: 0, total: 0 });
+    }
+  };
 
   // Hero Section Fading Slideshow
   const heroImages = ["/hero-1.jpg", "/hero-2.jpg", "/hero-3.jpg", "/hero-4.jpg"];
@@ -376,7 +298,6 @@ export default function AdminDashboard() {
     if (error instanceof Error) {
       return error.message;
     }
-
     return String(error);
   };
 
@@ -388,34 +309,27 @@ export default function AdminDashboard() {
 
   const PROCESS_STEPS = {
     1: [
-      "Uploading PDF template document...",
-      "Extracting document canvas dimensions...",
-      "Rendering high-resolution page preview...",
-      "Caching base template layers..."
+      "Uploading template document...",
+      "Extracting template properties...",
+      "Generating unique template reference..."
     ],
     2: [
-      "Verifying layout coordinate metrics...",
-      "Normalizing overlay anchor positions...",
-      "Saving layout schema configurations...",
-      "Finalizing visual alignment presets..."
-    ],
-    3: [
       "Reading uploaded Excel record registry...",
       "Validating student name and college listings...",
-      "Generating secure cryptographic registry check-codes...",
+      "Searching for placeholders (e.g. <<NAME>>, <<QR>>)...",
       "Stitching text layers and compiling PDF certificates...",
       "Compiling final spreadsheet download sheet..."
     ]
   };
 
-  const isProcessing = isUploadingTemplate || isSavingLayout || isGenerating;
-  const processingStage = isUploadingTemplate ? 1 : isSavingLayout ? 2 : isGenerating ? 3 : 0;
+  const isProcessing = isUploadingTemplate || isGenerating;
+  const processingStage = isUploadingTemplate ? 1 : isGenerating ? 2 : 0;
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isProcessing) {
       setActiveSubStep(0);
-      const stepsCount = processingStage === 1 ? 4 : processingStage === 2 ? 4 : 5;
+      const stepsCount = processingStage === 1 ? 3 : 5;
       interval = setInterval(() => {
         setActiveSubStep((prev) => (prev < stepsCount - 1 ? prev + 1 : prev));
       }, 1200);
@@ -427,7 +341,6 @@ export default function AdminDashboard() {
     };
   }, [isProcessing, processingStage]);
 
-  
   const handleTemplateUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!templateFile) return;
@@ -454,131 +367,22 @@ export default function AdminDashboard() {
 
       const data = await response.json();
       setTemplateId(data.template_id);
-      setPreviewUrl(data.preview_image_url);
-      setPageWidthPt(data.page_width_pt);
-      setPageHeightPt(data.page_height_pt);
-      if (data.detected_fields) {
-        setDetectedFields(data.detected_fields);
-      } else {
-        setDetectedFields(["name", "college", "year", "department", "role", "project", "month", "date"]);
-      }
       
       // Auto-advance to Step 2
       setStep(2);
     } catch (err: unknown) {
       console.error(err);
-        // Provide clearer guidance when network error occurs
-        if (err instanceof TypeError) {
-          setErrorMsg("Network error: failed to reach backend. Check that the backend is running and the Backend URL is correct (e.g. http://localhost:5000).");
-        } else {
-          setErrorMsg(getErrorMessage(err) || "An error occurred connecting to the backend server. Please verify the URL and backend status.");
-        }
+      if (err instanceof TypeError) {
+        setErrorMsg("Network error: failed to reach backend. Check that the backend is running and the Backend URL is correct.");
+      } else {
+        setErrorMsg(getErrorMessage(err) || "An error occurred connecting to the backend server.");
+      }
     } finally {
       setIsUploadingTemplate(false);
     }
   };
 
-  // Step 2: Field-box drag / resize
-  const handleBoxDown = (
-    e: React.PointerEvent,
-    field: string,
-    op: "move" | "resize"
-  ) => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (!canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) / rect.width;
-    const my = (e.clientY - rect.top) / rect.height;
-    const box = getBox(field);
-    // For move: record offset from pointer to box top-left so it follows cleanly
-    setDragOffset({ ox: mx - box.x, oy: my - box.y });
-    setDragging({ field, op });
-  };
-
-  // QR legacy handlers
-  const handleQrDown = (e: React.PointerEvent, op: "qr" | "qr-resize") => {
-    e.stopPropagation();
-    e.preventDefault();
-    setDragging({ field: "_qr", op });
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragging || !canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const mx = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const my = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-
-    if (dragging.op === "move") {
-      const box = getBox(dragging.field);
-      setBox(dragging.field, {
-        ...box,
-        x: Math.max(0, Math.min(1 - box.w, mx - dragOffset.ox)),
-        y: Math.max(0, Math.min(1 - box.h, my - dragOffset.oy)),
-      });
-    } else if (dragging.op === "resize") {
-      const box = getBox(dragging.field);
-      // pointer IS the new bottom-right corner
-      setBox(dragging.field, {
-        ...box,
-        w: Math.max(0.04, Math.min(1 - box.x, mx - box.x)),
-        h: Math.max(0.02, Math.min(1 - box.y, my - box.y)),
-      });
-    } else if (dragging.op === "qr") {
-      const maxL = 1 - qrSize;
-      const maxT = 1 - qrSize;
-      setQrPos({ x: Math.max(0, Math.min(maxL, mx)), y: Math.max(0, Math.min(maxT, my)) });
-    } else if (dragging.op === "qr-resize") {
-      const newSize = Math.max(0.04, Math.min(0.4, mx - qrPos.x));
-      setQrSize(newSize);
-    }
-  };
-
-  const handlePointerUp = () => { setDragging(null); };
-
-  const handleSaveLayout = async () => {
-    if (!templateId) return;
-    setIsSavingLayout(true);
-    setErrorMsg("");
-
-    // Convert FieldBox (left/top + w/h) to center-based Position for backend
-    // We also pass w and h so backend can auto-size the font
-    const boxToPos = (b: FieldBox) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2, w: b.w, h: b.h });
-
-    try {
-      const response = await fetch(`${backendUrl}/api/template/layout`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          template_id: templateId,
-          name_pos:       boxToPos(nameBox),
-          college_pos:    boxToPos(collegeBox),
-          year_pos:       boxToPos(yearBox),
-          qr_pos:         qrPos,
-          qr_size:        qrSize,
-          department_pos: boxToPos(departmentBox),
-          role_pos:       boxToPos(roleBox),
-          project_pos:    boxToPos(projectBox),
-          month_pos:      boxToPos(monthBox),
-          date_pos:       boxToPos(dateBox),
-          font_settings:  fontSettings,
-        }),
-      });
-
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.detail || "Failed to save layout positions");
-      }
-      setStep(3);
-    } catch (err: unknown) {
-      console.error(err);
-      setErrorMsg(getErrorMessage(err) || "Failed to save layout. Please try again.");
-    } finally {
-      setIsSavingLayout(false);
-    }
-  };
-
-  // Step 3: Trigger Generation
+  // Step 2: Trigger Generation
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!excelFile || !templateId) return;
@@ -626,12 +430,10 @@ export default function AdminDashboard() {
     setTemplateFile(null);
     setExcelFile(null);
     setTemplateId("");
-    setPreviewUrl("");
     setExcelDownloadUrl("");
     setGenerationResults([]);
     setStep(1);
     setErrorMsg("");
-    setDetectedFields(["name", "college", "year"]);
   };
 
   return (
@@ -699,7 +501,7 @@ export default function AdminDashboard() {
             {/* Step badge */}
             <div className="rounded-2xl border border-[#12a150]/20 bg-[#12a150]/10 px-4 py-2 text-center shrink-0">
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#12a150] block">Active Stage</span>
-              <span className="text-xl font-bold font-mono text-[#12a150] mt-0.5 block">0{step} / 03</span>
+              <span className="text-xl font-bold font-mono text-[#12a150] mt-0.5 block">0{step} / 02</span>
             </div>
             
             {/* Note text */}
@@ -707,13 +509,11 @@ export default function AdminDashboard() {
               <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
                 <span className="inline-block w-2 h-2 rounded-full bg-[#12a150] animate-pulse" />
                 {step === 1 && "Upload Base Certificate Files"}
-                {step === 2 && "Configure Target Coordinate Overlay"}
-                {step === 3 && "Compile Batch Certificate Run"}
+                {step === 2 && "Compile Batch Certificate Run"}
               </h3>
               <p className="mt-1.5 text-xs text-stone-600 leading-relaxed max-w-3xl">
-                {step === 1 && "Note: Select the Canva-exported base template PDF and the intern details excel sheet (.xlsx). The document processor will automatically prepare canvas templates and calculate coordinates dimensions."}
-                {step === 2 && "Note: Drag the circles to define name, college, and batch position anchors relative to document resolution. Use the bottom-right corner handles to scale the QR verification box layout."}
-                {step === 3 && "Note: Verify intern record mappings and run the generator. The platform will inject verification anchors, map Supabase registry database, build QR verification codes, and pack final PDFs."}
+                {step === 1 && "Note: Select the base certificate template (PDF/PPTX) and the intern details Excel sheet (.xlsx). The system will automatically convert, parse, and prepare your files."}
+                {step === 2 && "Note: Verify intern record mappings and run the generator. The platform will automatically locate placeholders (e.g. <<NAME>>, <<COLLEGE>>), redact them, insert details, generate QRs, and compile certificates."}
               </p>
             </div>
           </div>
@@ -740,10 +540,10 @@ export default function AdminDashboard() {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
-                {/* PDF Certificate Template Upload Card */}
+                {/* PPTX Certificate Template Upload Card */}
                 <div className="relative group">
                   <label className="block text-sm font-bold text-zinc-400 mb-2">
-                    1. Canva-exported PDF Template
+                    1. Certificate Template (PPTX)
                   </label>
                   <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[220px] ${
                     templateFile 
@@ -752,7 +552,7 @@ export default function AdminDashboard() {
                   }`}>
                     <input 
                       type="file" 
-                      accept="application/pdf"
+                      accept="application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
                       onChange={(e) => setTemplateFile(e.target.files?.[0] || null)}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
@@ -762,7 +562,9 @@ export default function AdminDashboard() {
                     {templateFile ? (
                       <div className="text-center">
                         <p className="text-sm font-bold text-white">{templateFile.name}</p>
-                        <p className="text-xs text-zinc-400 mt-1">{(templateFile.size / 1024 / 1024).toFixed(2)} MB • PDF Template</p>
+                        <p className="text-xs text-zinc-400 mt-1">
+                          {(templateFile.size / 1024 / 1024).toFixed(2)} MB • PPTX Presentation
+                        </p>
                         <button 
                           type="button" 
                           onClick={(e) => { e.stopPropagation(); setTemplateFile(null); }}
@@ -773,8 +575,8 @@ export default function AdminDashboard() {
                       </div>
                     ) : (
                       <div className="text-center">
-                        <p className="text-sm font-semibold text-zinc-200">Drag & drop your PDF template here</p>
-                        <p className="text-xs text-zinc-500 mt-1">Supports PDF up to 15MB</p>
+                        <p className="text-sm font-semibold text-zinc-200">Drag & drop your PPTX template here</p>
+                        <p className="text-xs text-zinc-500 mt-1">Supports PPTX up to 15MB</p>
                       </div>
                     )}
                   </div>
@@ -802,7 +604,7 @@ export default function AdminDashboard() {
                     {excelFile ? (
                       <div className="text-center">
                         <p className="text-sm font-bold text-white">{excelFile.name}</p>
-                        <p className="text-xs text-zinc-400 mt-1">{(excelFile.size / 1024).toFixed(1)} KB • Columns: Name, College, Batch</p>
+                        <p className="text-xs text-zinc-400 mt-1">{(excelFile.size / 1024).toFixed(1)} KB • Columns: Name, College, Year, Department</p>
                         <button 
                           type="button" 
                           onClick={(e) => { e.stopPropagation(); setExcelFile(null); }}
@@ -814,7 +616,7 @@ export default function AdminDashboard() {
                     ) : (
                       <div className="text-center">
                         <p className="text-sm font-semibold text-zinc-200">Drag & drop your Excel sheet here</p>
-                        <p className="text-xs text-zinc-500 mt-1">Must contain: Name, College, Batch columns</p>
+                        <p className="text-xs text-zinc-500 mt-1">Must contain: Name, College, Year, Department columns</p>
                       </div>
                     )}
                   </div>
@@ -848,452 +650,8 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* STEP 2: FIELD POSITIONING CANVAS */}
-        {step === 2 && previewUrl && (
-          <div className="grid grid-cols-1 gap-8 rounded-[32px] border border-black/5 bg-white p-8 shadow-[0_18px_60px_rgba(0,0,0,0.05)] lg:grid-cols-12">
-            
-            {/* Visual designer canvas area */}
-            <div className="lg:col-span-8 flex flex-col items-center">
-              <div className="w-full flex items-center justify-between mb-4 flex-wrap gap-3">
-                <div className="flex items-center gap-3">
-                  <h3 className="text-lg font-bold text-zinc-800">Field Positioning Canvas</h3>
-                  <span className="text-xs bg-zinc-100 text-zinc-600 px-3 py-1 rounded-full border border-zinc-200 font-mono">
-                    {pageWidthPt.toFixed(0)} × {pageHeightPt.toFixed(0)} pt
-                  </span>
-                </div>
-                
-                {/* Zoom controls */}
-                <div className="flex items-center gap-1.5 bg-zinc-100 p-1 rounded-xl border border-zinc-200 select-none">
-                  <button
-                    type="button"
-                    onClick={() => setZoomScale(prev => Math.max(0.5, prev - 0.1))}
-                    className="w-8 h-8 flex items-center justify-center bg-white hover:bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-650 hover:text-zinc-850 font-bold transition-all text-sm cursor-pointer shadow-sm"
-                    title="Zoom Out"
-                  >
-                    —
-                  </button>
-                  <span className="px-2 text-xs font-bold text-zinc-700 min-w-[48px] text-center font-mono">
-                    {Math.round(zoomScale * 100)}%
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setZoomScale(prev => Math.min(3.0, prev + 0.1))}
-                    className="w-8 h-8 flex items-center justify-center bg-white hover:bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-650 hover:text-zinc-850 font-bold transition-all text-sm cursor-pointer shadow-sm"
-                    title="Zoom In"
-                  >
-                    +
-                  </button>
-                  {zoomScale !== 1.0 && (
-                    <button
-                      type="button"
-                      onClick={() => setZoomScale(1.0)}
-                      className="px-2.5 h-8 flex items-center justify-center bg-zinc-200 hover:bg-zinc-300 border border-zinc-300 rounded-lg text-zinc-750 font-bold transition-all text-[11px] cursor-pointer shadow-sm"
-                    >
-                      Reset
-                    </button>
-                  )}
-                </div>
-              </div>
-              
-              {/* Scrollable container framing the template canvas */}
-              <div className="w-full overflow-auto max-h-[70vh] border border-zinc-200 bg-zinc-50 rounded-2xl p-4 flex items-start justify-center shadow-inner">
-                <div 
-                  ref={canvasRef}
-                  onPointerMove={handlePointerMove}
-                  onPointerUp={handlePointerUp}
-                  onPointerLeave={handlePointerUp}
-                  className="relative select-none border border-zinc-300 bg-white shadow-xl rounded-lg overflow-hidden shrink-0 transition-all duration-150"
-                  style={{ 
-                    width: `${zoomScale * 100}%`,
-                    maxWidth: zoomScale > 1.0 ? "none" : "100%",
-                    aspectRatio: `${pageWidthPt}/${pageHeightPt}` 
-                  }}
-                >
-                  {/* Template rendered image */}
-                  <Image
-                    src={previewUrl}
-                    alt="Template preview page"
-                    fill
-                    unoptimized
-                    className="pointer-events-none object-contain"
-                    sizes="100vw"
-                  />
-
-                  {/* ─── Resizable Text-Box Anchors for each field ─── */}
-                  {(["name", "college", "year"] as string[])
-                    .concat(detectedFields.filter(f => !["name", "college", "year"].includes(f)))
-                    .map((field) => {
-                      const box = getBox(field);
-                      const cfg = FIELD_CFG[field];
-                      const sample = FIELD_SAMPLES[field];
-                      const fontSize = calcFontSize(sample, box);
-                      const font = fontSettings[field] ?? "inherit";
-                      const isActive = dragging?.field === field;
-                      return (
-                        <div
-                          key={field}
-                          className="absolute"
-                          style={{
-                            left:   `${box.x * 100}%`,
-                            top:    `${box.y * 100}%`,
-                            width:  `${box.w * 100}%`,
-                            height: `${box.h * 100}%`,
-                            border: `2px solid ${cfg.border}`,
-                            background: cfg.bg,
-                            borderRadius: 4,
-                            cursor: "move",
-                            boxShadow: isActive ? `0 0 0 3px ${cfg.border}55` : "none",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            overflow: "hidden",
-                            userSelect: "none",
-                          }}
-                          onPointerDown={(e) => handleBoxDown(e, field, "move")}
-                        >
-                          {/* Label pill — top-left */}
-                          <span
-                            style={{
-                              position: "absolute",
-                              top: 2, left: 4,
-                              fontSize: 8,
-                              fontWeight: 900,
-                              letterSpacing: "0.12em",
-                              color: cfg.text,
-                              opacity: 0.75,
-                              lineHeight: 1,
-                              pointerEvents: "none",
-                            }}
-                          >
-                            {cfg.label}
-                          </span>
-
-                          {/* Sample value text — auto-sized */}
-                          <span
-                            style={{
-                              fontFamily: font,
-                              fontSize,
-                              color: cfg.text,
-                              fontWeight: 600,
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              maxWidth: "95%",
-                              pointerEvents: "none",
-                              marginTop: 8,
-                            }}
-                          >
-                            {sample}
-                          </span>
-
-                          {/* Resize handle — bottom-right */}
-                          <div
-                            style={{
-                              position: "absolute",
-                              bottom: 0, right: 0,
-                              width: 12, height: 12,
-                              background: cfg.border,
-                              borderRadius: "2px 0 4px 0",
-                              cursor: "se-resize",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
-                            onPointerDown={(e) => {
-                              e.stopPropagation();
-                              e.preventDefault();
-                              setDragging({ field, op: "resize" });
-                            }}
-                          >
-                            <div style={{ width: 5, height: 5, borderRight: `1.5px solid white`, borderBottom: `1.5px solid white` }} />
-                          </div>
-                        </div>
-                      );
-                    })
-                  }
-
-                  {/* Resizable QR Box (unchanged) */}
-                  <div 
-                    className="absolute cursor-move border-2 border-dashed border-emerald-500 bg-emerald-500/10"
-                    style={{
-                      left: `${qrPos.x * 100}%`,
-                      top: `${qrPos.y * 100}%`,
-                      width: `${qrSize * 100}%`,
-                      aspectRatio: "1/1"
-                    }}
-                    onPointerDown={(e) => handleQrDown(e, "qr")}
-                  >
-                    <div className="absolute inset-0 flex items-center justify-center p-1">
-                      <span className="text-[10px] md:text-xs font-bold text-emerald-600 tracking-tight text-center bg-white/95 px-2 py-0.5 rounded border border-emerald-500/30 shadow-sm">
-                        QR Code
-                      </span>
-                    </div>
-                    <div 
-                      className="absolute bottom-0 right-0 w-4 h-4 bg-emerald-500 hover:scale-125 transition-transform cursor-se-resize flex items-center justify-center shadow-lg border border-white rounded-sm"
-                      onPointerDown={(e) => { e.stopPropagation(); handleQrDown(e, "qr-resize"); }}
-                    >
-                      <div className="w-1.5 h-1.5 border-r border-b border-white" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <p className="text-xs text-zinc-550 mt-4 text-center">
-                Drag each text box onto your template&apos;s blank field. Pull the bottom-right corner handle to resize.
-              </p>
-            </div>
-
-            {/* Sidebar properties card */}
-            <div className="lg:col-span-4 flex flex-col justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-zinc-800 mb-4">Layout Parameters</h3>
-                <p className="text-xs text-zinc-500 mb-6 leading-relaxed">
-                  These coordinate values represent positioning relative to the template&apos;s width and height (fractions 0 to 1). This ensures layout constancy when rendering across dynamic print resolutions.
-                </p>
-
-                <div className="space-y-4">
-                  {/* Name Pos info */}
-                  <div className="bg-zinc-50 border border-zinc-150 p-4 rounded-2xl flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full bg-violet-500" />
-                      <span className="text-sm font-bold text-zinc-750">Name Overlay</span>
-                    </div>
-                    <div className="text-xs font-mono text-zinc-500">
-                      X: <span className="text-violet-600 font-bold">{((nameBox.x + nameBox.w / 2) * 100).toFixed(1)}%</span> • Y: <span className="text-violet-600 font-bold">{((nameBox.y + nameBox.h / 2) * 100).toFixed(1)}%</span>
-                    </div>
-                  </div>
-
-                  {/* College Pos info */}
-                  <div className="bg-zinc-50 border border-zinc-150 p-4 rounded-2xl flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full bg-indigo-500" />
-                      <span className="text-sm font-bold text-zinc-750">College Overlay</span>
-                    </div>
-                    <div className="text-xs font-mono text-zinc-500">
-                      X: <span className="text-indigo-600 font-bold">{((collegeBox.x + collegeBox.w / 2) * 100).toFixed(1)}%</span> • Y: <span className="text-indigo-600 font-bold">{((collegeBox.y + collegeBox.h / 2) * 100).toFixed(1)}%</span>
-                    </div>
-                  </div>
-
-                  {/* Year Pos info */}
-                  <div className="bg-zinc-50 border border-zinc-150 p-4 rounded-2xl flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full bg-cyan-500" />
-                      <span className="text-sm font-bold text-zinc-750">Year Overlay</span>
-                    </div>
-                    <div className="text-xs font-mono text-zinc-500">
-                      X: <span className="text-cyan-600 font-bold">{((yearBox.x + yearBox.w / 2) * 100).toFixed(1)}%</span> • Y: <span className="text-cyan-600 font-bold">{((yearBox.y + yearBox.h / 2) * 100).toFixed(1)}%</span>
-                    </div>
-                  </div>
-
-                  {/* Department Pos info */}
-                  {detectedFields.includes("department") && (
-                    <div className="bg-zinc-50 border border-zinc-150 p-4 rounded-2xl flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full bg-orange-500" />
-                        <span className="text-sm font-bold text-zinc-750">Department Overlay</span>
-                      </div>
-                      <div className="text-xs font-mono text-zinc-500">
-                        X: <span className="text-orange-600 font-bold">{((departmentBox.x + departmentBox.w / 2) * 100).toFixed(1)}%</span> • Y: <span className="text-orange-600 font-bold">{((departmentBox.y + departmentBox.h / 2) * 100).toFixed(1)}%</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Role Pos info */}
-                  {detectedFields.includes("role") && (
-                    <div className="bg-zinc-50 border border-zinc-150 p-4 rounded-2xl flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full bg-pink-500" />
-                        <span className="text-sm font-bold text-zinc-750">Role Overlay</span>
-                      </div>
-                      <div className="text-xs font-mono text-zinc-500">
-                        X: <span className="text-pink-600 font-bold">{((roleBox.x + roleBox.w / 2) * 100).toFixed(1)}%</span> • Y: <span className="text-pink-600 font-bold">{((roleBox.y + roleBox.h / 2) * 100).toFixed(1)}%</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Project Pos info */}
-                  {detectedFields.includes("project") && (
-                    <div className="bg-zinc-50 border border-zinc-150 p-4 rounded-2xl flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full bg-amber-500" />
-                        <span className="text-sm font-bold text-zinc-750">Project Overlay</span>
-                      </div>
-                      <div className="text-xs font-mono text-zinc-500">
-                        X: <span className="text-amber-600 font-bold">{((projectBox.x + projectBox.w / 2) * 100).toFixed(1)}%</span> • Y: <span className="text-amber-600 font-bold">{((projectBox.y + projectBox.h / 2) * 100).toFixed(1)}%</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Month Pos info */}
-                  {detectedFields.includes("month") && (
-                    <div className="bg-zinc-50 border border-zinc-150 p-4 rounded-2xl flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full bg-teal-500" />
-                        <span className="text-sm font-bold text-zinc-750">Month Overlay</span>
-                      </div>
-                      <div className="text-xs font-mono text-zinc-500">
-                        X: <span className="text-teal-600 font-bold">{((monthBox.x + monthBox.w / 2) * 100).toFixed(1)}%</span> • Y: <span className="text-teal-600 font-bold">{((monthBox.y + monthBox.h / 2) * 100).toFixed(1)}%</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Date Pos info */}
-                  {detectedFields.includes("date") && (
-                    <div className="bg-zinc-50 border border-zinc-150 p-4 rounded-2xl flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full bg-blue-500" />
-                        <span className="text-sm font-bold text-zinc-750">Date Overlay</span>
-                      </div>
-                      <div className="text-xs font-mono text-zinc-500">
-                        X: <span className="text-blue-600 font-bold">{((dateBox.x + dateBox.w / 2) * 100).toFixed(1)}%</span> • Y: <span className="text-blue-600 font-bold">{((dateBox.y + dateBox.h / 2) * 100).toFixed(1)}%</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* QR Box info */}
-                  <div className="bg-zinc-50 border border-zinc-150 p-4 rounded-2xl flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                        <span className="text-sm font-bold text-zinc-750">QR Code Box</span>
-                      </div>
-                      <div className="text-xs font-mono text-zinc-500">
-                        Size: <span className="text-emerald-600 font-bold">{(qrSize * 100).toFixed(1)}%</span>
-                      </div>
-                    </div>
-                    <div className="text-right text-xs font-mono text-zinc-500 border-t border-zinc-200 pt-2">
-                      X: <span className="text-emerald-600 font-bold">{(qrPos.x * 100).toFixed(1)}%</span> • Y: <span className="text-emerald-600 font-bold">{(qrPos.y * 100).toFixed(1)}%</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* ── Font Settings Section ──────────────────────────────── */}
-                <div className="mt-6 pt-5 border-t border-zinc-150">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Type size={14} className="text-violet-500" />
-                    <h4 className="text-sm font-bold text-zinc-800">Font Styles</h4>
-                    <span className="ml-auto text-[10px] text-zinc-400 font-medium">Per-field Google Fonts</span>
-                  </div>
-
-                  <div className="space-y-3">
-                    {/* Name Font */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="flex items-center gap-2 text-xs font-semibold text-zinc-600">
-                        <span className="w-2.5 h-2.5 rounded-full bg-violet-500 inline-block" />
-                        Name
-                      </label>
-                      <FontPicker value={fontSettings.name} onChange={f => setFieldFont("name", f)} accentColor="#7c3aed" />
-                    </div>
-
-                    {/* College Font */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="flex items-center gap-2 text-xs font-semibold text-zinc-600">
-                        <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block" />
-                        College
-                      </label>
-                      <FontPicker value={fontSettings.college} onChange={f => setFieldFont("college", f)} />
-                    </div>
-
-                    {/* Year Font */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="flex items-center gap-2 text-xs font-semibold text-zinc-600">
-                        <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 inline-block" />
-                        Year
-                      </label>
-                      <FontPicker value={fontSettings.year} onChange={f => setFieldFont("year", f)} />
-                    </div>
-
-                    {/* Department Font */}
-                    {detectedFields.includes("department") && (
-                      <div className="flex flex-col gap-1.5">
-                        <label className="flex items-center gap-2 text-xs font-semibold text-zinc-600">
-                          <span className="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block" />
-                          Department
-                        </label>
-                        <FontPicker value={fontSettings.department} onChange={f => setFieldFont("department", f)} />
-                      </div>
-                    )}
-
-                    {/* Role Font */}
-                    {detectedFields.includes("role") && (
-                      <div className="flex flex-col gap-1.5">
-                        <label className="flex items-center gap-2 text-xs font-semibold text-zinc-600">
-                          <span className="w-2.5 h-2.5 rounded-full bg-pink-500 inline-block" />
-                          Role
-                        </label>
-                        <FontPicker value={fontSettings.role} onChange={f => setFieldFont("role", f)} />
-                      </div>
-                    )}
-
-                    {/* Project Font */}
-                    {detectedFields.includes("project") && (
-                      <div className="flex flex-col gap-1.5">
-                        <label className="flex items-center gap-2 text-xs font-semibold text-zinc-600">
-                          <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
-                          Project
-                        </label>
-                        <FontPicker value={fontSettings.project} onChange={f => setFieldFont("project", f)} />
-                      </div>
-                    )}
-
-                    {/* Month Font */}
-                    {detectedFields.includes("month") && (
-                      <div className="flex flex-col gap-1.5">
-                        <label className="flex items-center gap-2 text-xs font-semibold text-zinc-600">
-                          <span className="w-2.5 h-2.5 rounded-full bg-teal-500 inline-block" />
-                          Month
-                        </label>
-                        <FontPicker value={fontSettings.month} onChange={f => setFieldFont("month", f)} />
-                      </div>
-                    )}
-
-                    {/* Date Font */}
-                    {detectedFields.includes("date") && (
-                      <div className="flex flex-col gap-1.5">
-                        <label className="flex items-center gap-2 text-xs font-semibold text-zinc-600">
-                          <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
-                          Date
-                        </label>
-                        <FontPicker value={fontSettings.date} onChange={f => setFieldFont("date", f)} />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Action buttons */}
-              <div className="mt-8 flex flex-col gap-3 pt-6 border-t border-zinc-150">
-                <button
-                  onClick={handleSaveLayout}
-                  disabled={isSavingLayout}
-                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold py-3.5 px-6 rounded-xl shadow-md cursor-pointer transition-all duration-300 text-sm"
-                >
-                  {isSavingLayout ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-zinc-450 border-t-white rounded-full animate-spin" />
-                      Saving Coordinates...
-                    </>
-                  ) : (
-                    <>
-                      Save Layout & Proceed
-                    </>
-                  )}
-                </button>
-                
-                <button
-                  onClick={handleReset}
-                  className="w-full inline-flex items-center justify-center gap-2 border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-650 hover:text-zinc-800 font-bold py-3 px-6 rounded-xl transition-all duration-300 text-sm"
-                >
-                  <RotateCcw className="w-4 h-4" /> Start Over
-                </button>
-              </div>
-
-            </div>
-
-          </div>
-        )}
-
-        {/* STEP 3: EXCEL DETAILS UPLOAD & BATCH GENERATION */}
-        {step === 3 && (
+        {/* STEP 2: EXCEL DETAILS UPLOAD & BATCH GENERATION */}
+        {step === 2 && (
           <div className="space-y-8">
             
             {/* Generate Trigger Card */}
@@ -1302,7 +660,7 @@ export default function AdminDashboard() {
                 Generate Certificates Batch
               </h2>
               <p className="text-xs text-zinc-550 mb-6">
-                Template and coordinates saved successfully. Next, select your details sheet if not already uploaded, and run the batch processor.
+                Template uploaded successfully. Next, run the batch certificate builder to search, redact, and replace placeholders (e.g. &lt;&lt;NAME&gt;&gt;, &lt;&lt;QR&gt;&gt;) in the template.
               </p>
 
               <form onSubmit={handleGenerate} className="space-y-6">
@@ -1372,14 +730,37 @@ export default function AdminDashboard() {
                   </div>
 
                   {!isGenerating && excelDownloadUrl && (
-                    <a 
-                      href={excelDownloadUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-2.5 px-5 rounded-xl shadow-md text-xs transition-all duration-300"
-                    >
-                      <Download className="w-4 h-4" /> Download Result Excel Sheet
-                    </a>
+                    <div className="flex items-center gap-3">
+                      <a
+                        href={excelDownloadUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-2.5 px-5 rounded-xl shadow-md text-xs transition-all duration-300"
+                      >
+                        <Download className="w-4 h-4" /> Download Result Excel Sheet
+                      </a>
+
+                      {generationResults.some((r) => r.pdf_url && r.status === "active") && (
+                        <button
+                          onClick={handleDownloadAllZip}
+                          disabled={isZipping}
+                          className="inline-flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-2.5 px-5 rounded-xl shadow-md text-xs transition-all duration-300"
+                        >
+                          {isZipping ? (
+                            <>
+                              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              {zipProgress.total > 0
+                                ? `Packing ${zipProgress.done}/${zipProgress.total}…`
+                                : "Preparing…"}
+                            </>
+                          ) : (
+                            <>
+                              <Download className="w-4 h-4" /> Download All PDFs as ZIP
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -1429,7 +810,7 @@ export default function AdminDashboard() {
                             <td className="p-4 font-bold text-zinc-800">{row.name}</td>
                             <td className="p-4 text-zinc-650">{row.college}</td>
                             <td className="p-4 text-zinc-650">{row.department || "—"}</td>
-                            <td className="p-4 font-mono text-zinc-500 text-xs">{row.batch}</td>
+                            <td className="p-4 font-mono text-zinc-500 text-xs">{row.month || row.year || "—"}</td>
                             <td className="p-4 font-mono text-zinc-700 text-xs">
                               {row.cert_code || <span className="text-zinc-400">—</span>}
                             </td>
@@ -1449,14 +830,41 @@ export default function AdminDashboard() {
                             </td>
                             <td className="p-4 text-right">
                               {row.pdf_url ? (
-                                <a 
-                                  href={row.pdf_url} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-xs font-bold text-violet-600 hover:text-violet-800 transition-colors"
-                                >
-                                  <LinkIcon className="w-3.5 h-3.5" /> View PDF
-                                </a>
+                                <div className="inline-flex items-center gap-2">
+                                  {/* View in new tab */}
+                                  <a
+                                    href={row.pdf_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="Open PDF in new tab"
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-violet-600 hover:text-violet-800 bg-violet-50 hover:bg-violet-100 border border-violet-200 px-2.5 py-1 rounded-lg transition-all duration-150"
+                                  >
+                                    <LinkIcon className="w-3 h-3" /> View
+                                  </a>
+
+                                  {/* Force-download */}
+                                  <button
+                                    title="Download PDF"
+                                    onClick={async () => {
+                                      try {
+                                        const res = await fetch(row.pdf_url!);
+                                        const blob = await res.blob();
+                                        const url = URL.createObjectURL(blob);
+                                        const a = document.createElement("a");
+                                        a.href = url;
+                                        const safeName = (row.name || "certificate").replace(/[^a-zA-Z0-9_\- ]/g, "_");
+                                        a.download = `${safeName}.pdf`;
+                                        a.click();
+                                        URL.revokeObjectURL(url);
+                                      } catch {
+                                        alert("Failed to download PDF. Please try View instead.");
+                                      }
+                                    }}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-all duration-150"
+                                  >
+                                    <Download className="w-3 h-3" /> Download
+                                  </button>
+                                </div>
                               ) : (
                                 <span className="text-zinc-400 text-xs font-bold">Unsaved</span>
                               )}
@@ -1510,27 +918,24 @@ export default function AdminDashboard() {
               {/* Core Icon */}
               <div className="absolute w-12 h-12 rounded-full bg-zinc-50 flex items-center justify-center shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]">
                 {processingStage === 1 && <Upload className="w-5 h-5 text-violet-600 animate-bounce" />}
-                {processingStage === 2 && <MapPin className="w-5 h-5 text-indigo-600 animate-[pulse_1.2s_ease-in-out_infinite]" />}
-                {processingStage === 3 && <Settings className="w-5 h-5 text-emerald-600 animate-spin" />}
+                {processingStage === 2 && <Settings className="w-5 h-5 text-emerald-600 animate-spin" />}
               </div>
             </div>
 
             {/* Stage Title */}
             <span className="text-[9px] font-bold uppercase tracking-[0.24em] text-[#846328] bg-[#b4914c]/8 px-3 py-1 rounded-full border border-[#b4914c]/15 mb-3">
               {processingStage === 1 && "Stage 01 — Parsing Template"}
-              {processingStage === 2 && "Stage 02 — Registering Layout"}
-              {processingStage === 3 && "Stage 03 — Compiling Certificates"}
+              {processingStage === 2 && "Stage 02 — Compiling Certificates"}
             </span>
             
             <h3 className="font-sans text-lg text-stone-900 font-bold mb-5">
               {processingStage === 1 && "Analyzing Base Document"}
-              {processingStage === 2 && "Configuring Fields Registry"}
-              {processingStage === 3 && "Building Batch Run"}
+              {processingStage === 2 && "Building Batch Run"}
             </h3>
 
             {/* Sequential Processing Steps Checklist */}
             <div className="w-full text-left space-y-3 bg-zinc-50 border border-zinc-150 p-5 rounded-2xl">
-              {(processingStage === 1 ? PROCESS_STEPS[1] : processingStage === 2 ? PROCESS_STEPS[2] : PROCESS_STEPS[3]).map((stepText, idx) => {
+              {(processingStage === 1 ? PROCESS_STEPS[1] : PROCESS_STEPS[2]).map((stepText: string, idx: number) => {
                 const isCompleted = idx < activeSubStep;
                 const isActive = idx === activeSubStep;
                 return (

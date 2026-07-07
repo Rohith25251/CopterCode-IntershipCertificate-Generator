@@ -3,6 +3,7 @@ import os
 import uuid
 import re
 import urllib.request
+import tempfile
 import pandas as pd
 from typing import Dict, List, Optional
 from datetime import datetime
@@ -10,6 +11,12 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
+
+try:
+    import win32com.client
+    HAS_WIN32COM = True
+except ImportError:
+    HAS_WIN32COM = False
 
 # PDF & QR generation libraries
 import fitz  # PyMuPDF
@@ -188,6 +195,162 @@ class LayoutPayload(BaseModel):
     font_settings: Optional[Dict[str, str]] = None  # per-field font names
 
 
+def convert_pptx_to_pdf_bytes(pptx_bytes: bytes) -> bytes:
+    if not HAS_WIN32COM:
+        raise ValueError("PowerPoint COM library (pywin32) is not installed on this system.")
+    
+    # Save the pptx bytes to a temp file
+    temp_pptx = tempfile.NamedTemporaryFile(suffix=".pptx", delete=False)
+    temp_pptx.write(pptx_bytes)
+    temp_pptx.close()
+    
+    temp_pdf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    temp_pdf.close() # we just need the name
+    
+    powerpoint = None
+    presentation = None
+    try:
+        # Initialize PowerPoint COM in background
+        powerpoint = win32com.client.DispatchEx("PowerPoint.Application")
+        
+        abs_pptx = os.path.abspath(temp_pptx.name)
+        abs_pdf = os.path.abspath(temp_pdf.name)
+        
+        presentation = powerpoint.Presentations.Open(abs_pptx, WithWindow=False)
+        presentation.SaveAs(abs_pdf, 32) # 32 = PDF
+        presentation.Close()
+        
+        with open(temp_pdf.name, "rb") as f:
+            pdf_bytes = f.read()
+            
+        return pdf_bytes
+    except Exception as e:
+        print(f"Failed to convert PPTX to PDF via win32com: {e}")
+        raise ValueError(f"Could not convert PPTX to PDF. Make sure PowerPoint is installed. Details: {e}")
+    finally:
+        if presentation is not None:
+            try:
+                presentation.Close()
+            except Exception:
+                pass
+        if powerpoint is not None:
+            try:
+                powerpoint.Quit()
+            except Exception:
+                pass
+        # Clean up temp files
+        try:
+            os.remove(temp_pptx.name)
+            os.remove(temp_pdf.name)
+        except Exception:
+            pass
+
+def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, qr_bytes: bytes) -> bytes:
+    from pptx import Presentation
+    from pptx.util import Inches
+    import tempfile
+    
+    # Save the input pptx bytes to a temp file
+    temp_pptx = tempfile.NamedTemporaryFile(suffix=".pptx", delete=False)
+    temp_pptx.write(pptx_bytes)
+    temp_pptx.close()
+    
+    try:
+        prs = Presentation(temp_pptx.name)
+        slide = prs.slides[0]
+        
+        # Fields that should WRAP to next line instead of shrinking font
+        WRAP_FIELDS = {"<<INTERNSHIP & LIVE PROJECT AREA>>", "<<PROJECT>>", "<<DOMAIN>>", "<<ROLE>>"}
+
+        # 1. Process shapes and replace text
+        for shape in list(slide.shapes):
+            if shape.has_text_frame:
+                text_frame = shape.text_frame
+
+                # Enable word wrap so long values flow to next line naturally
+                text_frame.word_wrap = True
+
+                combined_text = text_frame.text.strip()
+
+                # Check for QR placeholder
+                if "<<QR>>" in combined_text or "«QR»" in combined_text:
+                    qr_left = shape.left
+                    qr_top = shape.top
+
+                    # Remove placeholder shape
+                    sp = shape._element
+                    sp.getparent().remove(sp)
+
+                    # Write QR bytes to a temp file to insert as picture
+                    temp_qr = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+                    temp_qr.write(qr_bytes)
+                    temp_qr.close()
+
+                    try:
+                        slide.shapes.add_picture(temp_qr.name, qr_left, qr_top, width=Inches(0.9), height=Inches(0.9))
+                    finally:
+                        try:
+                            os.remove(temp_qr.name)
+                        except Exception:
+                            pass
+                    continue
+
+                # Standard replacements on text runs
+                for paragraph in text_frame.paragraphs:
+                    for run in paragraph.runs:
+                        run.font.name = "Arial"
+
+                        for key, val in replacements.items():
+                            has_match = False
+                            actual_key = None
+
+                            if key in run.text:
+                                has_match = True
+                                actual_key = key
+                            else:
+                                guill_key = key.replace("<<", "«").replace(">>", "»")
+                                if guill_key in run.text:
+                                    has_match = True
+                                    actual_key = guill_key
+
+                            if has_match:
+                                # For body/area fields: keep font size and let text wrap
+                                # For short label fields (name, institution): allow mild shrinking
+                                is_wrap_field = key in WRAP_FIELDS
+                                if not is_wrap_field and run.font.size and val:
+                                    length = len(val)
+                                    limit = 20 if "NAME" in key else 30
+                                    if length > limit:
+                                        scale = limit / length
+                                        scale = max(0.75, min(1.0, scale))
+                                        run.font.size = int(run.font.size * scale)
+
+                                run.text = run.text.replace(actual_key, val)
+
+                        # Clean up visual hacks (multiple consecutive spaces) and fix missing comma spaces
+                        if run.text:
+                            run.text = re.sub(r',([a-zA-Z])', r', \1', run.text)
+                            run.text = re.sub(r'\s{2,}', ' ', run.text)
+                                
+        # Save presentation back to same temp file
+        prs.save(temp_pptx.name)
+        
+        # Read the modified PPTX file bytes
+        with open(temp_pptx.name, "rb") as f:
+            modified_pptx_bytes = f.read()
+            
+        # Convert to PDF
+        pdf_bytes = convert_pptx_to_pdf_bytes(modified_pptx_bytes)
+        return pdf_bytes
+        
+    finally:
+        try:
+            os.remove(temp_pptx.name)
+        except Exception:
+            pass
+
+
+
 @app.get("/")
 def read_root():
     return {"status": "healthy", "service": "Certificate Generator API"}
@@ -199,7 +362,8 @@ async def template_preview(
     excel_file: Optional[UploadFile] = File(None)
 ):
     """
-    Accepts template PDF and optional Excel sheet.
+    Accepts template PDF or PPTX and optional Excel sheet.
+    Converts PPTX to PDF if necessary.
     Uploads PDF template to Supabase Storage bucket 'templates'.
     Extracts first page width and height in points.
     Renders first page as PNG.
@@ -213,11 +377,12 @@ async def template_preview(
             detail="Supabase client is not configured. Please set environment variables."
         )
 
-    # Validate file format
-    if not template_file.filename.lower().endswith(".pdf"):
+    # Validate file format — PPTX only
+    ext = os.path.splitext(template_file.filename)[1].lower()
+    if ext != ".pptx":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Template must be a PDF file."
+            detail="Template must be a PPTX file. Please upload a PowerPoint (.pptx) file."
         )
 
     try:
@@ -249,12 +414,31 @@ async def template_preview(
             except Exception as e:
                 print(f"Error parsing optional Excel columns in preview: {e}")
 
-        pdf_bytes = await template_file.read()
+        raw_bytes = await template_file.read()
+        if ext == ".pptx":
+            try:
+                pdf_bytes = convert_pptx_to_pdf_bytes(raw_bytes)
+            except Exception as conv_err:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to convert uploaded PPTX template to PDF: {conv_err}"
+                )
+        else:
+            pdf_bytes = raw_bytes
         template_id = str(uuid.uuid4())
 
         # Save to Supabase Storage (private bucket 'templates')
-        pdf_path = f"{template_id}/template.pdf"
         try:
+            # If PPTX, save original PPTX file first
+            if ext == ".pptx":
+                pptx_path = f"{template_id}/template.pptx"
+                supabase.storage.from_("templates").upload(
+                    path=pptx_path,
+                    file=raw_bytes,
+                    file_options={"content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation"}
+                )
+                
+            pdf_path = f"{template_id}/template.pdf"
             supabase.storage.from_("templates").upload(
                 path=pdf_path,
                 file=pdf_bytes,
@@ -271,7 +455,7 @@ async def template_preview(
                 )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to upload PDF template to Supabase Storage: {upload_err}"
+                detail=f"Failed to upload template assets to Supabase Storage: {upload_err}"
             )
 
         # Open PDF with PyMuPDF to extract dimensions and render page 1
@@ -434,9 +618,8 @@ async def generate_certificates(
 ):
     """
     Processes the details from Excel.
-    For each row, generates a QR code and positions text overlays.
-    Merges them onto the template, saves PDF, inserts database record.
-    Generates a download link for a final compiled Excel results list.
+    For each row, generates a QR code and replaces placeholders in the template PDF.
+    Saves PDF, inserts database record, and compiles excel results sheet.
     """
     if not supabase:
         raise HTTPException(
@@ -451,7 +634,7 @@ async def generate_certificates(
             detail="Please upload a valid Excel file (.xlsx or .xls)."
         )
 
-    # 1. Fetch template & layout metadata
+    # 1. Fetch template metadata
     try:
         template_res = supabase.table("templates").select("*").eq("id", template_id).execute()
         if not template_res.data:
@@ -466,57 +649,26 @@ async def generate_certificates(
             detail=f"Failed to fetch template metadata: {e}"
         )
 
-    # Unpack position dicts; fall back to sensible defaults for w/h for old data
-    def _pos(d: Optional[dict], default_x=0.5, default_y=0.5, default_w=0.30, default_h=0.05):
-        if not d:
-            return None
-        return {
-            "x": d.get("x", default_x),
-            "y": d.get("y", default_y),
-            "w": d.get("w", default_w),
-            "h": d.get("h", default_h),
-        }
-
-    name_pos    = _pos(template_data.get("name_pos"),    0.5, 0.45)
-    college_pos = _pos(template_data.get("college_pos"), 0.5, 0.55)
-    batch_pos_data = template_data.get("batch_pos") or {}
-
-    year_pos = {
-        "x": batch_pos_data.get("x", 0.5),
-        "y": batch_pos_data.get("y", 0.65),
-        "w": batch_pos_data.get("w", 0.20),
-        "h": batch_pos_data.get("h", 0.05),
-    } if isinstance(batch_pos_data, dict) else _pos(None)
-
-    department_pos = _pos(batch_pos_data.get("department_pos")) if isinstance(batch_pos_data, dict) else None
-    role_pos       = _pos(batch_pos_data.get("role_pos"))       if isinstance(batch_pos_data, dict) else None
-    project_pos    = _pos(batch_pos_data.get("project_pos"))    if isinstance(batch_pos_data, dict) else None
-    month_pos      = _pos(batch_pos_data.get("month_pos"))      if isinstance(batch_pos_data, dict) else None
-    date_pos       = _pos(batch_pos_data.get("date_pos"))       if isinstance(batch_pos_data, dict) else None
-    font_settings: Dict[str, str] = (batch_pos_data.get("font_settings") or {}) if isinstance(batch_pos_data, dict) else {}
-
-    qr_pos = template_data.get("qr_pos")
-    qr_size = template_data.get("qr_size")
-
-    # Validate layout has been saved
-    if not all([name_pos, college_pos, year_pos, qr_pos, qr_size is not None]):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Template layout coordinates are incomplete. Please save layout first."
-        )
-
-    width_pt  = template_data.get("page_width_pt") or template_data.get("width_pt")
-    height_pt = template_data.get("page_height_pt") or template_data.get("height_pt")
-
-    # 2. Download original template PDF from storage
+    # 2. Download original template (PPTX if available, otherwise fallback to PDF)
+    use_pptx_pipeline = False
+    template_pptx_bytes = None
+    template_pdf_bytes = None
+    
     try:
-        pdf_path = f"{template_id}/template.pdf"
-        template_pdf_bytes = supabase.storage.from_("templates").download(pdf_path)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to download original PDF template: {e}"
-        )
+        pptx_path = f"{template_id}/template.pptx"
+        template_pptx_bytes = supabase.storage.from_("templates").download(pptx_path)
+        use_pptx_pipeline = True
+        print(f"Using PPTX pipeline for template ID {template_id}")
+    except Exception:
+        try:
+            pdf_path = f"{template_id}/template.pdf"
+            template_pdf_bytes = supabase.storage.from_("templates").download(pdf_path)
+            print(f"Using PDF fallback pipeline for template ID {template_id}")
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to download original PDF template: {e}"
+            )
 
     # 3. Read and parse Excel file
     try:
@@ -529,7 +681,6 @@ async def generate_certificates(
         )
 
     # Clean and validate Excel columns
-    # Accepts: NAME, DEPARTMENT, YEAR, COLLEGE, ROLE, PROJECT, MONTH, DATE
     df.columns = [str(col).strip().lower() for col in df.columns]
     col_mapping = {}
     for col in df.columns:
@@ -568,10 +719,7 @@ async def generate_certificates(
 
     # 4. Generate Certificates row-by-row
     rows_results = []
-    output_rows = []  # For final excel: cert_code, name, college, batch
-
-    # Cache for batch counters to avoid querying DB repeatedly for the same batch
-    batch_counters = {}
+    output_rows = []
 
     for index, row in df.iterrows():
         try:
@@ -601,89 +749,239 @@ async def generate_certificates(
             # Generate a unique UUID for the certificate
             cert_code = str(uuid.uuid4())
 
-            # Create QR code
-            qr_url = build_verify_url(cert_code)
-            qr = qrcode.QRCode(version=1, box_size=10, border=1)
-            qr.add_data(qr_url)
-            qr.make(fit=True)
+            # Check if we should use the high-fidelity PPTX pipeline
+            row_use_pptx_pipeline = use_pptx_pipeline
+            merged_pdf_bytes = None
+
+            if row_use_pptx_pipeline:
+                # 1. Setup replacements dictionary
+                replacements = {
+                    "<<NAME>>": name_val,
+                    "<<INSTITUTION>>": college_val,
+                    "<<COLLEGE>>": college_val,
+                    "<<YEAR>>": year_val,
+                    "<<DEPARTMENT>>": department_val,
+                    "<<DOMAIN>>": role_val,
+                    "<<ROLE>>": role_val,
+                    "<<PROJECT>>": project_val,
+                    "<<INTERNSHIP & LIVE PROJECT AREA>>": project_val,
+                    "<<BATCH>>": month_val,
+                    "<<BATCH >>": month_val,
+                    "<<DATE>>": date_val,
+                    "<<DT>>": date_val
+                }
+                
+                # 2. Generate QR code bytes
+                qr_url = build_verify_url(cert_code)
+                qr = qrcode.QRCode(
+                    version=1,
+                    error_correction=qrcode.constants.ERROR_CORRECT_H,
+                    box_size=12,
+                    border=2
+                )
+                qr.add_data(qr_url)
+                qr.make(fit=True)
+                from qrcode.image.pil import PilImage
+                qr_img = qr.make_image(image_factory=PilImage, fill_color="black", back_color="white")
+                qr_io = io.BytesIO()
+                qr_img.save(qr_io, format="PNG")
+                qr_bytes = qr_io.getvalue()
+                
+                # 3. Generate PDF using PPTX pipeline
+                try:
+                    merged_pdf_bytes = generate_certificate_from_pptx_bytes(template_pptx_bytes, replacements, qr_bytes)
+                except Exception as pptx_err:
+                    print(f"PPTX pipeline execution failed for row: {pptx_err}")
+                    row_use_pptx_pipeline = False
             
-            from qrcode.image.pil import PilImage
-            qr_img = qr.make_image(image_factory=PilImage, fill_color="black", back_color="white")
-            pil_img = qr_img.get_image()
-
-            qr_io = io.BytesIO()
-            pil_img.save(qr_io, format="PNG")
-            qr_io.seek(0)
-            qr_reader = ImageReader(qr_io)
-
-            # Draw ReportLab Overlay
-            overlay_io = io.BytesIO()
-            can = canvas.Canvas(overlay_io, pagesize=(width_pt, height_pt))
-
-            # Render text overlays using per-field fonts and auto-sized font-size
-            # Resolve per-field fonts (downloads TTF from Google Fonts on first use)
-            f_name     = get_reportlab_font(font_settings.get("name",       "Helvetica-Bold"))
-            f_college  = get_reportlab_font(font_settings.get("college",    "Helvetica"))
-            f_year     = get_reportlab_font(font_settings.get("year",       "Helvetica"))
-            f_dept     = get_reportlab_font(font_settings.get("department", "Helvetica"))
-            f_role     = get_reportlab_font(font_settings.get("role",       "Helvetica"))
-            f_project  = get_reportlab_font(font_settings.get("project",    "Helvetica"))
-            f_month    = get_reportlab_font(font_settings.get("month",      "Helvetica"))
-            f_date     = get_reportlab_font(font_settings.get("date",       "Helvetica"))
-
-            def draw_field(pos: Optional[dict], text: str, font: str) -> None:
-                """Draw text left-aligned at the left edge of the stored bounding-box position."""
-                if not pos or not text:
-                    return
-                bw = pos.get("w", 0.30) * width_pt
-                bh = pos.get("h", 0.05) * height_pt
-                cx = pos["x"] * width_pt          # x is already the center fraction
-                cy = (1 - pos["y"]) * height_pt   # flip y for PDF coordinates
-                fs = calc_pdf_font_size(text, font, bw, bh)
-                can.setFont(font, fs)
-                lx = cx - (bw / 2)
-                ly = cy - (bh / 2) + 2.0
-                can.drawString(lx, ly, text)
-
-            draw_field(name_pos,    name_val,       f_name)
-            draw_field(college_pos, college_val,    f_college)
-            draw_field(year_pos,    year_val,       f_year)
-            draw_field(department_pos, department_val, f_dept)
-            draw_field(role_pos,    role_val,       f_role)
-            draw_field(project_pos, project_val,    f_project)
-            draw_field(month_pos,   month_val,      f_month)
-            draw_field(date_pos,    date_val,       f_date)
-
-            # Render QR overlay
-            qr_x = qr_pos["x"] * width_pt
-            qr_size_pt = qr_size * width_pt
-            qr_y = (1 - qr_pos["y"]) * height_pt - qr_size_pt
-            can.drawImage(qr_reader, qr_x, qr_y, width=qr_size_pt, height=qr_size_pt)
-
-            can.save()
-            overlay_io.seek(0)
-
-            # Merge PDF overlay with original
-            template_reader = PdfReader(io.BytesIO(template_pdf_bytes))
-            overlay_reader = PdfReader(overlay_io)
-            
-            writer = PdfWriter()
-            template_page = template_reader.pages[0]
-            overlay_page = overlay_reader.pages[0]
-            
-            template_page.merge_page(overlay_page)
-            writer.add_page(template_page)
-
-            # Add remaining pages
-            for i in range(1, len(template_reader.pages)):
-                writer.add_page(template_reader.pages[i])
-
-            merged_pdf_io = io.BytesIO()
-            writer.write(merged_pdf_io)
-            merged_pdf_bytes = merged_pdf_io.getvalue()
+            if not row_use_pptx_pipeline:
+                # Fallback to PyMuPDF drawing logic on the PDF template
+                doc = fitz.open(stream=template_pdf_bytes, filetype="pdf")
+                
+                # Define all search keys for each field
+                field_placeholders = {
+                    "name": ["<<NAME>>"],
+                    "college": ["<<COLLEGE>>", "<<INSTITUTION>>", "<<UNIVERSITY>>"],
+                    "year": ["<<YEAR>>", "<<CLASS>>"],
+                    "department": ["<<DEPARTMENT>>", "<<DEPT>>", "<<BRANCH>>"],
+                    "role": ["<<ROLE>>", "<<DOMAIN>>", "<<FIELD>>"],
+                    "project": ["<<PROJECT>>", "<<INTERNSHIP & LIVE PROJECT AREA>>", "<<AREA>>"],
+                    "month": ["<<MONTH>>", "<<BATCH>>", "<<BATCH >>"],
+                    "date": ["<<DATE>>", "<<DT>>"]
+                }
+                
+                for page in doc:
+                    # Map of exact keys found on the page to their values and standard field name
+                    active_placeholders = {}
+                    
+                    for field, keys in field_placeholders.items():
+                        val = ""
+                        if field == "name": val = name_val
+                        elif field == "college": val = college_val
+                        elif field == "year": val = year_val
+                        elif field == "department": val = department_val
+                        elif field == "role": val = role_val
+                        elif field == "project": val = project_val
+                        elif field == "month": val = month_val
+                        elif field == "date": val = date_val
+                        
+                        for key in keys:
+                            # check standard format <<KEY>>
+                            rects = page.search_for(key)
+                            if rects:
+                                active_placeholders[key] = {"val": val, "field": field}
+                            else:
+                                # check guillemets format «KEY»
+                                guill_key = key.replace("<<", "«").replace(">>", "»")
+                                rects = page.search_for(guill_key)
+                                if rects:
+                                    active_placeholders[guill_key] = {"val": val, "field": field}
+    
+                    # Register fonts on the page if they exist
+                    fonts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
+                    font_paths = {
+                        "canvasans-regular": os.path.join(fonts_dir, "CanvaSans-Regular.ttf"),
+                        "canvasans-bold": os.path.join(fonts_dir, "CanvaSans-Bold.ttf"),
+                        "codecpro-bold": os.path.join(fonts_dir, "CodecPro-Bold.ttf"),
+                        "codecpro-regular": os.path.join(fonts_dir, "CodecPro-Regular.ttf")
+                    }
+                    
+                    registered_fonts = {}
+                    for name, path in font_paths.items():
+                        if os.path.exists(path):
+                            try:
+                                page.insert_font(fontname=name, fontfile=path)
+                                registered_fonts[name] = True
+                            except Exception as e:
+                                print(f"Failed to register font {name}: {e}")
+    
+                    # 1. Scan spans to extract styling (font size, color, font family) of placeholders before redacting
+                    styles = {}
+                    blocks = page.get_text("dict")["blocks"]
+                    for block in blocks:
+                        if "lines" in block:
+                            for line in block["lines"]:
+                                for span in line["spans"]:
+                                    text = span["text"].strip()
+                                    for key in active_placeholders:
+                                        if key.lower() in text.lower():
+                                            color_int = span["color"]
+                                            r = ((color_int >> 16) & 255) / 255.0
+                                            g = ((color_int >> 8) & 255) / 255.0
+                                            b = (color_int & 255) / 255.0
+                                            styles[key] = {
+                                                "size": span["size"],
+                                                "color": (r, g, b),
+                                                "font": span["font"]
+                                            }
+    
+                    # 2. Search and save coordinates of all occurrences of placeholders before redacting
+                    replacements_to_apply = []
+                    for key, data in active_placeholders.items():
+                        rects = page.search_for(key)
+                        for r in rects:
+                            replacements_to_apply.append({
+                                "rect": r,
+                                "val": data["val"],
+                                "field": data["field"],
+                                "key": key
+                            })
+    
+                    # QR code replacements
+                    qr_rects = []
+                    for qr_key in ("<<QR>>", "<<QR_CODE>>", "<<QRCODE>>", "«QR»", "«QR_CODE»", "«QRCODE»"):
+                        rects = page.search_for(qr_key)
+                        if rects:
+                            qr_rects = rects
+                            break
+    
+                    # 3. Add redactions for all placeholders found
+                    for rep in replacements_to_apply:
+                        page.add_redact_annot(rep["rect"])
+                    for r in qr_rects:
+                        page.add_redact_annot(r)
+                    
+                    # Apply redactions, keeping background graphics & images
+                    page.apply_redactions(images=0, graphics=0)
+    
+                    # 4. Insert replacement text at baseline coordinates
+                    for rep in replacements_to_apply:
+                        rect = rep["rect"]
+                        val = rep["val"]
+                        field = rep["field"]
+                        key = rep["key"]
+                        if val:
+                            style = styles.get(key, {"size": 12, "color": (0, 0, 0)})
+                            
+                            # Determine fontname dynamically from original placeholder font
+                            orig_font = style.get("font", "").lower()
+                            if "+" in orig_font:
+                                orig_font = orig_font.split("+")[1]
+                            
+                            fontname = "helv"
+                            if "canvasans-bold" in orig_font and "canvasans-bold" in registered_fonts:
+                                fontname = "canvasans-bold"
+                            elif "canvasans-regular" in orig_font and "canvasans-regular" in registered_fonts:
+                                fontname = "canvasans-regular"
+                            elif "codecpro-bold" in orig_font and "codecpro-bold" in registered_fonts:
+                                fontname = "codecpro-bold"
+                            elif "codecpro-regular" in orig_font and "codecpro-regular" in registered_fonts:
+                                fontname = "codecpro-regular"
+                            elif field == "name":
+                                fontname = "hebo"  # standard fallback for bold name
+                            elif "bold" in orig_font:
+                                fontname = "hebo"
+                            
+                            # Auto-scale font size if text is too long to fit on the page
+                            original_size = style.get("size", 12)
+                            max_width = page.rect.width - rect.x0 - 30  # 30pt right margin
+                            
+                            # Calculate exact text width using font metrics
+                            try:
+                                text_width = fitz.get_text_length(val, fontname=fontname, fontsize=original_size)
+                            except Exception:
+                                # Fallback estimation if font metrics fail
+                                text_width = len(val) * original_size * 0.55
+                                
+                            fontsize = original_size
+                            if text_width > max_width and max_width > 50:
+                                fontsize = original_size * (max_width / text_width)
+                                fontsize = max(8.0, fontsize)  # Cap minimum size to 8pt
+                            
+                            # Calculate baseline Y coordinate dynamically (descender space is roughly 18% of the bounding box height)
+                            baseline_y = rect.y1 - (rect.y1 - rect.y0) * 0.18
+                            point = fitz.Point(rect.x0, baseline_y)
+                            
+                            page.insert_text(
+                                point,
+                                val,
+                                fontname=fontname,
+                                fontsize=fontsize,
+                                color=style["color"]
+                            )
+    
+                    # 5. Insert QR Code
+                    for r in qr_rects:
+                        qr_url = build_verify_url(cert_code)
+                        qr = qrcode.QRCode(version=1, box_size=10, border=1)
+                        qr.add_data(qr_url)
+                        qr.make(fit=True)
+                        from qrcode.image.pil import PilImage
+                        qr_img = qr.make_image(image_factory=PilImage, fill_color="black", back_color="white")
+                        
+                        qr_io = io.BytesIO()
+                        qr_img.save(qr_io, format="PNG")
+                        qr_bytes = qr_io.getvalue()
+                        
+                        page.insert_image(r, stream=qr_bytes)
+    
+                # Get final PDF bytes
+                merged_pdf_bytes = doc.tobytes()
+                doc.close()
 
             # Upload generated PDF to Supabase Storage ('certificates' bucket)
-            pdf_filename = f"{cert_code}.pdf"
+            safe_name = re.sub(r"[^A-Za-z0-9_-]", "_", name_val.strip())[:40]
+            pdf_filename = f"{safe_name}_{cert_code}.pdf"
             supabase.storage.from_("certificates").upload(
                 path=pdf_filename,
                 file=merged_pdf_bytes,
@@ -693,13 +991,22 @@ async def generate_certificates(
             pdf_url = supabase.storage.from_("certificates").get_public_url(pdf_filename)
 
             # Save certificate to Supabase Database
-            # Map date -> issue_date to match schema
             issue_date_val = None
-            try:
-                if date_val:
-                    issue_date_val = datetime.fromisoformat(date_val).date().isoformat()
-            except Exception:
-                issue_date_val = date_val or None
+            if date_val:
+                try:
+                    # Clean and parse using pandas
+                    clean_dt = date_val.strip()
+                    parsed_dt = pd.to_datetime(clean_dt, errors='raise')
+                    issue_date_val = parsed_dt.date().isoformat()
+                except Exception:
+                    # Fallback to dateutil parser (handles formats like 20.6.2026 with dayfirst)
+                    try:
+                        from dateutil import parser
+                        parsed_dt = parser.parse(clean_dt, dayfirst=True)
+                        issue_date_val = parsed_dt.date().isoformat()
+                    except Exception:
+                        issue_date_val = None
+
 
             cert_data = {
                 "cert_code": cert_code,
@@ -708,20 +1015,19 @@ async def generate_certificates(
                 "batch": year_val,         # stored in batch column for backwards compat
                 "department": department_val,
                 "role": role_val,
-                "project": project_val,    # NEW column — requires DB migration
-                "month": month_val,        # NEW column — requires DB migration
+                "project": project_val,    # Requires DB column addition
+                "month": month_val,        # Requires DB column addition
                 "issue_date": issue_date_val,
                 "status": "active",
                 "pdf_url": pdf_url,
                 "template_id": template_id
             }
-            # Try upserting; specify on_conflict="cert_code" to handle existing records
+            # Try upserting; fallback without new columns if DB migration is not run yet
             try:
                 supabase.table("certificates").upsert(cert_data, on_conflict="cert_code").execute()
             except Exception as db_col_err:
                 err_str = str(db_col_err).lower()
                 if "project" in err_str or "month" in err_str or "column" in err_str:
-                    # Fallback: upsert without new columns if migration not run yet
                     fallback_data = {k: v for k, v in cert_data.items() if k not in ("project", "month")}
                     supabase.table("certificates").upsert(fallback_data, on_conflict="cert_code").execute()
                 else:
@@ -732,11 +1038,13 @@ async def generate_certificates(
                 "name": name_val,
                 "college": college_val,
                 "year": year_val,
+                "month": month_val,
                 "department": department_val,
                 "cert_code": cert_code,
                 "pdf_url": pdf_url,
                 "status": "active"
             })
+
             output_rows.append({
                 "cert_code": cert_code,
                 "name": name_val,

@@ -1,7 +1,7 @@
 import fitz
 
 def inspect():
-    doc = fitz.open("C:/Users/ROHITH P/Downloads/ROHITH P cerf (3).pdf (2).pdf")
+    doc = fitz.open("d:/Projects/CopterCode Certificate Verfication/output/Certificate_SHAHUL HAEED_20.06.2026.pdf")
     page = doc[0]
     blocks = page.get_text("dict")["blocks"]
     for block in blocks:
