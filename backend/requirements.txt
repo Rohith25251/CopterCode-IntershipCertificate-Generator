@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+pydantic
+pandas
+openpyxl
+qrcode
+reportlab
+pypdf
+pymupdf
+supabase
+python-multipart
+python-dotenv
