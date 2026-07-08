@@ -7,10 +7,13 @@ import tempfile
 import pandas as pd
 from typing import Dict, List, Optional
 from datetime import datetime
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status, Response, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 try:
     import win32com.client
@@ -54,6 +57,90 @@ def build_verify_url(cert_code: str) -> str:
 
     separator = "&" if "?" in base else "?"
     return f"{base}{separator}id={cert_code}"
+
+
+BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://localhost:5000").strip()
+
+
+def send_email_notification(
+    to_email: str,
+    intern_name: str,
+    batch_title: str,
+    certificates: List[Dict[str, str]],
+    intern_id: str
+):
+    smtp_server = os.getenv("SMTP_SERVER")
+    smtp_port = os.getenv("SMTP_PORT", "587")
+    smtp_username = os.getenv("SMTP_USERNAME")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    smtp_from_email = os.getenv("SMTP_FROM_EMAIL")
+    smtp_from_name = os.getenv("SMTP_FROM_NAME", "CopterCode Team")
+
+    if not smtp_server or not smtp_username or not smtp_password or not smtp_from_email:
+        print("WARNING: SMTP credentials not fully configured. Skipping email dispatch.")
+        return False
+
+    try:
+        portal_link = f"https://coptercode-website.vercel.app/intern-portal?id={intern_id}"
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Congratulations on Successfully Completing Your Internship at CopterCode"
+        msg["From"] = f"{smtp_from_name} <{smtp_from_email}>"
+        msg["To"] = to_email
+
+        cert_items_html = ""
+        for cert in certificates:
+            cert_items_html += f"<li><strong>{cert['label']}</strong></li>"
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+        </head>
+        <body style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #faf9f6; color: #1c1917; margin: 0; padding: 0;">
+            <div class="container" style="max-width: 600px; margin: 40px auto; background: #ffffff; border: 1px solid #e7e5e4; border-radius: 24px; padding: 40px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);">
+                <div class="header" style="text-align: center; margin-bottom: 30px;">
+                    <img src="https://coptercode-website.vercel.app/coptercode-logo.svg" alt="CopterCode Logo" style="height: 50px; width: auto; display: block; margin: 0 auto 10px auto;" />
+                    <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 10px 0 0 0;">CopterCode</h1>
+                </div>
+                <div class="content">
+                    <p style="font-size: 14px; line-height: 1.6; color: #44403c; margin-bottom: 20px;">Greetings from <strong>CopterCode</strong>!</p>
+                    <p style="font-size: 14px; line-height: 1.6; color: #44403c; margin-bottom: 20px;">We are pleased to inform you that you have <strong>successfully completed the internship program</strong> at CopterCode. Your dedication, hard work, and enthusiasm throughout the program have been truly commendable.</p>
+                    <p style="font-size: 14px; line-height: 1.6; color: #44403c; margin-bottom: 20px;">As a token of your accomplishments, the following documents have been issued for you:</p>
+                    <ul style="font-size: 14px; color: #44403c; margin: 15px 0; padding-left: 20px;">
+                        {cert_items_html}
+                    </ul>
+                    <p style="font-size: 14px; line-height: 1.6; color: #44403c; margin-bottom: 20px;">We extend our heartfelt congratulations and best wishes for your future career. We are confident that the skills and knowledge you have gained here will serve you well in all your professional pursuits.</p>
+                    
+                    <div class="button-container" style="text-align: center; margin: 35px 0;">
+                        <a href="{portal_link}" class="btn" style="background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%); color: #ffffff !important; text-decoration: none; font-weight: bold; font-size: 14px; padding: 14px 30px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.15);" target="_blank">Download Certificate(s)</a>
+                    </div>
+                    
+                    <p style="font-size: 14px; line-height: 1.6; color: #44403c; margin-bottom: 20px;">Please feel free to stay in touch with us for any guidance or opportunities. We look forward to seeing you achieve great success ahead.</p>
+                </div>
+                <div class="footer" style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #f5f5f4; font-size: 11px; color: #78716c; text-align: center;">
+                    <p>Warm regards,<br /><strong>Team CopterCode</strong></p>
+                    <p style="margin-top: 20px; font-size: 10px; color: #a8a29e;">This is an automated message, please do not reply to this email.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        msg.attach(MIMEText(html_content, "html"))
+
+        server = smtplib.SMTP(smtp_server, int(smtp_port))
+        if int(smtp_port) == 587:
+            server.starttls()
+        server.login(smtp_username, smtp_password)
+        server.sendmail(smtp_from_email, to_email, msg.as_string())
+        server.quit()
+        print(f"Email sent successfully to {to_email}")
+        return True
+    except Exception as email_err:
+        print(f"Error sending email to {to_email}: {email_err}")
+        return False
 
 # Configure CORS
 app.add_middleware(
@@ -460,9 +547,79 @@ def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, 
 
 
 
-@app.get("/")
-def read_root():
-    return {"status": "healthy", "service": "Certificate Generator API"}
+@app.post("/api/batch/create")
+async def create_batch(
+    batch_id: str = Form(...),
+    month: str = Form(...),
+    issue_date: str = Form(...),
+    lor_template: Optional[UploadFile] = File(None),
+    experience_template: Optional[UploadFile] = File(None),
+    internship_template: Optional[UploadFile] = File(None)
+):
+    if not supabase:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Supabase client is not configured."
+        )
+
+    for f in (lor_template, experience_template, internship_template):
+        if f:
+            ext = os.path.splitext(f.filename)[1].lower()
+            if ext != ".pptx":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Template {f.filename} must be a PPTX file."
+                )
+
+    try:
+        lor_path = None
+        exp_path = None
+        int_path = None
+
+        if lor_template:
+            lor_bytes = await lor_template.read()
+            lor_path = f"templates/{batch_id}/lor.pptx"
+            supabase.storage.from_("templates").upload(
+                path=lor_path,
+                file=lor_bytes,
+                file_options={"content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "upsert": "true"}
+            )
+        
+        if experience_template:
+            exp_bytes = await experience_template.read()
+            exp_path = f"templates/{batch_id}/experience.pptx"
+            supabase.storage.from_("templates").upload(
+                path=exp_path,
+                file=exp_bytes,
+                file_options={"content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "upsert": "true"}
+            )
+
+        if internship_template:
+            int_bytes = await internship_template.read()
+            int_path = f"templates/{batch_id}/internship.pptx"
+            supabase.storage.from_("templates").upload(
+                path=int_path,
+                file=int_bytes,
+                file_options={"content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "upsert": "true"}
+            )
+
+        batch_record = {
+            "id": batch_id,
+            "month": month,
+            "issue_date": issue_date,
+            "lor_template_path": lor_path,
+            "experience_template_path": exp_path,
+            "internship_template_path": int_path
+        }
+        supabase.table("batches").upsert(batch_record).execute()
+
+        return {"status": "success", "batch_id": batch_id}
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create batch: {str(e)}"
+        )
 
 
 @app.post("/api/template/preview")
@@ -707,29 +864,26 @@ async def save_layout(payload: LayoutPayload):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Template with ID {payload.template_id} not found."
             )
-        return {"status": "success", "message": "Layout configuration saved."}
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database update failed: {str(e)}"
-        )
-
-
-
-
-
-@app.post("/api/generate")
+        return {"status": "@app.post("/api/generate")
 async def generate_certificates(
-    template_id: str = Form(...),
-    excel_file: UploadFile = File(...)
+    batch_id: Optional[str] = Form(None),
+    template_id: Optional[str] = Form(None),
+    excel_file: UploadFile = File(...),
+    background_tasks: Optional[BackgroundTasks] = None
 ):
     """
     Processes the details from Excel.
-    For each row, generates a QR code and replaces placeholders in the template PDF.
-    Saves PDF, inserts database record, and compiles excel results sheet.
+    For each row, inserts records into the 'interns' and 'certificates' tables
+    based on their LOR, Experience, and Internship selections.
+    Emails certificates to interns.
     """
+    target_batch_id = batch_id or template_id
+    if not target_batch_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing batch_id or template_id parameter."
+        )
+
     if not supabase:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -743,43 +897,7 @@ async def generate_certificates(
             detail="Please upload a valid Excel file (.xlsx or .xls)."
         )
 
-    # 1. Fetch template metadata
-    try:
-        template_res = supabase.table("templates").select("*").eq("id", template_id).execute()
-        if not template_res.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Template with ID {template_id} not found."
-            )
-        template_data = template_res.data[0]
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch template metadata: {e}"
-        )
-
-    # 2. Download original template (PPTX if available, otherwise fallback to PDF)
-    use_pptx_pipeline = False
-    template_pptx_bytes = None
-    template_pdf_bytes = None
-    
-    try:
-        pptx_path = f"{template_id}/template.pptx"
-        template_pptx_bytes = supabase.storage.from_("templates").download(pptx_path)
-        use_pptx_pipeline = True
-        print(f"Using PPTX pipeline for template ID {template_id}")
-    except Exception:
-        try:
-            pdf_path = f"{template_id}/template.pdf"
-            template_pdf_bytes = supabase.storage.from_("templates").download(pdf_path)
-            print(f"Using PDF fallback pipeline for template ID {template_id}")
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to download original PDF template: {e}"
-            )
-
-    # 3. Read and parse Excel file
+    # Read and parse Excel file
     try:
         excel_bytes = await excel_file.read()
         df = pd.read_excel(io.BytesIO(excel_bytes))
@@ -795,6 +913,8 @@ async def generate_certificates(
     for col in df.columns:
         if "name" in col:
             col_mapping["name"] = col
+        elif "email" in col:
+            col_mapping["email"] = col
         elif "college" in col or "university" in col or "institution" in col:
             col_mapping["college"] = col
         elif "year" in col or "class" in col:
@@ -809,10 +929,21 @@ async def generate_certificates(
             col_mapping["month"] = col
         elif "date" in col or "dt" in col:
             col_mapping["date"] = col
+        
+        # YES/NO certificate selections
+        elif "recomandation" in col or "recommendation" in col or "lor" in col:
+            col_mapping["opt_lor"] = col
+        elif "experience" in col:
+            col_mapping["opt_experience"] = col
+        elif "internship certificate" in col or "internship_certificate" in col:
+            col_mapping["opt_internship"] = col
 
+    # Fallback to standard column mapping check
     missing_cols = []
     if "name" not in col_mapping:
         missing_cols.append("Name")
+    if "email" not in col_mapping:
+        missing_cols.append("Email")
     if "college" not in col_mapping:
         missing_cols.append("College")
     if "year" not in col_mapping:
@@ -826,9 +957,8 @@ async def generate_certificates(
             detail=f"Excel file is missing required columns: {', '.join(missing_cols)}"
         )
 
-    # 4. Generate Certificates row-by-row
+    # Process row by row
     rows_results = []
-    output_rows = []
 
     for index, row in df.iterrows():
         try:
@@ -842,7 +972,12 @@ async def generate_certificates(
                     return str(v.date())
                 return str(v).strip()
 
+            def _cell_yes_no(r, key):
+                val = _cell_str(r, key).upper()
+                return val == "YES"
+
             name_val = _cell_str(row, "name")
+            email_val = _cell_str(row, "email")
             college_val = _cell_str(row, "college")
             year_val = _cell_str(row, "year")
             department_val = _cell_str(row, "department")
@@ -851,279 +986,21 @@ async def generate_certificates(
             month_val = _cell_str(row, "month")
             date_val = _cell_str(row, "date")
 
-            # Skip empty rows
-            if not name_val or name_val.lower() == "nan":
+            opt_lor = _cell_yes_no(row, "opt_lor")
+            opt_exp = _cell_yes_no(row, "opt_experience")
+            opt_int = _cell_yes_no(row, "opt_internship")
+
+            if not name_val or name_val.lower() == "nan" or not email_val:
                 continue
 
-            # Generate a unique UUID for the certificate
-            cert_code = str(uuid.uuid4())
-
-            # Check if we should use the high-fidelity PPTX pipeline
-            row_use_pptx_pipeline = use_pptx_pipeline
-            merged_pdf_bytes = None
-
-            if row_use_pptx_pipeline:
-                # 1. Setup replacements dictionary
-                replacements = {
-                    "<<NAME>>": name_val,
-                    "<<INSTITUTION>>": college_val,
-                    "<<COLLEGE>>": college_val,
-                    "<<YEAR>>": year_val,
-                    "<<DEPARTMENT>>": department_val,
-                    "<<DOMAIN>>": role_val,
-                    "<<ROLE>>": role_val,
-                    "<<PROJECT>>": project_val,
-                    "<<INTERNSHIP & LIVE PROJECT AREA>>": project_val,
-                    "<<BATCH>>": month_val,
-                    "<<BATCH >>": month_val,
-                    "<<DATE>>": date_val,
-                    "<<DT>>": date_val
-                }
-                
-                # 2. Generate QR code bytes
-                qr_url = build_verify_url(cert_code)
-                qr = qrcode.QRCode(
-                    version=1,
-                    error_correction=qrcode.constants.ERROR_CORRECT_H,
-                    box_size=12,
-                    border=2
-                )
-                qr.add_data(qr_url)
-                qr.make(fit=True)
-                from qrcode.image.pil import PilImage
-                qr_img = qr.make_image(image_factory=PilImage, fill_color="black", back_color="white")
-                qr_io = io.BytesIO()
-                qr_img.save(qr_io, format="PNG")
-                qr_bytes = qr_io.getvalue()
-                
-                # 3. Generate PDF using PPTX pipeline
-                try:
-                    merged_pdf_bytes, cert_title = generate_certificate_from_pptx_bytes(template_pptx_bytes, replacements, qr_bytes)
-                except Exception as pptx_err:
-                    print(f"PPTX pipeline execution failed for row: {pptx_err}")
-                    row_use_pptx_pipeline = False
-            
-            if not row_use_pptx_pipeline:
-                # Fallback to PyMuPDF drawing logic on the PDF template
-                doc = fitz.open(stream=template_pdf_bytes, filetype="pdf")
-                
-                # Detect certificate title from template text
-                full_text = ""
-                for page in doc:
-                    full_text += page.get_text()
-                
-                cert_title = "Certificate"
-                full_text_lower = full_text.lower()
-                if "recommendation" in full_text_lower or "recomandation" in full_text_lower:
-                    cert_title = "Letter Of Recomandation"
-                elif "experience certificate" in full_text_lower or "experience letter" in full_text_lower:
-                    cert_title = "Experience Letter"
-                elif "internship" in full_text_lower:
-                    cert_title = "Internship Certificate"
-                
-                # Define all search keys for each field
-                field_placeholders = {
-                    "name": ["<<NAME>>"],
-                    "college": ["<<COLLEGE>>", "<<INSTITUTION>>", "<<UNIVERSITY>>"],
-                    "year": ["<<YEAR>>", "<<CLASS>>"],
-                    "department": ["<<DEPARTMENT>>", "<<DEPT>>", "<<BRANCH>>"],
-                    "role": ["<<ROLE>>", "<<DOMAIN>>", "<<FIELD>>"],
-                    "project": ["<<PROJECT>>", "<<INTERNSHIP & LIVE PROJECT AREA>>", "<<AREA>>"],
-                    "month": ["<<MONTH>>", "<<BATCH>>", "<<BATCH >>"],
-                    "date": ["<<DATE>>", "<<DT>>"]
-                }
-                
-                for page in doc:
-                    # Map of exact keys found on the page to their values and standard field name
-                    active_placeholders = {}
-                    
-                    for field, keys in field_placeholders.items():
-                        val = ""
-                        if field == "name": val = name_val
-                        elif field == "college": val = college_val
-                        elif field == "year": val = year_val
-                        elif field == "department": val = department_val
-                        elif field == "role": val = role_val
-                        elif field == "project": val = project_val
-                        elif field == "month": val = month_val
-                        elif field == "date": val = date_val
-                        
-                        for key in keys:
-                            # check standard format <<KEY>>
-                            rects = page.search_for(key)
-                            if rects:
-                                active_placeholders[key] = {"val": val, "field": field}
-                            else:
-                                # check guillemets format «KEY»
-                                guill_key = key.replace("<<", "«").replace(">>", "»")
-                                rects = page.search_for(guill_key)
-                                if rects:
-                                    active_placeholders[guill_key] = {"val": val, "field": field}
-    
-                    # Register fonts on the page if they exist
-                    fonts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
-                    font_paths = {
-                        "canvasans-regular": os.path.join(fonts_dir, "CanvaSans-Regular.ttf"),
-                        "canvasans-bold": os.path.join(fonts_dir, "CanvaSans-Bold.ttf"),
-                        "codecpro-bold": os.path.join(fonts_dir, "CodecPro-Bold.ttf"),
-                        "codecpro-regular": os.path.join(fonts_dir, "CodecPro-Regular.ttf")
-                    }
-                    
-                    registered_fonts = {}
-                    for name, path in font_paths.items():
-                        if os.path.exists(path):
-                            try:
-                                page.insert_font(fontname=name, fontfile=path)
-                                registered_fonts[name] = True
-                            except Exception as e:
-                                print(f"Failed to register font {name}: {e}")
-    
-                    # 1. Scan spans to extract styling (font size, color, font family) of placeholders before redacting
-                    styles = {}
-                    blocks = page.get_text("dict")["blocks"]
-                    for block in blocks:
-                        if "lines" in block:
-                            for line in block["lines"]:
-                                for span in line["spans"]:
-                                    text = span["text"].strip()
-                                    for key in active_placeholders:
-                                        if key.lower() in text.lower():
-                                            color_int = span["color"]
-                                            r = ((color_int >> 16) & 255) / 255.0
-                                            g = ((color_int >> 8) & 255) / 255.0
-                                            b = (color_int & 255) / 255.0
-                                            styles[key] = {
-                                                "size": span["size"],
-                                                "color": (r, g, b),
-                                                "font": span["font"]
-                                            }
-    
-                    # 2. Search and save coordinates of all occurrences of placeholders before redacting
-                    replacements_to_apply = []
-                    for key, data in active_placeholders.items():
-                        rects = page.search_for(key)
-                        for r in rects:
-                            replacements_to_apply.append({
-                                "rect": r,
-                                "val": data["val"],
-                                "field": data["field"],
-                                "key": key
-                            })
-    
-                    # QR code replacements
-                    qr_rects = []
-                    for qr_key in ("<<QR>>", "<<QR_CODE>>", "<<QRCODE>>", "«QR»", "«QR_CODE»", "«QRCODE»"):
-                        rects = page.search_for(qr_key)
-                        if rects:
-                            qr_rects = rects
-                            break
-    
-                    # 3. Add redactions for all placeholders found
-                    for rep in replacements_to_apply:
-                        page.add_redact_annot(rep["rect"])
-                    for r in qr_rects:
-                        page.add_redact_annot(r)
-                    
-                    # Apply redactions, keeping background graphics & images
-                    page.apply_redactions(images=0, graphics=0)
-    
-                    # 4. Insert replacement text at baseline coordinates
-                    for rep in replacements_to_apply:
-                        rect = rep["rect"]
-                        val = rep["val"]
-                        field = rep["field"]
-                        key = rep["key"]
-                        if val:
-                            style = styles.get(key, {"size": 12, "color": (0, 0, 0)})
-                            
-                            # Determine fontname dynamically from original placeholder font
-                            orig_font = style.get("font", "").lower()
-                            if "+" in orig_font:
-                                orig_font = orig_font.split("+")[1]
-                            
-                            fontname = "helv"
-                            if "canvasans-bold" in orig_font and "canvasans-bold" in registered_fonts:
-                                fontname = "canvasans-bold"
-                            elif "canvasans-regular" in orig_font and "canvasans-regular" in registered_fonts:
-                                fontname = "canvasans-regular"
-                            elif "codecpro-bold" in orig_font and "codecpro-bold" in registered_fonts:
-                                fontname = "codecpro-bold"
-                            elif "codecpro-regular" in orig_font and "codecpro-regular" in registered_fonts:
-                                fontname = "codecpro-regular"
-                            elif field == "name":
-                                fontname = "hebo"  # standard fallback for bold name
-                            elif "bold" in orig_font:
-                                fontname = "hebo"
-                            
-                            # Auto-scale font size if text is too long to fit on the page
-                            original_size = style.get("size", 12)
-                            max_width = page.rect.width - rect.x0 - 30  # 30pt right margin
-                            
-                            # Calculate exact text width using font metrics
-                            try:
-                                text_width = fitz.get_text_length(val, fontname=fontname, fontsize=original_size)
-                            except Exception:
-                                # Fallback estimation if font metrics fail
-                                text_width = len(val) * original_size * 0.55
-                                
-                            fontsize = original_size
-                            if text_width > max_width and max_width > 50:
-                                fontsize = original_size * (max_width / text_width)
-                                fontsize = max(8.0, fontsize)  # Cap minimum size to 8pt
-                            
-                            # Calculate baseline Y coordinate dynamically (descender space is roughly 18% of the bounding box height)
-                            baseline_y = rect.y1 - (rect.y1 - rect.y0) * 0.18
-                            point = fitz.Point(rect.x0, baseline_y)
-                            
-                            page.insert_text(
-                                point,
-                                val,
-                                fontname=fontname,
-                                fontsize=fontsize,
-                                color=style["color"]
-                            )
-    
-                    # 5. Insert QR Code
-                    for r in qr_rects:
-                        qr_url = build_verify_url(cert_code)
-                        qr = qrcode.QRCode(version=1, box_size=10, border=1)
-                        qr.add_data(qr_url)
-                        qr.make(fit=True)
-                        from qrcode.image.pil import PilImage
-                        qr_img = qr.make_image(image_factory=PilImage, fill_color="black", back_color="white")
-                        
-                        qr_io = io.BytesIO()
-                        qr_img.save(qr_io, format="PNG")
-                        qr_bytes = qr_io.getvalue()
-                        
-                        page.insert_image(r, stream=qr_bytes)
-    
-                # Get final PDF bytes
-                merged_pdf_bytes = doc.tobytes()
-                doc.close()
-
-            # Upload generated PDF to Supabase Storage ('certificates' bucket)
-            safe_name = re.sub(r"[^A-Za-z0-9_-]", "_", name_val.strip())[:40]
-            safe_title = cert_title.replace(" ", "_")
-            pdf_filename = f"{safe_name}_({safe_title})_{cert_code}.pdf"
-            supabase.storage.from_("certificates").upload(
-                path=pdf_filename,
-                file=merged_pdf_bytes,
-                file_options={"content-type": "application/pdf", "upsert": "true"}
-            )
-
-            pdf_url = supabase.storage.from_("certificates").get_public_url(pdf_filename)
-
-            # Save certificate to Supabase Database
+            # Parse Issue Date
             issue_date_val = None
             if date_val:
                 try:
-                    # Clean and parse using pandas
                     clean_dt = date_val.strip()
                     parsed_dt = pd.to_datetime(clean_dt, errors='raise')
                     issue_date_val = parsed_dt.date().isoformat()
                 except Exception:
-                    # Fallback to dateutil parser (handles formats like 20.6.2026 with dayfirst)
                     try:
                         from dateutil import parser
                         parsed_dt = parser.parse(clean_dt, dayfirst=True)
@@ -1131,46 +1008,9 @@ async def generate_certificates(
                     except Exception:
                         issue_date_val = None
 
-
-            cert_data = {
-                "cert_code": cert_code,
-                "name": name_val,
-                "college": college_val,
-                "batch": year_val,         # stored in batch column for backwards compat
-                "department": department_val,
-                "role": role_val,
-                "project": project_val,    # Requires DB column addition
-                "month": month_val,        # Requires DB column addition
-                "issue_date": issue_date_val,
-                "status": "active",
-                "pdf_url": pdf_url,
-                "template_id": template_id
-            }
-            # Try upserting; fallback without new columns if DB migration is not run yet
-            try:
-                supabase.table("certificates").upsert(cert_data, on_conflict="cert_code").execute()
-            except Exception as db_col_err:
-                err_str = str(db_col_err).lower()
-                if "project" in err_str or "month" in err_str or "column" in err_str:
-                    fallback_data = {k: v for k, v in cert_data.items() if k not in ("project", "month")}
-                    supabase.table("certificates").upsert(fallback_data, on_conflict="cert_code").execute()
-                else:
-                    raise
-
-            # Success response details
-            rows_results.append({
-                "name": name_val,
-                "college": college_val,
-                "year": year_val,
-                "month": month_val,
-                "department": department_val,
-                "cert_code": cert_code,
-                "pdf_url": pdf_url,
-                "status": "active"
-            })
-
-            output_rows.append({
-                "cert_code": cert_code,
+            # 1. Insert/Save Intern details
+            intern_data = {
+                "email": email_val,
                 "name": name_val,
                 "college": college_val,
                 "year": year_val,
@@ -1178,47 +1018,106 @@ async def generate_certificates(
                 "role": role_val,
                 "project": project_val,
                 "month": month_val,
-                "date": date_val
-            })
+                "date": date_val,
+                "batch_id": target_batch_id
+            }
+
+            intern_res = supabase.table("interns").insert(intern_data).execute()
+            if not intern_res.data:
+                raise ValueError("Failed to create intern database record.")
+            intern_id = intern_res.data[0]["id"]
+
+            # 2. Build Certificates based on YES/NO choices
+            certificates_to_create = []
+            if opt_lor:
+                certificates_to_create.append(("lor", "Letter of Recommendation"))
+            if opt_exp:
+                certificates_to_create.append(("experience", "Experience Letter"))
+            if opt_int:
+                certificates_to_create.append(("internship", "Internship Certificate"))
+
+            email_certificates = []
+
+            for cert_type, label in certificates_to_create:
+                cert_code = str(uuid.uuid4())
+                
+                # Dynamically point pdf_url to backend dynamic PDF route
+                dynamic_pdf_url = f"{BACKEND_BASE_URL}/api/certificates/{cert_code}/pdf"
+
+                cert_record = {
+                    "cert_code": cert_code,
+                    "intern_id": intern_id,
+                    "cert_type": cert_type,
+                    "status": "active",
+                    "pdf_url": dynamic_pdf_url,
+                    
+                    # For backwards compatibility with older templates:
+                    "name": name_val,
+                    "college": college_val,
+                    "batch": year_val,
+                    "department": department_val,
+                    "role": role_val,
+                    "project": project_val,
+                    "month": month_val,
+                    "issue_date": issue_date_val,
+                    "template_id": target_batch_id
+                }
+
+                supabase.table("certificates").insert(cert_record).execute()
+
+                email_certificates.append({
+                    "type": cert_type,
+                    "label": label,
+                    "cert_code": cert_code,
+                    "pdf_url": dynamic_pdf_url
+                })
+
+                # Append to rows results for frontend UI display
+                rows_results.append({
+                    "name": name_val,
+                    "college": college_val,
+                    "department": department_val,
+                    "month": f"{label} ({month_val or year_val})",
+                    "cert_code": cert_code,
+                    "pdf_url": dynamic_pdf_url,
+                    "status": "active"
+                })
+
+            # 3. Trigger Email Notification (if any certificate is generated)
+            if email_certificates:
+                if background_tasks:
+                    background_tasks.add_task(
+                        send_email_notification,
+                        email_val,
+                        name_val,
+                        month_val or year_val,
+                        email_certificates,
+                        str(intern_id)
+                    )
+                else:
+                    send_email_notification(
+                        email_val,
+                        name_val,
+                        month_val or year_val,
+                        email_certificates,
+                        str(intern_id)
+                    )
 
         except Exception as row_error:
-            # Log error and continue the batch processing
             print(f"Row {index} failed: {row_error}")
             rows_results.append({
                 "name": str(row.get(col_mapping.get("name", ""), "Unknown")),
                 "college": str(row.get(col_mapping.get("college", ""), "Unknown")),
-                "year": str(row.get(col_mapping.get("year", ""), "Unknown")),
                 "department": str(row.get(col_mapping.get("department", ""), "Unknown")),
+                "month": "Error",
                 "cert_code": None,
                 "pdf_url": None,
                 "status": "error",
                 "error": str(row_error)
             })
 
-    # 5. Create final results Excel file
-    excel_download_url = ""
-    if output_rows:
-        try:
-            out_df = pd.DataFrame(output_rows)
-            out_df = out_df[["cert_code", "name", "college", "year", "department", "role", "project", "month", "date"]]
-            out_df.columns = ["Certificate Code", "Name", "College", "Year", "Department", "Role", "Project", "Month", "Date"]
-            
-            result_excel_io = io.BytesIO()
-            out_df.to_excel(result_excel_io, index=False, engine='openpyxl')
-            result_excel_bytes = result_excel_io.getvalue()
-
-            results_filename = f"results_{template_id}_{uuid.uuid4().hex[:8]}.xlsx"
-            supabase.storage.from_("certificates").upload(
-                path=results_filename,
-                file=result_excel_bytes,
-                file_options={"content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
-            )
-            excel_download_url = supabase.storage.from_("certificates").get_public_url(results_filename)
-        except Exception as xl_err:
-            print(f"Failed to create and upload results Excel file: {xl_err}")
-
     return {
-        "excel_download_url": excel_download_url,
+        "excel_download_url": "",
         "rows": rows_results
     }
 
@@ -1256,6 +1155,154 @@ def lookup_certificate(cert_code: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database lookup failed: {str(e)}"
+        )
+
+
+@app.get("/api/certificates/{cert_code}/pdf")
+async def get_dynamic_pdf(cert_code: str):
+    """
+    Generates and returns the PDF for a specific certificate dynamically.
+    Downloads the templates from the bucket, parses data, replaces placeholders,
+    runs the conversion, and serves raw PDF bytes.
+    """
+    if not supabase:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Supabase client is not configured."
+        )
+
+    try:
+        # 1. Fetch certificate record (try exact match first, then case-insensitive fallbacks)
+        res = supabase.table("certificates").select("*").eq("cert_code", cert_code).execute()
+        if not res.data:
+            res = supabase.table("certificates").select("*").eq("cert_code", cert_code.upper()).execute()
+        if not res.data:
+            res = supabase.table("certificates").select("*").eq("cert_code", cert_code.lower()).execute()
+
+        if not res.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Certificate with code {cert_code} not found."
+            )
+        
+        cert_data = res.data[0]
+        
+        # 2. Retrieve intern and batch details
+        intern_id = cert_data.get("intern_id")
+        cert_type = cert_data.get("cert_type") or "internship"
+        batch_id = cert_data.get("template_id") # stored as template_id for compatibility
+
+        # Fallback details from certificate record itself for old entries
+        intern_name = cert_data.get("name")
+        college = cert_data.get("college")
+        year = cert_data.get("batch")
+        department = cert_data.get("department")
+        role = cert_data.get("role")
+        project = cert_data.get("project")
+        month = cert_data.get("month")
+        date_val = cert_data.get("issue_date")
+
+        # Load from interns table if it exists
+        if intern_id:
+            intern_res = supabase.table("interns").select("*").eq("id", intern_id).execute()
+            if intern_res.data:
+                intern = intern_res.data[0]
+                intern_name = intern.get("name")
+                college = intern.get("college")
+                year = intern.get("year")
+                department = intern.get("department")
+                role = intern.get("role")
+                project = intern.get("project")
+                month = intern.get("month")
+                date_val = intern.get("date") or date_val
+                batch_id = intern.get("batch_id") or batch_id
+
+        # 3. Retrieve template path from batches table
+        template_path = None
+        if batch_id:
+            batch_res = supabase.table("batches").select("*").eq("id", batch_id).execute()
+            if batch_res.data:
+                batch = batch_res.data[0]
+                if cert_type == "lor":
+                    template_path = batch.get("lor_template_path")
+                elif cert_type == "experience":
+                    template_path = batch.get("experience_template_path")
+                else:
+                    template_path = batch.get("internship_template_path")
+            else:
+                # Fallback to old templates table lookup (backward compatible)
+                template_res = supabase.table("templates").select("*").eq("id", batch_id).execute()
+                if template_res.data:
+                    template_path = f"{batch_id}/template.pptx"
+
+        if not template_path:
+            # Absolute default fallback
+            template_path = f"{batch_id}/template.pptx"
+
+        # 4. Download template PPTX from storage
+        try:
+            pptx_bytes = supabase.storage.from_("templates").download(template_path)
+        except Exception as dl_err:
+            # Fallback try template.pptx directly
+            try:
+                pptx_bytes = supabase.storage.from_("templates").download(f"{batch_id}/template.pptx")
+            except Exception:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to retrieve template file from Storage bucket: {dl_err}"
+                )
+
+        # 5. Prepare replacements
+        replacements = {
+            "<<NAME>>": intern_name or "",
+            "<<INSTITUTION>>": college or "",
+            "<<COLLEGE>>": college or "",
+            "<<YEAR>>": year or "",
+            "<<DEPARTMENT>>": department or "",
+            "<<DOMAIN>>": role or "",
+            "<<ROLE>>": role or "",
+            "<<PROJECT>>": project or "",
+            "<<INTERNSHIP & LIVE PROJECT AREA>>": project or "",
+            "<<BATCH>>": month or "",
+            "<<BATCH >>": month or "",
+            "<<DATE>>": str(date_val) if date_val else "",
+            "<<DT>>": str(date_val) if date_val else ""
+        }
+
+        # 6. Generate QR code bytes pointing to verification URL
+        qr_url = build_verify_url(cert_code)
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_H,
+            box_size=12,
+            border=2
+        )
+        qr.add_data(qr_url)
+        qr.make(fit=True)
+        from qrcode.image.pil import PilImage
+        qr_img = qr.make_image(image_factory=PilImage, fill_color="black", back_color="white")
+        qr_io = io.BytesIO()
+        qr_img.save(qr_io, format="PNG")
+        qr_bytes = qr_io.getvalue()
+
+        # 7. Convert and build PDF
+        pdf_bytes, cert_title = generate_certificate_from_pptx_bytes(pptx_bytes, replacements, qr_bytes)
+
+        # 8. Return response containing PDF stream
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"inline; filename={cert_code}.pdf"
+            }
+        )
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate dynamic certificate PDF: {str(e)}"
         )
 
 

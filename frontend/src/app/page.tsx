@@ -223,6 +223,12 @@ const FIELD_CFG: Record<string, { border: string; bg: string; text: string; labe
 };
 
 export default function AdminDashboard() {
+  const [isMounted, setIsMounted] = useState(false);
+  
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   // App state (1 = upload assets, 2 = generation run)
   const [step, setStep] = useState<1 | 2>(1);
   const [backendUrl, setBackendUrl] = useState<string>(() => {
@@ -231,10 +237,17 @@ export default function AdminDashboard() {
   });
   
   // Files
-  const [templateFile, setTemplateFile] = useState<File | null>(null);
+  const [lorTemplateFile, setLorTemplateFile] = useState<File | null>(null);
+  const [experienceTemplateFile, setExperienceTemplateFile] = useState<File | null>(null);
+  const [internshipTemplateFile, setInternshipTemplateFile] = useState<File | null>(null);
   const [excelFile, setExcelFile] = useState<File | null>(null);
   
-  // Loaded Template ID
+  // Batch details
+  const [batchId, setBatchId] = useState<string>("");
+  const [batchMonth, setBatchMonth] = useState<string>("");
+  const [issueDate, setIssueDate] = useState<string>("");
+
+  // Loaded Template ID (used as batch_id)
   const [templateId, setTemplateId] = useState<string>("");
   
   // Generator states
@@ -315,7 +328,7 @@ export default function AdminDashboard() {
     return String(error);
   };
 
-  // Step 1: Upload Template and get preview
+  // Step 1: Upload templates and metadata
   const [isUploadingTemplate, setIsUploadingTemplate] = useState<boolean>(false);
 
   // Processing animation sub-steps state
@@ -323,16 +336,16 @@ export default function AdminDashboard() {
 
   const PROCESS_STEPS = {
     1: [
-      "Uploading template document...",
-      "Extracting template properties...",
-      "Generating unique template reference..."
+      "Uploading LOR, Experience, and Internship templates...",
+      "Registering batch metadata in Supabase DB...",
+      "Generating unique batch records..."
     ],
     2: [
-      "Reading uploaded Excel record registry...",
-      "Validating student name and college listings...",
-      "Searching for placeholders (e.g. <<NAME>>, <<QR>>)...",
-      "Stitching text layers and compiling PDF certificates...",
-      "Compiling final spreadsheet download sheet..."
+      "Parsing Excel data sheet...",
+      "Creating intern profiles in Supabase...",
+      "Resolving certificate requirements (YES/NO columns)...",
+      "Registering credentials and scheduling email dispatches...",
+      "Completing generation run..."
     ]
   };
 
@@ -355,32 +368,42 @@ export default function AdminDashboard() {
     };
   }, [isProcessing, processingStage]);
 
-  const handleTemplateUpload = async (e: React.FormEvent) => {
+  const handleBatchCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!templateFile) return;
+    if (!batchId || !batchMonth || !issueDate) {
+      setErrorMsg("Please fill in all batch details (Batch ID, Month, and Issue Date).");
+      return;
+    }
+    if (!lorTemplateFile && !experienceTemplateFile && !internshipTemplateFile) {
+      setErrorMsg("Please upload at least one PPTX certificate template (LOR, Experience, or Internship).");
+      return;
+    }
 
     setIsUploadingTemplate(true);
     setErrorMsg("");
 
     const formData = new FormData();
-    formData.append("template_file", templateFile);
-    if (excelFile) {
-      formData.append("excel_file", excelFile);
-    }
+    formData.append("batch_id", batchId.trim());
+    formData.append("month", batchMonth.trim());
+    formData.append("issue_date", issueDate);
+    
+    if (lorTemplateFile) formData.append("lor_template", lorTemplateFile);
+    if (experienceTemplateFile) formData.append("experience_template", experienceTemplateFile);
+    if (internshipTemplateFile) formData.append("internship_template", internshipTemplateFile);
 
     try {
-      const response = await fetch(`${backendUrl}/api/template/preview`, {
+      const response = await fetch(`${backendUrl}/api/batch/create`, {
         method: "POST",
         body: formData,
       });
 
       if (!response.ok) {
         const errData = await response.json();
-        throw new Error(errData.detail || "Failed to process template PDF");
+        throw new Error(errData.detail || "Failed to create batch record.");
       }
 
       const data = await response.json();
-      setTemplateId(data.template_id);
+      setTemplateId(data.batch_id); // Save batch_id in templateId to maintain compat with Step 2 UI
       
       // Auto-advance to Step 2
       setStep(2);
@@ -407,7 +430,7 @@ export default function AdminDashboard() {
     setErrorMsg("");
 
     const formData = new FormData();
-    formData.append("template_id", templateId);
+    formData.append("batch_id", templateId);
     formData.append("excel_file", excelFile);
 
     try {
@@ -441,14 +464,23 @@ export default function AdminDashboard() {
   };
 
   const handleReset = () => {
-    setTemplateFile(null);
+    setLorTemplateFile(null);
+    setExperienceTemplateFile(null);
+    setInternshipTemplateFile(null);
     setExcelFile(null);
+    setBatchId("");
+    setBatchMonth("");
+    setIssueDate("");
     setTemplateId("");
     setExcelDownloadUrl("");
     setGenerationResults([]);
     setStep(1);
     setErrorMsg("");
   };
+
+  if (!isMounted) {
+    return null;
+  }
 
   return (
     <div className="relative min-h-screen overflow-hidden pb-16 text-stone-850">
@@ -548,60 +580,138 @@ export default function AdminDashboard() {
         {step === 1 && (
           <div className="rounded-[32px] border border-zinc-800 bg-[#030712] p-8 shadow-[0_18px_60px_rgba(0,0,0,0.15)] text-white">
             <h2 className="font-sans text-2xl font-bold text-white mb-6">
-              Upload Base <span className="text-[#3b82f6]">Certificate Files</span>
+              Upload Base <span className="text-[#3b82f6]">Certificate Templates</span>
             </h2>
-            <form onSubmit={handleTemplateUpload} className="space-y-8">
+            <form onSubmit={handleBatchCreate} className="space-y-8">
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Three PPTX Templates Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 
-                {/* PPTX Certificate Template Upload Card */}
+                {/* 1. LOR Template */}
                 <div className="relative group">
                   <label className="block text-sm font-bold text-zinc-400 mb-2">
-                    1. Certificate Template (PPTX)
+                    1. Letter of Recommendation (LOR) PPTX
                   </label>
-                  <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[220px] ${
-                    templateFile 
+                  <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${
+                    lorTemplateFile 
                       ? "border-[#3b82f6]/60 bg-[#3b82f6]/8" 
                       : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
                   }`}>
                     <input 
                       type="file" 
                       accept="application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
-                      onChange={(e) => setTemplateFile(e.target.files?.[0] || null)}
+                      onChange={(e) => setLorTemplateFile(e.target.files?.[0] || null)}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
-                    
-                    <FileText className={`w-12 h-12 mb-4 transition-colors ${templateFile ? "text-[#3b82f6]" : "text-zinc-500 group-hover:text-zinc-400"}`} />
-                    
-                    {templateFile ? (
+                    <FileText className={`w-10 h-10 mb-3 transition-colors ${lorTemplateFile ? "text-[#3b82f6]" : "text-zinc-500 group-hover:text-zinc-400"}`} />
+                    {lorTemplateFile ? (
                       <div className="text-center">
-                        <p className="text-sm font-bold text-white">{templateFile.name}</p>
-                        <p className="text-xs text-zinc-400 mt-1">
-                          {(templateFile.size / 1024 / 1024).toFixed(2)} MB • PPTX Presentation
-                        </p>
+                        <p className="text-xs font-bold text-white truncate max-w-[200px]">{lorTemplateFile.name}</p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">{(lorTemplateFile.size / 1024 / 1024).toFixed(2)} MB</p>
                         <button 
                           type="button" 
-                          onClick={(e) => { e.stopPropagation(); setTemplateFile(null); }}
-                          className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
+                          onClick={(e) => { e.stopPropagation(); setLorTemplateFile(null); }}
+                          className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
                         >
-                          <Trash2 className="w-3.5 h-3.5" /> Remove
+                          Remove
                         </button>
                       </div>
                     ) : (
                       <div className="text-center">
-                        <p className="text-sm font-semibold text-zinc-200">Drag & drop your PPTX template here</p>
-                        <p className="text-xs text-zinc-500 mt-1">Supports PPTX up to 15MB</p>
+                        <p className="text-xs font-semibold text-zinc-200">Upload LOR PPTX</p>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Excel Intern Details Upload Card */}
+                {/* 2. Experience Letter Template */}
                 <div className="relative group">
                   <label className="block text-sm font-bold text-zinc-400 mb-2">
-                    2. Intern Details Sheet (.xlsx)
+                    2. Experience Letter PPTX
                   </label>
-                  <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[220px] ${
+                  <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${
+                    experienceTemplateFile 
+                      ? "border-[#3b82f6]/60 bg-[#3b82f6]/8" 
+                      : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
+                  }`}>
+                    <input 
+                      type="file" 
+                      accept="application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
+                      onChange={(e) => setExperienceTemplateFile(e.target.files?.[0] || null)}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                    <FileText className={`w-10 h-10 mb-3 transition-colors ${experienceTemplateFile ? "text-[#3b82f6]" : "text-zinc-500 group-hover:text-zinc-400"}`} />
+                    {experienceTemplateFile ? (
+                      <div className="text-center">
+                        <p className="text-xs font-bold text-white truncate max-w-[200px]">{experienceTemplateFile.name}</p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">{(experienceTemplateFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                        <button 
+                          type="button" 
+                          onClick={(e) => { e.stopPropagation(); setExperienceTemplateFile(null); }}
+                          className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="text-center">
+                        <p className="text-xs font-semibold text-zinc-200">Upload Experience PPTX</p>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. Internship Certificate Template */}
+                <div className="relative group">
+                  <label className="block text-sm font-bold text-zinc-400 mb-2">
+                    3. Internship Certificate PPTX
+                  </label>
+                  <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${
+                    internshipTemplateFile 
+                      ? "border-[#3b82f6]/60 bg-[#3b82f6]/8" 
+                      : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
+                  }`}>
+                    <input 
+                      type="file" 
+                      accept="application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
+                      onChange={(e) => setInternshipTemplateFile(e.target.files?.[0] || null)}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                    <FileText className={`w-10 h-10 mb-3 transition-colors ${internshipTemplateFile ? "text-[#3b82f6]" : "text-zinc-500 group-hover:text-zinc-400"}`} />
+                    {internshipTemplateFile ? (
+                      <div className="text-center">
+                        <p className="text-xs font-bold text-white truncate max-w-[200px]">{internshipTemplateFile.name}</p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">{(internshipTemplateFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                        <button 
+                          type="button" 
+                          onClick={(e) => { e.stopPropagation(); setInternshipTemplateFile(null); }}
+                          className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="text-center">
+                        <p className="text-xs font-semibold text-zinc-200">Upload Internship PPTX</p>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Excel and Batch Details Split */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+                
+                {/* Excel Upload */}
+                <div className="relative group">
+                  <label className="block text-sm font-bold text-zinc-400 mb-2">
+                    4. Intern Details Sheet (.xlsx)
+                  </label>
+                  <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${
                     excelFile 
                       ? "border-emerald-500/60 bg-emerald-500/8" 
                       : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
@@ -612,27 +722,74 @@ export default function AdminDashboard() {
                       onChange={(e) => setExcelFile(e.target.files?.[0] || null)}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
-                    
-                    <FileText className={`w-12 h-12 mb-4 transition-colors ${excelFile ? "text-emerald-400" : "text-zinc-500 group-hover:text-zinc-400"}`} />
-                    
+                    <FileText className={`w-10 h-10 mb-3 transition-colors ${excelFile ? "text-emerald-400" : "text-zinc-500 group-hover:text-zinc-400"}`} />
                     {excelFile ? (
                       <div className="text-center">
-                        <p className="text-sm font-bold text-white">{excelFile.name}</p>
-                        <p className="text-xs text-zinc-400 mt-1">{(excelFile.size / 1024).toFixed(1)} KB • Columns: Name, College, Year, Department</p>
+                        <p className="text-xs font-bold text-white truncate max-w-[240px]">{excelFile.name}</p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">{(excelFile.size / 1024).toFixed(1)} KB • Has YES/NO columns</p>
                         <button 
                           type="button" 
                           onClick={(e) => { e.stopPropagation(); setExcelFile(null); }}
-                          className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
+                          className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
                         >
-                          <Trash2 className="w-3.5 h-3.5" /> Remove
+                          Remove
                         </button>
                       </div>
                     ) : (
                       <div className="text-center">
-                        <p className="text-sm font-semibold text-zinc-200">Drag & drop your Excel sheet here</p>
-                        <p className="text-xs text-zinc-500 mt-1">Must contain: Name, College, Year, Department columns</p>
+                        <p className="text-xs font-semibold text-zinc-200">Drag & drop your Excel sheet here</p>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">Must contain Email and certificate choice columns</p>
                       </div>
                     )}
+                  </div>
+                </div>
+
+                {/* Batch Details Form */}
+                <div className="bg-[#0b0f19]/85 border border-zinc-800 rounded-2xl p-6 space-y-4">
+                  <h3 className="text-sm font-bold text-zinc-400 border-b border-zinc-850 pb-2">
+                    5. Batch Release Details
+                  </h3>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
+                        Batch ID
+                      </label>
+                      <input 
+                        type="text" 
+                        required
+                        value={batchId}
+                        onChange={(e) => setBatchId(e.target.value)}
+                        placeholder="e.g. Batch_34_ERP"
+                        className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500 focus:bg-black transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
+                        Month / Year
+                      </label>
+                      <input 
+                        type="text" 
+                        required
+                        value={batchMonth}
+                        onChange={(e) => setBatchMonth(e.target.value)}
+                        placeholder="e.g. July 2026"
+                        className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500 focus:bg-black transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
+                      Certificate Issue Date
+                    </label>
+                    <input 
+                      type="date" 
+                      required
+                      value={issueDate}
+                      onChange={(e) => setIssueDate(e.target.value)}
+                      className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500 focus:bg-black transition-colors"
+                    />
                   </div>
                 </div>
 
@@ -641,9 +798,9 @@ export default function AdminDashboard() {
               <div className="flex justify-end pt-6 border-t border-zinc-800">
                 <button
                   type="submit"
-                  disabled={!templateFile || isUploadingTemplate}
+                  disabled={isUploadingTemplate}
                   className={`flex items-center gap-2 px-6 py-3.5 rounded-xl font-bold text-sm transition-all duration-300 ${
-                    templateFile && !isUploadingTemplate
+                    !isUploadingTemplate
                       ? "bg-blue-600 hover:bg-blue-500 text-white shadow-lg cursor-pointer"
                       : "bg-zinc-900 text-zinc-600 border border-zinc-850 cursor-not-allowed"
                   }`}
@@ -651,11 +808,11 @@ export default function AdminDashboard() {
                   {isUploadingTemplate ? (
                     <>
                       <div className="w-4 h-4 border-2 border-zinc-700 border-t-white rounded-full animate-spin" />
-                      Parsing PDF Template...
+                      Uploading templates...
                     </>
                   ) : (
                     <>
-                      Generate Certificate
+                      Create Batch
                     </>
                   )}
                 </button>
