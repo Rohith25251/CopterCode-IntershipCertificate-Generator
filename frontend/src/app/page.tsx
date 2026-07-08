@@ -499,10 +499,23 @@ export default function AdminDashboard() {
             </span>
           </div>
 
-          <div className="hidden items-center rounded-full border border-black/5 bg-white px-4 py-2 shadow-[0_2px_12px_rgba(0,0,0,0.02)] lg:flex">
-            <span className="text-[10px] font-bold uppercase tracking-[0.24em] text-stone-500">
-              Intern Certificate Generator
-            </span>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-2 shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)]">
+              <span className="text-[10px] font-extrabold text-zinc-400 mr-2.5 uppercase tracking-wider">Backend API:</span>
+              <input
+                type="text"
+                value={backendUrl}
+                onChange={(e) => saveBackendUrl(e.target.value)}
+                placeholder="http://localhost:5000"
+                className="text-xs font-bold text-zinc-700 bg-transparent outline-none w-56 border-none"
+              />
+            </div>
+
+            <div className="hidden items-center rounded-full border border-black/5 bg-white px-4 py-2 shadow-[0_2px_12px_rgba(0,0,0,0.02)] lg:flex">
+              <span className="text-[10px] font-bold uppercase tracking-[0.24em] text-stone-500">
+                Intern Certificate Generator
+              </span>
+            </div>
           </div>
         </div>
       </header>
