@@ -38,7 +38,7 @@ function VerifyContent() {
   const id = searchParams.get("id");
   
   const [loading, setLoading] = useState<boolean>(true);
-  const [certificate, setCertificate] = useState<Certificate | null>(null);
+  const [certificate, setCertificate] = useState<any | null>(null);
   const [error, setError] = useState<"not_found" | "revoked" | "expired" | "unknown" | null>(null);
 
   useEffect(() => {
@@ -53,10 +53,10 @@ function VerifyContent() {
         setLoading(true);
         setError(null);
 
-        // Fetch from Supabase certificates table
+        // Fetch from Supabase certificates table with interns details
         const { data, error: dbError } = await supabase
           .from("certificates")
-          .select("*")
+          .select("*, interns(*)")
           .eq("cert_code", id.trim())
           .maybeSingle();
 
@@ -114,6 +114,40 @@ function VerifyContent() {
     );
   }
 
+  // Helper to format date strings
+  const formatStrDate = (dateStr?: string) => {
+    if (!dateStr) return "";
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric"
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Resolve display cert fields early
+  const displayCert = (() => {
+    if (!certificate) return null;
+    const internObj = Array.isArray(certificate.interns) ? certificate.interns[0] : certificate.interns;
+    return {
+      cert_code: certificate.cert_code,
+      name: internObj?.name || certificate.name,
+      college: internObj?.college || certificate.college,
+      year: internObj?.year || certificate.batch || certificate.year,
+      department: internObj?.department || certificate.department,
+      role: internObj?.role || certificate.role,
+      project: internObj?.project || certificate.project,
+      month: internObj?.month || certificate.month,
+      issue_date: formatStrDate(certificate.issue_date || internObj?.date || certificate.created_at),
+      expiry_date: formatStrDate(certificate.expiry_date)
+    };
+  })();
+
   // Certificate not found
   if (error === "not_found" && !certificate) {
     return (
@@ -150,17 +184,17 @@ function VerifyContent() {
         <div className="mt-6 bg-zinc-50 border border-zinc-150 p-5 rounded-2xl text-left space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Recipient</span>
-              <span className="text-sm font-bold text-zinc-800">{certificate.name}</span>
+              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Candidate Name</span>
+              <span className="text-sm font-bold text-zinc-800">{displayCert?.name}</span>
             </div>
             <div>
               <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Institution</span>
-              <span className="text-sm font-bold text-zinc-800">{certificate.college}</span>
+              <span className="text-sm font-bold text-zinc-800">{displayCert?.college}</span>
             </div>
-            {certificate.department && (
+            {displayCert?.department && (
               <div>
                 <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Department</span>
-                <span className="text-sm font-bold text-zinc-800">{certificate.department}</span>
+                <span className="text-sm font-bold text-zinc-800">{displayCert.department}</span>
               </div>
             )}
           </div>
@@ -185,17 +219,17 @@ function VerifyContent() {
         <div className="mt-6 bg-zinc-50 border border-zinc-150 p-5 rounded-2xl text-left space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Recipient</span>
-              <span className="text-sm font-bold text-zinc-800">{certificate.name}</span>
+              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Candidate Name</span>
+              <span className="text-sm font-bold text-zinc-800">{displayCert?.name}</span>
             </div>
             <div>
               <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Institution</span>
-              <span className="text-sm font-bold text-zinc-800">{certificate.college}</span>
+              <span className="text-sm font-bold text-zinc-800">{displayCert?.college}</span>
             </div>
-            {certificate.department && (
+            {displayCert?.department && (
               <div>
                 <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Department</span>
-                <span className="text-sm font-bold text-zinc-800">{certificate.department}</span>
+                <span className="text-sm font-bold text-zinc-800">{displayCert.department}</span>
               </div>
             )}
           </div>
@@ -219,25 +253,7 @@ function VerifyContent() {
   }
 
   // Active / Valid Certificate
-  if (certificate) {
-    const formatStrDate = (dateStr?: string) => {
-      if (!dateStr) return "";
-      try {
-        const d = new Date(dateStr);
-        if (isNaN(d.getTime())) return dateStr;
-        return d.toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "long",
-          day: "numeric"
-        });
-      } catch {
-        return dateStr;
-      }
-    };
-    
-    const issueDate = formatStrDate(certificate.issue_date) || formatStrDate(certificate.created_at);
-    const expiryDate = formatStrDate(certificate.expiry_date);
-
+  if (certificate && displayCert) {
     return (
       <div className="max-w-3xl mx-auto space-y-6">
         
@@ -293,85 +309,113 @@ function VerifyContent() {
               Credential Attributes
             </h3>
 
-            {/* Recipient Name */}
+            {/* Candidate Name */}
             <div className="flex gap-3">
               <div className="bg-zinc-100 p-2 rounded-xl text-zinc-650 shrink-0 h-10 w-10 flex items-center justify-center">
                 <GraduationCap className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Recipient</span>
-                <span className="text-sm font-bold text-zinc-800 leading-tight block">{certificate.name}</span>
+                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Candidate Name</span>
+                <span className="text-sm font-bold text-zinc-800 leading-tight block">{displayCert.name}</span>
               </div>
             </div>
 
-            {/* College Name */}
+            {/* Institution */}
             <div className="flex gap-3">
               <div className="bg-zinc-100 p-2 rounded-xl text-zinc-650 shrink-0 h-10 w-10 flex items-center justify-center">
                 <Building className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">College / Institution</span>
-                <span className="text-sm font-bold text-zinc-800 leading-tight block">{certificate.college}</span>
+                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Institution</span>
+                <span className="text-sm font-bold text-zinc-800 leading-tight block">{displayCert.college}</span>
               </div>
             </div>
 
-            {/* Department Info */}
-            {certificate.department && (
+            {/* Year */}
+            {displayCert.year && (
+              <div className="flex gap-3">
+                <div className="bg-zinc-100 p-2 rounded-xl text-zinc-650 shrink-0 h-10 w-10 flex items-center justify-center">
+                  <GraduationCap className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Year</span>
+                  <span className="text-sm font-bold text-zinc-800 leading-tight block">{displayCert.year}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Department */}
+            {displayCert.department && (
               <div className="flex gap-3">
                 <div className="bg-zinc-100 p-2 rounded-xl text-zinc-650 shrink-0 h-10 w-10 flex items-center justify-center">
                   <GraduationCap className="w-5 h-5" />
                 </div>
                 <div>
                   <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Department</span>
-                  <span className="text-sm font-bold text-zinc-800 leading-tight block">{certificate.department}</span>
+                  <span className="text-sm font-bold text-zinc-800 leading-tight block">{displayCert.department}</span>
                 </div>
               </div>
             )}
 
-            {/* Role Info */}
-            {certificate.role && (
+            {/* Domain */}
+            {displayCert.role && (
               <div className="flex gap-3">
                 <div className="bg-zinc-100 p-2 rounded-xl text-zinc-650 shrink-0 h-10 w-10 flex items-center justify-center">
                   <Briefcase className="w-5 h-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Role / Designation</span>
-                  <span className="text-sm font-bold text-zinc-800 leading-tight block">{certificate.role}</span>
+                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Domain</span>
+                  <span className="text-sm font-bold text-zinc-800 leading-tight block">{displayCert.role}</span>
                 </div>
               </div>
             )}
 
-            {/* Batch Info */}
-            <div className="flex gap-3">
-              <div className="bg-zinc-100 p-2 rounded-xl text-zinc-650 shrink-0 h-10 w-10 flex items-center justify-center">
-                <Calendar className="w-5 h-5" />
+            {/* Internship & Live Project Area */}
+            {displayCert.project && (
+              <div className="flex gap-3">
+                <div className="bg-zinc-100 p-2 rounded-xl text-zinc-650 shrink-0 h-10 w-10 flex items-center justify-center">
+                  <Briefcase className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Internship & Live Project Area</span>
+                  <span className="text-sm font-bold text-zinc-800 leading-tight block">{displayCert.project}</span>
+                </div>
               </div>
-              <div>
-                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Batch</span>
-                <span className="text-sm font-bold text-zinc-800 leading-tight block">{certificate.batch}</span>
-              </div>
-            </div>
+            )}
 
-            {/* Issue Date */}
-            <div className="flex gap-3">
-              <div className="bg-zinc-100 p-2 rounded-xl text-zinc-650 shrink-0 h-10 w-10 flex items-center justify-center">
-                <Calendar className="w-5 h-5" />
-              </div>
-              <div>
-                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Issue Date</span>
-                <span className="text-sm font-bold text-zinc-800 leading-tight block">{issueDate}</span>
-              </div>
-            </div>
-
-            {/* End Date */}
-            {expiryDate && (
+            {/* Batch */}
+            {displayCert.month && (
               <div className="flex gap-3">
                 <div className="bg-zinc-100 p-2 rounded-xl text-zinc-650 shrink-0 h-10 w-10 flex items-center justify-center">
                   <Calendar className="w-5 h-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">End Date</span>
-                  <span className="text-sm font-bold text-zinc-800 leading-tight block">{expiryDate}</span>
+                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Batch</span>
+                  <span className="text-sm font-bold text-zinc-800 leading-tight block">{displayCert.month}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Date of Issue */}
+            <div className="flex gap-3">
+              <div className="bg-zinc-100 p-2 rounded-xl text-zinc-650 shrink-0 h-10 w-10 flex items-center justify-center">
+                <Calendar className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Date of Issue</span>
+                <span className="text-sm font-bold text-zinc-800 leading-tight block">{displayCert.issue_date}</span>
+              </div>
+            </div>
+
+            {/* Expiry Date */}
+            {displayCert.expiry_date && (
+              <div className="flex gap-3">
+                <div className="bg-zinc-100 p-2 rounded-xl text-zinc-650 shrink-0 h-10 w-10 flex items-center justify-center">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Expiry Date</span>
+                  <span className="text-sm font-bold text-zinc-800 leading-tight block">{displayCert.expiry_date}</span>
                 </div>
               </div>
             )}
