@@ -97,33 +97,117 @@ def send_email_notification(
         <html>
         <head>
             <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Congratulations from CopterCode</title>
         </head>
-        <body style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #faf9f6; color: #1c1917; margin: 0; padding: 0;">
-            <div class="container" style="max-width: 600px; margin: 40px auto; background: #ffffff; border: 1px solid #e7e5e4; border-radius: 24px; padding: 40px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);">
-                <div class="header" style="text-align: center; margin-bottom: 30px;">
-                    <img src="https://coptercode-website.vercel.app/coptercode-logo.svg" alt="CopterCode Logo" style="height: 50px; width: auto; display: block; margin: 0 auto 10px auto;" />
-                    <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 10px 0 0 0;">CopterCode</h1>
-                </div>
-                <div class="content">
-                    <p style="font-size: 14px; line-height: 1.6; color: #44403c; margin-bottom: 20px;">Greetings from <strong>CopterCode</strong>!</p>
-                    <p style="font-size: 14px; line-height: 1.6; color: #44403c; margin-bottom: 20px;">We are pleased to inform you that you have <strong>successfully completed the internship program</strong> at CopterCode. Your dedication, hard work, and enthusiasm throughout the program have been truly commendable.</p>
-                    <p style="font-size: 14px; line-height: 1.6; color: #44403c; margin-bottom: 20px;">As a token of your accomplishments, the following documents have been issued for you:</p>
-                    <ul style="font-size: 14px; color: #44403c; margin: 15px 0; padding-left: 20px;">
-                        {cert_items_html}
-                    </ul>
-                    <p style="font-size: 14px; line-height: 1.6; color: #44403c; margin-bottom: 20px;">We extend our heartfelt congratulations and best wishes for your future career. We are confident that the skills and knowledge you have gained here will serve you well in all your professional pursuits.</p>
-                    
-                    <div class="button-container" style="text-align: center; margin: 35px 0;">
-                        <a href="{portal_link}" class="btn" style="background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%); color: #ffffff !important; text-decoration: none; font-weight: bold; font-size: 14px; padding: 14px 30px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.15);" target="_blank">Download Certificate(s)</a>
-                    </div>
-                    
-                    <p style="font-size: 14px; line-height: 1.6; color: #44403c; margin-bottom: 20px;">Please feel free to stay in touch with us for any guidance or opportunities. We look forward to seeing you achieve great success ahead.</p>
-                </div>
-                <div class="footer" style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #f5f5f4; font-size: 11px; color: #78716c; text-align: center;">
-                    <p>Warm regards,<br /><strong>Team CopterCode</strong></p>
-                    <p style="margin-top: 20px; font-size: 10px; color: #a8a29e;">This is an automated message, please do not reply to this email.</p>
-                </div>
-            </div>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; -webkit-font-smoothing: antialiased;">
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; padding: 40px 0;">
+                <tr>
+                    <td align="center">
+                        <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.035); border: 1px solid #e2e8f0;">
+                            
+                            <!-- Header / B&W Logo -->
+                            <tr>
+                                <td align="center" style="background-color: #ffffff; padding: 32px 24px 24px 24px;">
+                                    <img src="https://copter-code-intership-certificate-g.vercel.app/coptercode-logo-bw.svg" alt="CopterCode Logo" style="height: 54px; width: auto; display: block;" />
+                                </td>
+                            </tr>
+                            
+                            <!-- Hero Image -->
+                            <tr>
+                                <td style="padding: 0 24px;">
+                                    <img src="https://copter-code-intership-certificate-g.vercel.app/hero-img.jpg" alt="CopterCode Team" style="width: 100%; height: auto; display: block; border-radius: 12px; object-fit: cover;" />
+                                </td>
+                            </tr>
+                            
+                            <!-- Main Content -->
+                            <tr>
+                                <td style="padding: 36px 36px 24px 36px;">
+                                    <h2 style="font-size: 16px; font-weight: 700; color: #0f172a; margin: 0 0 16px 0;">Greetings from CopterCode!</h2>
+                                    
+                                    <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 18px 0;">
+                                        We are pleased to inform you that you have successfully completed the one-month internship program at <strong>CopterCode</strong>. Your dedication, hard work, and enthusiasm throughout the program have been truly commendable.
+                                    </p>
+                                    
+                                    <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 18px 0;">
+                                        As a token of your accomplishments, please find attached the following documents for your reference and future endeavors:
+                                    </p>
+                                    
+                                    <!-- Bullet list styled inside a neat callout card -->
+                                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f1f5f9; border-radius: 12px; margin-bottom: 24px;">
+                                        <tr>
+                                            <td style="padding: 18px 24px;">
+                                                <ul style="margin: 0; padding: 0 0 0 20px; font-size: 14px; line-height: 1.8; color: #334155; font-weight: bold;">
+                                                    <li style="margin-bottom: 6px;">Internship Certificate</li>
+                                                    <li style="margin-bottom: 6px;">Letter of Recommendation</li>
+                                                    <li style="margin-bottom: 0;">Experience Letter</li>
+                                                </ul>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                    
+                                    <!-- Download CTA Button -->
+                                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 32px 0;">
+                                        <tr>
+                                            <td align="center">
+                                                <a href="{portal_link}" target="_blank" style="background-color: #0f172a; color: #ffffff !important; text-decoration: none; font-size: 14px; font-weight: bold; padding: 14px 32px; border-radius: 8px; display: inline-block; letter-spacing: 0.5px; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);">
+                                                    Download Certificate(s)
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                    
+                                    <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 18px 0;">
+                                        We extend our heartfelt congratulations and best wishes for your future career. We are confident that the skills and knowledge you have gained here will serve you well in all your professional pursuits.
+                                    </p>
+                                    
+                                    <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px 0;">
+                                        Please feel free to stay in touch with us for any guidance or opportunities. We look forward to seeing you achieve great success ahead.
+                                    </p>
+                                </td>
+                            </tr>
+                            
+                            <!-- Premium B&W Signature & Footer -->
+                            <tr>
+                                <td style="background-color: #0f172a; padding: 36px; color: #f8fafc; font-size: 13px; line-height: 1.6; border-bottom-left-radius: 15px; border-bottom-right-radius: 15px;">
+                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                        <tr>
+                                            <!-- Left Signature details -->
+                                            <td width="55%" valign="top">
+                                                <p style="margin: 0; font-weight: bold; font-size: 14px; color: #ffffff;">Warm regards,</p>
+                                                <p style="margin: 2px 0 16px 0; font-weight: 500; color: #94a3b8;">Team CopterCode</p>
+                                                
+                                                <p style="margin: 0; color: #cbd5e1; font-size: 12px;">
+                                                    ✉️ <a href="mailto:hr@coptercode.co.in" style="color: #38bdf8 !important; text-decoration: none;">hr@coptercode.co.in</a><br>
+                                                    🌐 <a href="https://www.coptercode.co.in/" target="_blank" style="color: #38bdf8 !important; text-decoration: none;">www.coptercode.co.in</a>
+                                                </p>
+                                            </td>
+                                            
+                                            <!-- Right Contact & Socials details -->
+                                            <td width="45%" align="right" valign="top" style="border-left: 1px solid #334155; padding-left: 24px;">
+                                                <p style="margin: 0; font-weight: bold; color: #ffffff; font-size: 12px;">Best regards,</p>
+                                                <p style="margin: 2px 0 16px 0; font-weight: 500; color: #94a3b8;">HR Team • CopterCode</p>
+                                                
+                                                <p style="margin: 0; font-size: 11px;">
+                                                    📸 <a href="https://instagram.com/coptercode" target="_blank" style="color: #38bdf8 !important; text-decoration: none;">Instagram</a>
+                                                </p>
+                                                <p style="margin: 4px 0 0 0; font-size: 11px; color: #cbd5e1;">
+                                                    Mail Id: <a href="mailto:hr@coptercode.co.in" style="color: #38bdf8 !important; text-decoration: none;">hr@coptercode.co.in</a>
+                                                </p>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td colspan="2" align="center" style="padding-top: 28px; border-top: 1px solid #334155; margin-top: 24px; font-size: 10px; color: #64748b;">
+                                                This is an automated message. Please do not reply directly to this mail.
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
         </body>
         </html>
         """

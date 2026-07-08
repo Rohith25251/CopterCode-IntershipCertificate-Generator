@@ -306,7 +306,7 @@ export default function AdminDashboard() {
   };
 
   // Hero Section Fading Slideshow
-  const heroImages = ["/hero-1.jpg", "/hero-2.jpg", "/hero-3.jpg", "/hero-4.jpg"];
+  const heroImages = ["/hero-img.jpg", "/hero-1.jpg", "/hero-2.jpg", "/hero-3.jpg"];
   const [currentHeroImageIdx, setCurrentHeroImageIdx] = useState<number>(0);
 
   useEffect(() => {
@@ -491,7 +491,7 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-3.5">
             <div className="relative h-14 w-14 rounded-2xl bg-black shadow-sm flex items-center justify-center">
               <div className="relative h-12 w-12">
-                <Image src="/coptercode-logo.svg" alt="CopterCode logo" fill className="object-contain" priority />
+                <Image src="/coptercode-logo-bw.svg" alt="CopterCode logo" fill className="object-contain" priority />
               </div>
             </div>
             <span className="font-sans text-2xl font-bold tracking-tight text-[#0f172a]">
