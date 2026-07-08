@@ -253,13 +253,27 @@ export default function AdminDashboard() {
     setZipProgress({ done: 0, total: rows.length });
     try {
       const zip = new JSZip();
+      let zipTitle = "Certificates";
+      
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
+        if (!row.pdf_url) continue;
+        const url = row.pdf_url;
         try {
-          const res = await fetch(row.pdf_url!);
+          const res = await fetch(url);
           const blob = await res.arrayBuffer();
+          
+          // Parse cert title from the PDF filename
+          const filename = url.substring(url.lastIndexOf('/') + 1);
+          const match = filename.match(/\(([^)]+)\)/);
+          const certTitle = match ? match[1].replace(/_/g, ' ') : "Certificate";
+          
+          if (certTitle !== "Certificate" && zipTitle === "Certificates") {
+            zipTitle = certTitle;
+          }
+          
           const safeName = (row.name || `certificate_${i + 1}`).replace(/[^a-zA-Z0-9_\- ]/g, "_");
-          zip.file(`${safeName}.pdf`, blob);
+          zip.file(`${safeName}_(${certTitle}).pdf`, blob);
         } catch {
           // skip failed fetches silently
         }
@@ -269,7 +283,7 @@ export default function AdminDashboard() {
       const url = URL.createObjectURL(content);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `certificates_${new Date().toISOString().slice(0, 10)}.zip`;
+      a.download = `${zipTitle}.zip`;
       a.click();
       URL.revokeObjectURL(url);
     } finally {

@@ -78,6 +78,90 @@ def convert_pptx_to_pdf(pptx_path, pdf_path):
         print(f"  --> LibreOffice conversion failed: {e}")
         return False
 
+def defragment_paragraph(paragraph, placeholders):
+    """
+    Defragments python-pptx runs that have split placeholders.
+    Converts split runs into a single run so they can be replaced accurately.
+    """
+    for key in placeholders:
+        keys_to_check = [key, key.replace("<<", "«").replace(">>", "»")]
+        for k_check in keys_to_check:
+            search_start = 0
+            while True:
+                p_text = "".join(run.text for run in paragraph.runs)
+                start_idx = p_text.find(k_check, search_start)
+                if start_idx == -1:
+                    break
+
+                # Map each character position to its run index
+                run_map = []
+                for run_idx, run in enumerate(paragraph.runs):
+                    run_map.extend([run_idx] * len(run.text))
+
+                end_idx = start_idx + len(k_check) - 1
+                if end_idx >= len(run_map):
+                    break
+
+                # Get run indices that cover the placeholder
+                run_indices = run_map[start_idx : end_idx + 1]
+                first_run_idx = run_indices[0]
+                last_run_idx = run_indices[-1]
+
+                if first_run_idx == last_run_idx:
+                    search_start = start_idx + len(k_check)
+                    continue
+
+                # Merge split runs
+                combined_text = "".join(paragraph.runs[r_i].text for r_i in range(first_run_idx, last_run_idx + 1))
+                paragraph.runs[first_run_idx].text = combined_text
+                for r_i in range(first_run_idx + 1, last_run_idx + 1):
+                    paragraph.runs[r_i].text = ""
+
+                search_start = start_idx + len(k_check)
+
+def text_frame_has_placeholders(text_frame, replacements) -> bool:
+    """
+    Returns True if the text frame contains any of the keys in replacements,
+    or general QR placeholders.
+    """
+    text = text_frame.text
+    for key in replacements:
+        if key in text:
+            return True
+        guill_key = key.replace("<<", "«").replace(">>", "»")
+        if guill_key in text:
+            return True
+    
+    for qr_key in ("<<QR>>", "<<QR_CODE>>", "<<QRCODE>>", "«QR»", "«QR_CODE»", "«QRCODE»"):
+        if qr_key in text:
+            return True
+            
+    return False
+
+def detect_certificate_title(slide) -> str:
+    """
+    Detects the certificate type based on the text contents of the slide shapes.
+    Returns: 'Internship Certificate', 'Letter Of Recomandation', 'Experience Letter', or 'Certificate'.
+    """
+    for shape in slide.shapes:
+        if shape.has_text_frame:
+            text = shape.text_frame.text.lower()
+            if "recommendation" in text or "recomandation" in text:
+                return "Letter Of Recomandation"
+            elif "experience certificate" in text or "experience letter" in text:
+                return "Experience Letter"
+            elif "internship" in text:
+                return "Internship Certificate"
+    
+    # Fallback checks
+    for shape in slide.shapes:
+        if shape.has_text_frame:
+            text = shape.text_frame.text.lower()
+            if "certificate" in text:
+                return "Certificate"
+                
+    return "Certificate"
+
 # =====================================================
 # MAIN PIPELINE
 # =====================================================
@@ -231,28 +315,47 @@ def main():
         for shape in list(slide.shapes):
             if shape.has_text_frame:
                 text_frame = shape.text_frame
+                combined_text = text_frame.text.strip()
+
+                # Fix for "COPTERCODE" wrapping "E" to the next line in the header textbox
+                if ("COPTERCODE" in combined_text or "COPTERCOD" in combined_text) and len(combined_text) < 15:
+                    text_frame.word_wrap = False
+                    shape.width = shape.width + Inches(0.5)
+
+                # Skip text boxes that don't contain any placeholders at all to preserve formatting/alignment
+                if not text_frame_has_placeholders(text_frame, replacements):
+                    continue
 
                 # Enable word wrap so long values flow to next line naturally
                 text_frame.word_wrap = True
 
+                # Defragment paragraph runs to resolve split placeholders
+                placeholders_to_defrag = list(replacements.keys()) + ["<<QR>>", "<<QR_CODE>>", "<<QRCODE>>"]
+                for paragraph in text_frame.paragraphs:
+                    defragment_paragraph(paragraph, placeholders_to_defrag)
+
                 # Check for QR placeholder
                 combined_text = text_frame.text.strip()
                 if "<<QR>>" in combined_text or "«QR»" in combined_text:
-                    # Save QR shape position coordinates
-                    qr_left = shape.left
-                    qr_top = shape.top
+                    # Make the QR code larger (1.15 in x 1.15 in)
+                    qr_w = Inches(1.15)
+                    qr_h = Inches(1.15)
+                    
+                    # Center the QR image relative to the original <<QR>> placeholder textbox
+                    qr_left = int(shape.left + (shape.width - qr_w) // 2)
+                    qr_top = int(shape.top + (shape.height - qr_h) // 2)
 
                     # Remove the original text shape
                     sp = shape._element
                     sp.getparent().remove(sp)
 
-                    # Add picture (Aspect-ratio locked, 0.9 in x 0.9 in)
+                    # Add picture (Aspect-ratio locked, 1.15 in x 1.15 in)
                     slide.shapes.add_picture(
                         qr_path,
                         qr_left,
                         qr_top,
-                        width=Inches(0.9),
-                        height=Inches(0.9)
+                        width=qr_w,
+                        height=qr_h
                     )
                     qr_placed = True
                     continue
@@ -260,9 +363,6 @@ def main():
                 # Replace tokens in-place in text runs (preserves formatting)
                 for paragraph in text_frame.paragraphs:
                     for run in paragraph.runs:
-                        # Standardize to Arial to prevent system font substitutions
-                        run.font.name = "Arial"
-
                         for key, val in replacements.items():
                             has_match = False
                             actual_key = None
@@ -277,6 +377,9 @@ def main():
                                     actual_key = guill_key
 
                             if has_match:
+                                # Standardize to Arial to prevent system font substitutions
+                                run.font.name = "Arial"
+
                                 # For body/area fields: keep font size and let text wrap
                                 # For short label fields (name, institution): allow mild shrinking
                                 is_wrap_field = key in WRAP_FIELDS
@@ -290,16 +393,19 @@ def main():
 
                                 run.text = run.text.replace(actual_key, val)
 
-                        # Clean up visual hacks (multiple consecutive spaces) and fix missing comma spaces
-                        if run.text:
-                            run.text = re.sub(r',([a-zA-Z])', r', \1', run.text)
-                            run.text = re.sub(r'\s{2,}', ' ', run.text)
+                                # Clean up visual hacks (multiple consecutive spaces) and fix missing comma spaces
+                                if run.text:
+                                    run.text = re.sub(r',([a-zA-Z])', r', \1', run.text)
+                                    run.text = re.sub(r'\s{2,}', ' ', run.text)
                                 
+        # Detect certificate title from slide text
+        cert_title = detect_certificate_title(slide)
+
         # Save presentation
         prs.save(out_pptx_path)
         
         # Convert to PDF
-        out_pdf_name = f"Certificate_{safe_filename(name_val)}_{safe_filename(date_val)}.pdf"
+        out_pdf_name = f"{safe_filename(name_val)}_({cert_title}).pdf"
         out_pdf_path = os.path.join(args.outdir, out_pdf_name)
         
         success = convert_pptx_to_pdf(out_pptx_path, out_pdf_path)

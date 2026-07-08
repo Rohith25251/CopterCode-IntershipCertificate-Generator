@@ -245,7 +245,92 @@ def convert_pptx_to_pdf_bytes(pptx_bytes: bytes) -> bytes:
         except Exception:
             pass
 
-def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, qr_bytes: bytes) -> bytes:
+def defragment_paragraph(paragraph, placeholders):
+    """
+    Defragments python-pptx runs that have split placeholders
+    (e.g., <<INTERNSHIP & LIVE PROJECT AREA>> might be split into multiple runs).
+    Converts split runs into a single run so they can be replaced accurately.
+    """
+    for key in placeholders:
+        keys_to_check = [key, key.replace("<<", "«").replace(">>", "»")]
+        for k_check in keys_to_check:
+            search_start = 0
+            while True:
+                p_text = "".join(run.text for run in paragraph.runs)
+                start_idx = p_text.find(k_check, search_start)
+                if start_idx == -1:
+                    break
+
+                # Map each character position to its run index
+                run_map = []
+                for run_idx, run in enumerate(paragraph.runs):
+                    run_map.extend([run_idx] * len(run.text))
+
+                end_idx = start_idx + len(k_check) - 1
+                if end_idx >= len(run_map):
+                    break
+
+                # Get run indices that cover the placeholder
+                run_indices = run_map[start_idx : end_idx + 1]
+                first_run_idx = run_indices[0]
+                last_run_idx = run_indices[-1]
+
+                if first_run_idx == last_run_idx:
+                    search_start = start_idx + len(k_check)
+                    continue
+
+                # Merge split runs
+                combined_text = "".join(paragraph.runs[r_i].text for r_i in range(first_run_idx, last_run_idx + 1))
+                paragraph.runs[first_run_idx].text = combined_text
+                for r_i in range(first_run_idx + 1, last_run_idx + 1):
+                    paragraph.runs[r_i].text = ""
+
+                search_start = start_idx + len(k_check)
+
+def text_frame_has_placeholders(text_frame, replacements) -> bool:
+    """
+    Returns True if the text frame contains any of the keys in replacements,
+    or general QR placeholders.
+    """
+    text = text_frame.text
+    for key in replacements:
+        if key in text:
+            return True
+        guill_key = key.replace("<<", "«").replace(">>", "»")
+        if guill_key in text:
+            return True
+    
+    for qr_key in ("<<QR>>", "<<QR_CODE>>", "<<QRCODE>>", "«QR»", "«QR_CODE»", "«QRCODE»"):
+        if qr_key in text:
+            return True
+            
+    return False
+
+def detect_certificate_title(slide) -> str:
+    """
+    Detects the certificate type based on the text contents of the slide shapes.
+    Returns: 'Internship Certificate', 'Letter Of Recomandation', 'Experience Letter', or 'Certificate'.
+    """
+    for shape in slide.shapes:
+        if shape.has_text_frame:
+            text = shape.text_frame.text.lower()
+            if "recommendation" in text or "recomandation" in text:
+                return "Letter Of Recomandation"
+            elif "experience certificate" in text or "experience letter" in text:
+                return "Experience Letter"
+            elif "internship" in text:
+                return "Internship Certificate"
+    
+    # Fallback checks
+    for shape in slide.shapes:
+        if shape.has_text_frame:
+            text = shape.text_frame.text.lower()
+            if "certificate" in text:
+                return "Certificate"
+                
+    return "Certificate"
+
+def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, qr_bytes: bytes) -> tuple:
     from pptx import Presentation
     from pptx.util import Inches
     import tempfile
@@ -266,16 +351,36 @@ def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, 
         for shape in list(slide.shapes):
             if shape.has_text_frame:
                 text_frame = shape.text_frame
+                combined_text = text_frame.text.strip()
+
+                # Fix for "COPTERCODE" wrapping "E" to the next line in the header textbox
+                if ("COPTERCODE" in combined_text or "COPTERCOD" in combined_text) and len(combined_text) < 15:
+                    text_frame.word_wrap = False
+                    shape.width = shape.width + Inches(0.5)
+
+                # Skip text boxes that don't contain any placeholders at all to preserve formatting/alignment
+                if not text_frame_has_placeholders(text_frame, replacements):
+                    continue
 
                 # Enable word wrap so long values flow to next line naturally
                 text_frame.word_wrap = True
+
+                # Defragment paragraph runs to resolve split placeholders
+                placeholders_to_defrag = list(replacements.keys()) + ["<<QR>>", "<<QR_CODE>>", "<<QRCODE>>"]
+                for paragraph in text_frame.paragraphs:
+                    defragment_paragraph(paragraph, placeholders_to_defrag)
 
                 combined_text = text_frame.text.strip()
 
                 # Check for QR placeholder
                 if "<<QR>>" in combined_text or "«QR»" in combined_text:
-                    qr_left = shape.left
-                    qr_top = shape.top
+                    # Make the QR code larger (1.15 in x 1.15 in)
+                    qr_w = Inches(1.15)
+                    qr_h = Inches(1.15)
+                    
+                    # Center the QR image relative to the original <<QR>> placeholder textbox
+                    qr_left = int(shape.left + (shape.width - qr_w) // 2)
+                    qr_top = int(shape.top + (shape.height - qr_h) // 2)
 
                     # Remove placeholder shape
                     sp = shape._element
@@ -287,7 +392,7 @@ def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, 
                     temp_qr.close()
 
                     try:
-                        slide.shapes.add_picture(temp_qr.name, qr_left, qr_top, width=Inches(0.9), height=Inches(0.9))
+                        slide.shapes.add_picture(temp_qr.name, qr_left, qr_top, width=qr_w, height=qr_h)
                     finally:
                         try:
                             os.remove(temp_qr.name)
@@ -298,8 +403,6 @@ def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, 
                 # Standard replacements on text runs
                 for paragraph in text_frame.paragraphs:
                     for run in paragraph.runs:
-                        run.font.name = "Arial"
-
                         for key, val in replacements.items():
                             has_match = False
                             actual_key = None
@@ -314,6 +417,9 @@ def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, 
                                     actual_key = guill_key
 
                             if has_match:
+                                # Standardize to Arial to prevent system font substitutions
+                                run.font.name = "Arial"
+                                
                                 # For body/area fields: keep font size and let text wrap
                                 # For short label fields (name, institution): allow mild shrinking
                                 is_wrap_field = key in WRAP_FIELDS
@@ -327,13 +433,16 @@ def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, 
 
                                 run.text = run.text.replace(actual_key, val)
 
-                        # Clean up visual hacks (multiple consecutive spaces) and fix missing comma spaces
-                        if run.text:
-                            run.text = re.sub(r',([a-zA-Z])', r', \1', run.text)
-                            run.text = re.sub(r'\s{2,}', ' ', run.text)
+                                # Clean up visual hacks (multiple consecutive spaces) and fix missing comma spaces
+                                if run.text:
+                                    run.text = re.sub(r',([a-zA-Z])', r', \1', run.text)
+                                    run.text = re.sub(r'\s{2,}', ' ', run.text)
                                 
         # Save presentation back to same temp file
         prs.save(temp_pptx.name)
+        
+        # Detect certificate title from slide text
+        cert_title = detect_certificate_title(slide)
         
         # Read the modified PPTX file bytes
         with open(temp_pptx.name, "rb") as f:
@@ -341,7 +450,7 @@ def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, 
             
         # Convert to PDF
         pdf_bytes = convert_pptx_to_pdf_bytes(modified_pptx_bytes)
-        return pdf_bytes
+        return pdf_bytes, cert_title
         
     finally:
         try:
@@ -789,7 +898,7 @@ async def generate_certificates(
                 
                 # 3. Generate PDF using PPTX pipeline
                 try:
-                    merged_pdf_bytes = generate_certificate_from_pptx_bytes(template_pptx_bytes, replacements, qr_bytes)
+                    merged_pdf_bytes, cert_title = generate_certificate_from_pptx_bytes(template_pptx_bytes, replacements, qr_bytes)
                 except Exception as pptx_err:
                     print(f"PPTX pipeline execution failed for row: {pptx_err}")
                     row_use_pptx_pipeline = False
@@ -797,6 +906,20 @@ async def generate_certificates(
             if not row_use_pptx_pipeline:
                 # Fallback to PyMuPDF drawing logic on the PDF template
                 doc = fitz.open(stream=template_pdf_bytes, filetype="pdf")
+                
+                # Detect certificate title from template text
+                full_text = ""
+                for page in doc:
+                    full_text += page.get_text()
+                
+                cert_title = "Certificate"
+                full_text_lower = full_text.lower()
+                if "recommendation" in full_text_lower or "recomandation" in full_text_lower:
+                    cert_title = "Letter Of Recomandation"
+                elif "experience certificate" in full_text_lower or "experience letter" in full_text_lower:
+                    cert_title = "Experience Letter"
+                elif "internship" in full_text_lower:
+                    cert_title = "Internship Certificate"
                 
                 # Define all search keys for each field
                 field_placeholders = {
@@ -981,7 +1104,8 @@ async def generate_certificates(
 
             # Upload generated PDF to Supabase Storage ('certificates' bucket)
             safe_name = re.sub(r"[^A-Za-z0-9_-]", "_", name_val.strip())[:40]
-            pdf_filename = f"{safe_name}_{cert_code}.pdf"
+            safe_title = cert_title.replace(" ", "_")
+            pdf_filename = f"{safe_name}_({safe_title})_{cert_code}.pdf"
             supabase.storage.from_("certificates").upload(
                 path=pdf_filename,
                 file=merged_pdf_bytes,
