@@ -771,7 +771,15 @@ async def generate_certificates(
                     "intern_id": intern_id,
                     "cert_type": cert_type,
                     "status": "active",
-                    "pdf_url": dynamic_pdf_url
+                    "pdf_url": dynamic_pdf_url,
+                    "name": name_val,
+                    "college": college_val,
+                    "batch": year_val,
+                    "department": department_val,
+                    "role": role_val,
+                    "project": project_val,
+                    "month": month_val,
+                    "issue_date": date_val
                 }
 
                 supabase.table("certificates").insert(cert_record).execute()
