@@ -771,18 +771,7 @@ async def generate_certificates(
                     "intern_id": intern_id,
                     "cert_type": cert_type,
                     "status": "active",
-                    "pdf_url": dynamic_pdf_url,
-                    
-                    # For backwards compatibility with older templates:
-                    "name": name_val,
-                    "college": college_val,
-                    "batch": year_val,
-                    "department": department_val,
-                    "role": role_val,
-                    "project": project_val,
-                    "month": month_val,
-                    "issue_date": issue_date_val,
-                    "template_id": None
+                    "pdf_url": dynamic_pdf_url
                 }
 
                 supabase.table("certificates").insert(cert_record).execute()
@@ -861,7 +850,24 @@ def lookup_certificate(cert_code: str):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Certificate with code {cert_code} not found."
             )
-        return res.data[0]
+        
+        cert_data = dict(res.data[0])
+        intern_id = cert_data.get("intern_id")
+        if intern_id:
+            intern_res = supabase.table("interns").select("*").eq("id", intern_id).execute()
+            if intern_res.data:
+                intern = intern_res.data[0]
+                cert_data["name"] = intern.get("name")
+                cert_data["college"] = intern.get("college")
+                cert_data["batch"] = intern.get("year")
+                cert_data["department"] = intern.get("department")
+                cert_data["role"] = intern.get("role")
+                cert_data["project"] = intern.get("project")
+                cert_data["month"] = intern.get("month")
+                cert_data["issue_date"] = intern.get("date") or cert_data.get("issue_date")
+        
+        return cert_data
+
     except HTTPException as he:
         raise he
     except Exception as e:
