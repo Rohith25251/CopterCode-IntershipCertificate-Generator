@@ -235,51 +235,7 @@ def get_reportlab_font(font_name: str) -> str:
     return "Helvetica"
 
 
-class Position(BaseModel):
-    x: float   # center x fraction (0–1)
-    y: float   # center y fraction (0–1)
-    w: float = 0.30   # box width fraction  (default generous for back-compat)
-    h: float = 0.05   # box height fraction
 
-
-def calc_pdf_font_size(
-    text: str,
-    font_name: str,
-    box_w_pt: float,
-    box_h_pt: float,
-    min_size: float = 7,
-) -> float:
-    """
-    Return the largest integer font size (up to box_h_pt * 0.8)
-    at which `text` fits inside `box_w_pt` (92% fill).
-    Falls back to min_size if nothing fits.
-    """
-    if not text:
-        return 12
-    max_size = int(max(min_size, box_h_pt * 0.80))
-    for size in range(max_size, int(min_size) - 1, -1):
-        try:
-            w = pdfmetrics.stringWidth(text, font_name, size)
-            if w <= box_w_pt * 0.92:
-                return float(size)
-        except Exception:
-            pass
-    return float(min_size)
-
-
-class LayoutPayload(BaseModel):
-    template_id: str
-    name_pos: Position
-    college_pos: Position
-    year_pos: Position          # renamed from batch_pos
-    qr_pos: Position
-    qr_size: float
-    department_pos: Optional[Position] = None
-    role_pos: Optional[Position] = None
-    project_pos: Optional[Position] = None   # NEW
-    month_pos: Optional[Position] = None     # NEW
-    date_pos: Optional[Position] = None      # renamed from end_date_pos
-    font_settings: Optional[Dict[str, str]] = None  # per-field font names
 
 
 def convert_pptx_to_pdf_bytes(pptx_bytes: bytes) -> bytes:
@@ -465,8 +421,13 @@ def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, 
                     qr_w = Inches(1.15)
                     qr_h = Inches(1.15)
                     
-                    # Center the QR image relative to the original <<QR>> placeholder textbox
-                    qr_left = int(shape.left + (shape.width - qr_w) // 2)
+                    # If the placeholder textbox is abnormally wide, align the QR image to its left edge.
+                    # Otherwise, center it.
+                    if shape.width > Inches(2.5):
+                        qr_left = shape.left
+                    else:
+                        qr_left = int(shape.left + (shape.width - qr_w) // 2)
+                        
                     qr_top = int(shape.top + (shape.height - qr_h) // 2)
 
                     # Remove placeholder shape
@@ -622,254 +583,15 @@ async def create_batch(
         )
 
 
-@app.post("/api/template/preview")
-async def template_preview(
-    template_file: UploadFile = File(...),
-    excel_file: Optional[UploadFile] = File(None)
-):
-    """
-    Accepts template PDF or PPTX and optional Excel sheet.
-    Converts PPTX to PDF if necessary.
-    Uploads PDF template to Supabase Storage bucket 'templates'.
-    Extracts first page width and height in points.
-    Renders first page as PNG.
-    Uploads PNG to Supabase storage.
-    Inserts a metadata record into templates table.
-    Returns preview URL, page dimensions, and detected fields.
-    """
-    if not supabase:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Supabase client is not configured. Please set environment variables."
-        )
-
-    # Validate file format — PPTX only
-    ext = os.path.splitext(template_file.filename)[1].lower()
-    if ext != ".pptx":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Template must be a PPTX file. Please upload a PowerPoint (.pptx) file."
-        )
-
-    try:
-        # Detect fields in Excel sheet if uploaded
-        detected_fields = ["name", "college", "year"]
-        if excel_file:
-            try:
-                excel_bytes = await excel_file.read()
-                df = pd.read_excel(io.BytesIO(excel_bytes))
-                df.columns = [str(col).strip().lower() for col in df.columns]
-                
-                # Check for optional columns in excel
-                for col in df.columns:
-                    if "department" in col or "dept" in col or "branch" in col:
-                        if "department" not in detected_fields:
-                            detected_fields.append("department")
-                    elif "role" in col or "domain" in col:
-                        if "role" not in detected_fields:
-                            detected_fields.append("role")
-                    elif "project" in col or "proj" in col or "area" in col:
-                        if "project" not in detected_fields:
-                            detected_fields.append("project")
-                    elif "month" in col or "batch" in col:
-                        if "month" not in detected_fields:
-                            detected_fields.append("month")
-                    elif "date" in col or "dt" in col:
-                        if "date" not in detected_fields:
-                            detected_fields.append("date")
-            except Exception as e:
-                print(f"Error parsing optional Excel columns in preview: {e}")
-
-        raw_bytes = await template_file.read()
-        if ext == ".pptx":
-            try:
-                pdf_bytes = convert_pptx_to_pdf_bytes(raw_bytes)
-            except Exception as conv_err:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Failed to convert uploaded PPTX template to PDF: {conv_err}"
-                )
-        else:
-            pdf_bytes = raw_bytes
-        template_id = str(uuid.uuid4())
-
-        # Save to Supabase Storage (private bucket 'templates')
-        try:
-            # If PPTX, save original PPTX file first
-            if ext == ".pptx":
-                pptx_path = f"{template_id}/template.pptx"
-                supabase.storage.from_("templates").upload(
-                    path=pptx_path,
-                    file=raw_bytes,
-                    file_options={"content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation"}
-                )
-                
-            pdf_path = f"{template_id}/template.pdf"
-            supabase.storage.from_("templates").upload(
-                path=pdf_path,
-                file=pdf_bytes,
-                file_options={"content-type": "application/pdf"}
-            )
-        except Exception as upload_err:
-            err_txt = str(upload_err)
-            if 'row-level security' in err_txt.lower() or 'violates row' in err_txt.lower() or '403' in err_txt:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=("Supabase Storage upload blocked by row-level security (RLS). "
-                            "Ensure your backend is using the Supabase service_role key (SUPABASE_SERVICE_ROLE_KEY) "
-                            "or make the 'templates' bucket writable by your backend. Do NOT expose the service role key to the frontend.")
-                )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to upload template assets to Supabase Storage: {upload_err}"
-            )
-
-        # Open PDF with PyMuPDF to extract dimensions and render page 1
-        try:
-            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-            if len(doc) == 0:
-                raise ValueError("The PDF contains no pages.")
-            page = doc.load_page(0)
-            width_pt = float(page.rect.width)
-            height_pt = float(page.rect.height)
-
-            # Render page 1 to PNG
-            pix = page.get_pixmap(dpi=150)
-            png_bytes = pix.tobytes("png")
-        except Exception as pdf_err:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to parse PDF and render preview: {pdf_err}"
-            )
-
-        # Upload preview PNG to templates bucket
-        png_path = f"{template_id}/preview.png"
-        try:
-            supabase.storage.from_("templates").upload(
-                path=png_path,
-                file=png_bytes,
-                file_options={"content-type": "image/png"}
-            )
-        except Exception as png_upload_err:
-            err_txt = str(png_upload_err)
-            if 'row-level security' in err_txt.lower() or 'violates row' in err_txt.lower() or '403' in err_txt:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=("Supabase Storage upload blocked by row-level security (RLS). "
-                            "Ensure your backend is using the Supabase service_role key (SUPABASE_SERVICE_ROLE_KEY) "
-                            "or make the 'templates' bucket writable by your backend. Do NOT expose the service role key to the frontend.")
-                )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to upload preview image: {png_upload_err}"
-            )
-
-        # Generate a signed URL for the preview image so the frontend can display it
-        # Private templates bucket needs a signed URL or can be accessed via backend proxy.
-        # We will generate a signed URL valid for 7 days (604800 seconds)
-        try:
-            res = supabase.storage.from_("templates").create_signed_url(png_path, expires_in=604800)
-            preview_image_url = res["signedURL"]
-        except Exception as sign_err:
-            # Fallback if signed URL generation fails, try public URL (if user configures bucket as public)
-            preview_image_url = supabase.storage.from_("templates").get_public_url(png_path)
-
-        # Get file public or private url for database
-        file_url = supabase.storage.from_("templates").get_public_url(pdf_path)
-
-        # Insert metadata record into 'templates' table
-        # Use schema fields: template_pdf_url, preview_image_url, page_width_pt, page_height_pt
-        # Provide sensible defaults for layout positions so the insert succeeds if the table
-        # requires non-null jsonb columns. Admin can update layout via /api/template/layout.
-        template_record = {
-            "id": template_id,
-            "template_pdf_url": file_url,
-            "preview_image_url": preview_image_url,
-            "page_width_pt": width_pt,
-            "page_height_pt": height_pt,
-            "name_pos": {"x": 0.5, "y": 0.5},
-            "college_pos": {"x": 0.5, "y": 0.4},
-            "batch_pos": {"x": 0.5, "y": 0.35},
-            "qr_pos": {"x": 0.85, "y": 0.15},
-            "qr_size": 0.12
-        }
-        try:
-            supabase.table("templates").insert(template_record).execute()
-        except Exception as db_err:
-            err_txt = str(db_err)
-            if 'row-level security' in err_txt.lower() or 'violates row' in err_txt.lower() or '403' in err_txt:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=("Database insert blocked by row-level security (RLS). "
-                            "Ensure your backend is configured with the Supabase service_role key (SUPABASE_SERVICE_ROLE_KEY) "
-                            "and that it has permission to write to the 'templates' table. Do NOT expose the service role key to the frontend.")
-                )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to save template record in database: {db_err}"
-            )
-
-        return {
-            "template_id": template_id,
-            "preview_image_url": preview_image_url,
-            "page_width_pt": width_pt,
-            "page_height_pt": height_pt,
-            "detected_fields": detected_fields
-        }
-
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Unexpected error: {str(e)}"
-        )
 
 
-@app.post("/api/template/layout")
-async def save_layout(payload: LayoutPayload):
-    """
-    Saves coordinate fractions to Supabase for the specified template.
-    """
-    if not supabase:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Supabase client is not configured."
-        )
 
-    try:
-        data = {
-            "name_pos": {"x": payload.name_pos.x, "y": payload.name_pos.y, "w": payload.name_pos.w, "h": payload.name_pos.h},
-            "college_pos": {"x": payload.college_pos.x, "y": payload.college_pos.y, "w": payload.college_pos.w, "h": payload.college_pos.h},
-            # Store year_pos in batch_pos column (no schema change needed)
-            # and pack all extra field positions + font_settings as nested keys
-            "batch_pos": {
-                "x": payload.year_pos.x,
-                "y": payload.year_pos.y,
-                "w": payload.year_pos.w,
-                "h": payload.year_pos.h,
-                "department_pos": {"x": payload.department_pos.x, "y": payload.department_pos.y, "w": payload.department_pos.w, "h": payload.department_pos.h} if payload.department_pos else None,
-                "role_pos": {"x": payload.role_pos.x, "y": payload.role_pos.y, "w": payload.role_pos.w, "h": payload.role_pos.h} if payload.role_pos else None,
-                "project_pos": {"x": payload.project_pos.x, "y": payload.project_pos.y, "w": payload.project_pos.w, "h": payload.project_pos.h} if payload.project_pos else None,
-                "month_pos": {"x": payload.month_pos.x, "y": payload.month_pos.y, "w": payload.month_pos.w, "h": payload.month_pos.h} if payload.month_pos else None,
-                "date_pos": {"x": payload.date_pos.x, "y": payload.date_pos.y, "w": payload.date_pos.w, "h": payload.date_pos.h} if payload.date_pos else None,
-                "font_settings": payload.font_settings or {},  # per-field font names
-            },
-            "qr_pos": {"x": payload.qr_pos.x, "y": payload.qr_pos.y},
-            "qr_size": payload.qr_size
-        }
-        res = supabase.table("templates").update(data).eq("id", payload.template_id).execute()
-        if not res.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Template with ID {payload.template_id} not found."
-            )
-        return {"status": "@app.post("/api/generate")
+@app.post("/api/generate")
 async def generate_certificates(
-    batch_id: Optional[str] = Form(None),
-    template_id: Optional[str] = Form(None),
+    background_tasks: BackgroundTasks,
     excel_file: UploadFile = File(...),
-    background_tasks: Optional[BackgroundTasks] = None
+    batch_id: Optional[str] = Form(None),
+    template_id: Optional[str] = Form(None)
 ):
     """
     Processes the details from Excel.
@@ -1060,7 +782,7 @@ async def generate_certificates(
                     "project": project_val,
                     "month": month_val,
                     "issue_date": issue_date_val,
-                    "template_id": target_batch_id
+                    "template_id": None
                 }
 
                 supabase.table("certificates").insert(cert_record).execute()
@@ -1085,23 +807,14 @@ async def generate_certificates(
 
             # 3. Trigger Email Notification (if any certificate is generated)
             if email_certificates:
-                if background_tasks:
-                    background_tasks.add_task(
-                        send_email_notification,
-                        email_val,
-                        name_val,
-                        month_val or year_val,
-                        email_certificates,
-                        str(intern_id)
-                    )
-                else:
-                    send_email_notification(
-                        email_val,
-                        name_val,
-                        month_val or year_val,
-                        email_certificates,
-                        str(intern_id)
-                    )
+                background_tasks.add_task(
+                    send_email_notification,
+                    email_val,
+                    name_val,
+                    month_val or year_val,
+                    email_certificates,
+                    str(intern_id)
+                )
 
         except Exception as row_error:
             print(f"Row {index} failed: {row_error}")
