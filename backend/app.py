@@ -720,7 +720,7 @@ async def generate_certificates(
             if date_val:
                 try:
                     clean_dt = date_val.strip()
-                    parsed_dt = pd.to_datetime(clean_dt, errors='raise')
+                    parsed_dt = pd.to_datetime(clean_dt, dayfirst=True, errors='raise')
                     issue_date_val = parsed_dt.date().isoformat()
                 except Exception:
                     try:
