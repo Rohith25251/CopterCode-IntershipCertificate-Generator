@@ -299,7 +299,7 @@ def main():
         
         # Generate temporary QR code PNG
         qr_path = os.path.join(temp_dir, f"qr_{cert_code}.png")
-        verify_url = f"https://coptercode.co.in/verify/{cert_code}"
+        verify_url = f"https://coptercode.co.in/verify?id={cert_code}"
         generate_qr_code(verify_url, qr_path)
         
         # Open PPTX in python-pptx
