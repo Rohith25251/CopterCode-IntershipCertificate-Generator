@@ -16,9 +16,20 @@ import {
   ChevronDown,
   Search,
   Type,
-  Mail
+  Mail,
+  User,
+  Lock,
+  LogOut,
+  Database,
+  LayoutDashboard,
+  Eye,
+  KeyRound,
+  ShieldCheck,
+  Activity,
+  Edit2
 } from "lucide-react";
 import JSZip from "jszip";
+import { supabase } from "@/lib/supabase";
 
 // ─── Certificate Font Catalogue ─────────────────────────────────────────────
 interface FontOption {
@@ -232,6 +243,176 @@ export default function AdminDashboard() {
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  const [session, setSession] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authName, setAuthName] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authMsg, setAuthMsg] = useState("");
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+
+  // Profile fields
+  const [profileName, setProfileName] = useState("");
+  const [profilePassword, setProfilePassword] = useState("");
+  const [profileConfirmPassword, setProfileConfirmPassword] = useState("");
+  const [profileError, setProfileError] = useState("");
+  const [profileSuccess, setProfileSuccess] = useState("");
+  const [profileSubmitting, setProfileSubmitting] = useState(false);
+
+  // Tab State: "generator" | "history" | "profile"
+  const [activeTab, setActiveTab] = useState<"generator" | "history" | "profile">("generator");
+
+  // History state
+  const [historyCerts, setHistoryCerts] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [historyQuery, setHistoryQuery] = useState("");
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) {
+        setProfileName(session.user.user_metadata?.full_name || "");
+      }
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) {
+        setProfileName(session.user.user_metadata?.full_name || "");
+      }
+      setAuthLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    setAuthMsg("");
+    setAuthSubmitting(true);
+
+    try {
+      if (authMode === "login") {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: authEmail,
+          password: authPassword,
+        });
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase.auth.signUp({
+          email: authEmail,
+          password: authPassword,
+          options: {
+            data: {
+              full_name: authName || "Admin User",
+            },
+          },
+        });
+        if (error) throw error;
+        setAuthMsg("Registration successful! Please log in.");
+        setAuthMode("login");
+      }
+    } catch (err: any) {
+      setAuthError(err.message || "Authentication failed.");
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setActiveTab("generator");
+  };
+
+  const handleProfileUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProfileError("");
+    setProfileSuccess("");
+    setProfileSubmitting(true);
+
+    if (profilePassword && profilePassword !== profileConfirmPassword) {
+      setProfileError("Passwords do not match.");
+      setProfileSubmitting(false);
+      return;
+    }
+
+    try {
+      const updates: any = {
+        data: { full_name: profileName },
+      };
+      if (profilePassword) {
+        updates.password = profilePassword;
+      }
+      const { data, error } = await supabase.auth.updateUser(updates);
+      if (error) throw error;
+      setProfileSuccess("Profile updated successfully!");
+      setProfilePassword("");
+      setProfileConfirmPassword("");
+    } catch (err: any) {
+      setProfileError(err.message || "Failed to update profile.");
+    } finally {
+      setProfileSubmitting(false);
+    }
+  };
+
+  const fetchHistoryCerts = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError("");
+    try {
+      const { data, error } = await supabase
+        .from("certificates")
+        .select("*, intern:interns(*)")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setHistoryCerts(data || []);
+    } catch (err: any) {
+      console.error(err);
+      setHistoryError(err.message || "Failed to load certificates history.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (session && activeTab === "history") {
+      fetchHistoryCerts();
+    }
+  }, [session, activeTab, fetchHistoryCerts]);
+
+  const handleSendHistoryEmail = async (internId: string) => {
+    if (!internId) return;
+    
+    // Update local state to sending
+    setHistoryCerts((prev) =>
+      prev.map((c) => (c.intern_id === internId ? { ...c, intern: { ...c.intern, email_status: "sending" } } : c))
+    );
+
+    try {
+      const base = backendUrl.replace(/\/+$/, "");
+      const res = await fetch(`${base}/api/interns/${internId}/send-email`, {
+        method: "POST"
+      });
+      const data = await res.json();
+      
+      const nextStatus = res.ok && data.status === "success" ? "sent" : "failed";
+      setHistoryCerts((prev) =>
+        prev.map((c) => (c.intern_id === internId ? { ...c, intern: { ...c.intern, email_status: nextStatus } } : c))
+      );
+    } catch (err) {
+      console.error(err);
+      setHistoryCerts((prev) =>
+        prev.map((c) => (c.intern_id === internId ? { ...c, intern: { ...c.intern, email_status: "failed" } } : c))
+      );
+    }
+  };
 
   // App state (1 = upload assets, 2 = generation run)
   const [step, setStep] = useState<1 | 2>(1);
@@ -556,6 +737,136 @@ export default function AdminDashboard() {
     return null;
   }
 
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#faf9f6]">
+        <div className="flex flex-col items-center">
+          <div className="w-12 h-12 border-4 border-violet-100 border-t-violet-600 rounded-full animate-spin mb-4" />
+          <p className="text-sm font-bold text-zinc-650">Verifying session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#020617] p-6 relative overflow-hidden text-zinc-850 font-sans">
+        {/* Abstract background blobs for modern vibe */}
+        <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] bg-violet-650/15 rounded-full blur-[100px] pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-[350px] h-[350px] bg-emerald-650/10 rounded-full blur-[100px] pointer-events-none" />
+
+        <div className="w-full max-w-md bg-white border border-zinc-200 rounded-[32px] p-8 shadow-[0_15px_50px_rgba(0,0,0,0.05)] relative overflow-hidden">
+          <div className="flex flex-col items-center mb-8">
+            <div className="relative h-16 w-16 rounded-2xl bg-black shadow-md flex items-center justify-center border border-zinc-800 mb-4 animate-[pulse_4s_infinite]">
+              <div className="relative h-12 w-12">
+                <Image src="/coptercode-logo-bw.svg" alt="CopterCode Logo" fill className="object-contain" />
+              </div>
+            </div>
+            <h2 className="text-2xl font-black tracking-tight text-zinc-900">CopterCode</h2>
+            <p className="text-zinc-500 text-xs mt-1">Intern Certificate Hub — Admin Panel</p>
+          </div>
+
+          <div className="flex bg-zinc-100 p-1.5 rounded-xl border border-zinc-200 mb-6">
+            <button
+              onClick={() => { setAuthMode("login"); setAuthError(""); setAuthMsg(""); }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                authMode === "login" ? "bg-white text-stone-900 shadow-sm border border-zinc-200/50" : "text-zinc-500 hover:text-zinc-850"
+              }`}
+            >
+              Log In
+            </button>
+            <button
+              onClick={() => { setAuthMode("signup"); setAuthError(""); setAuthMsg(""); }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                authMode === "signup" ? "bg-white text-stone-900 shadow-sm border border-zinc-200/50" : "text-zinc-500 hover:text-zinc-850"
+              }`}
+            >
+              Sign Up
+            </button>
+          </div>
+
+          {authError && (
+            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 p-3.5 rounded-xl text-xs flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{authError}</span>
+            </div>
+          )}
+
+          {authMsg && (
+            <div className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-700 p-3.5 rounded-xl text-xs flex items-start gap-2">
+              <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{authMsg}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleAuth} className="space-y-4">
+            {authMode === "signup" && (
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">Full Name</label>
+                <div className="relative flex items-center">
+                  <User className="w-4 h-4 text-zinc-400 absolute left-3.5" />
+                  <input
+                    type="text"
+                    required
+                    value={authName}
+                    onChange={(e) => setAuthName(e.target.value)}
+                    placeholder="Enter your name"
+                    className="w-full text-xs bg-zinc-55 border border-zinc-200 rounded-xl pl-10 pr-4 py-3.5 text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-violet-500 focus:bg-white transition-colors"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">Email Address</label>
+              <div className="relative flex items-center">
+                <Mail className="w-4 h-4 text-zinc-400 absolute left-3.5" />
+                <input
+                  type="email"
+                  required
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  placeholder="admin@coptercode.com"
+                  className="w-full text-xs bg-zinc-55 border border-zinc-200 rounded-xl pl-10 pr-4 py-3.5 text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-violet-500 focus:bg-white transition-colors"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">Password</label>
+              <div className="relative flex items-center">
+                <Lock className="w-4 h-4 text-zinc-400 absolute left-3.5" />
+                <input
+                  type="password"
+                  required
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full text-xs bg-zinc-55 border border-zinc-200 rounded-xl pl-10 pr-4 py-3.5 text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-violet-500 focus:bg-white transition-colors"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={authSubmitting}
+              className="w-full mt-2 bg-[#5844e9] hover:bg-[#4338ca] disabled:opacity-60 text-white font-extrabold py-3.5 rounded-xl shadow-md hover:shadow-lg transition-all text-xs tracking-wider uppercase cursor-pointer"
+            >
+              {authSubmitting ? (
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-3.5 h-3.5 border-2 border-zinc-300 border-t-white rounded-full animate-spin" />
+                  <span>Processing...</span>
+                </div>
+              ) : (
+                authMode === "login" ? "Log In to Panel" : "Register Admin User"
+              )}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative min-h-screen overflow-hidden pb-16 text-stone-850">
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[#faf9f6]" />
@@ -573,8 +884,36 @@ export default function AdminDashboard() {
             </span>
           </div>
 
+          {/* Navigation Workspace Switcher Tabs */}
+          <div className="flex items-center gap-1 bg-zinc-100 rounded-xl p-1 border border-zinc-200 shadow-sm">
+            <button
+              onClick={() => setActiveTab("generator")}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                activeTab === "generator" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-900"
+              }`}
+            >
+              <LayoutDashboard size={14} /> Generator
+            </button>
+            <button
+              onClick={() => setActiveTab("history")}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                activeTab === "history" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-900"
+              }`}
+            >
+              <Database size={14} /> Database History
+            </button>
+            <button
+              onClick={() => setActiveTab("profile")}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                activeTab === "profile" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-900"
+              }`}
+            >
+              <User size={14} /> Profile
+            </button>
+          </div>
+
           <div className="flex items-center gap-4">
-            <div className="flex items-center rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-2 shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)]">
+            <div className="hidden items-center rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-2 shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)] xl:flex">
               <span className="text-[10px] font-extrabold text-zinc-400 mr-2.5 uppercase tracking-wider">Backend API:</span>
               <input
                 type="text"
@@ -585,10 +924,19 @@ export default function AdminDashboard() {
               />
             </div>
 
-            <div className="hidden items-center rounded-full border border-black/5 bg-white px-4 py-2 shadow-[0_2px_12px_rgba(0,0,0,0.02)] lg:flex">
-              <span className="text-[10px] font-bold uppercase tracking-[0.24em] text-stone-500">
-                Intern Certificate Generator
-              </span>
+            {/* Admin user greeting and logout */}
+            <div className="flex items-center gap-3 border-l border-zinc-200 pl-4">
+              <div className="text-right hidden sm:block">
+                <span className="block text-[9px] font-bold text-zinc-400 uppercase leading-none">Logged in as</span>
+                <span className="block text-xs font-bold text-zinc-750 mt-1">{session.user.user_metadata?.full_name || "Admin"}</span>
+              </div>
+              <button
+                onClick={handleLogout}
+                title="Log Out"
+                className="p-2 border border-zinc-200 rounded-xl bg-white hover:bg-red-50 hover:border-red-200 hover:text-red-650 text-zinc-500 transition-all cursor-pointer shadow-sm"
+              >
+                <LogOut size={14} />
+              </button>
             </div>
           </div>
         </div>
@@ -596,7 +944,9 @@ export default function AdminDashboard() {
 
       <main className="mx-auto max-w-7xl px-6 pt-10">
 
-        {/* Full-width Immersive Hero Section with Smooth Fading Slideshow */}
+        {activeTab === "generator" && (
+          <>
+            {/* Full-width Immersive Hero Section with Smooth Fading Slideshow */}
         <div className="relative mb-12 overflow-hidden rounded-[32px] h-[360px] md:h-[400px] w-full shadow-[0_15px_50px_rgba(0,0,0,0.08)] border-4 border-white">
           {heroImages.map((src, idx) => {
             const isActive = idx === currentHeroImageIdx;
@@ -1214,6 +1564,349 @@ export default function AdminDashboard() {
               </div>
             )}
 
+          </div>
+        )}
+          </>
+        )}
+
+        {/* Tab 2: History Database */}
+        {activeTab === "history" && (
+          <div className="rounded-[32px] border border-black/5 bg-white p-8 shadow-[0_18px_60px_rgba(0,0,0,0.05)]">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 pb-6 border-b border-zinc-150">
+              <div>
+                <h2 className="font-sans text-2xl font-bold text-zinc-800 flex items-center gap-2">
+                  <Database className="text-[#5844e9]" /> Certificates Database
+                </h2>
+                <p className="text-xs text-zinc-500 mt-1">
+                  View and manage all internship certificates, LORs, and experience letters generated via CopterCode.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-4 shrink-0">
+                <button
+                  onClick={fetchHistoryCerts}
+                  disabled={historyLoading}
+                  className="px-4 py-2 bg-zinc-105 hover:bg-zinc-200 border border-zinc-250 text-xs font-bold text-zinc-650 rounded-xl transition-all cursor-pointer"
+                >
+                  Refresh Data
+                </button>
+              </div>
+            </div>
+
+            {/* Filter/Search Bar */}
+            <div className="mb-6 flex gap-3">
+              <div className="flex-1 flex items-center gap-2.5 bg-zinc-50 border border-zinc-200 rounded-2xl px-4 py-3 shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)]">
+                <Search size={16} className="text-zinc-400 shrink-0" />
+                <input
+                  type="text"
+                  value={historyQuery}
+                  onChange={(e) => setHistoryQuery(e.target.value)}
+                  placeholder="Search by intern name, college, email, or credential code..."
+                  className="flex-1 text-xs bg-transparent outline-none text-zinc-700 placeholder:text-zinc-400"
+                />
+              </div>
+            </div>
+
+            {historyError && (
+              <div className="mb-6 bg-red-50 border border-red-250 p-4 rounded-2xl text-red-850 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-650" />
+                <span>{historyError}</span>
+              </div>
+            )}
+
+            {historyLoading ? (
+              <div className="py-20 text-center">
+                <div className="w-10 h-10 border-2 border-zinc-200 border-t-violet-600 rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-xs font-bold text-zinc-500">Querying Supabase database...</p>
+              </div>
+            ) : (
+              (() => {
+                const filtered = historyCerts.filter((c) => {
+                  const q = historyQuery.toLowerCase().trim();
+                  if (!q) return true;
+                  const name = (c.name || "").toLowerCase();
+                  const college = (c.college || "").toLowerCase();
+                  const code = (c.cert_code || "").toLowerCase();
+                  const email = (c.intern?.email || "").toLowerCase();
+                  return name.includes(q) || college.includes(q) || code.includes(q) || email.includes(q);
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="py-16 text-center border border-dashed border-zinc-200 rounded-2xl">
+                      <p className="text-sm font-bold text-zinc-550">No records found matching &quot;{historyQuery}&quot;</p>
+                      <p className="text-xs text-zinc-400 mt-1">Make sure you have generated certificates or try a different query.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="overflow-x-auto border border-zinc-150 rounded-2xl bg-white shadow-sm">
+                    <table className="w-full text-left border-collapse text-sm">
+                      <thead>
+                        <tr className="border-b border-zinc-150 bg-zinc-50/50 text-zinc-550 text-xs font-bold font-mono">
+                          <th className="p-4">Intern Details</th>
+                          <th className="p-4">Credential Code</th>
+                          <th className="p-4">Type</th>
+                          <th className="p-4">Issue Date</th>
+                          <th className="p-4">Status</th>
+                          <th className="p-4">Email Delivery</th>
+                          <th className="p-4 text-right">PDF File</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100">
+                        {filtered.map((cert) => {
+                          const dateStr = cert.issue_date || (cert.created_at ? new Date(cert.created_at).toLocaleDateString() : "—");
+                          const emailVal = cert.intern?.email || "—";
+                          const emailStatus = cert.intern?.email_status || "pending";
+                          
+                          return (
+                            <tr key={cert.id} className="hover:bg-zinc-50/50 transition-colors">
+                              <td className="p-4">
+                                <div className="font-bold text-zinc-800">{cert.name}</div>
+                                <div className="text-[10px] text-zinc-500 mt-0.5">{cert.college}</div>
+                                <div className="text-[10px] text-zinc-400 mt-0.5">{emailVal}</div>
+                              </td>
+                              <td className="p-4 font-mono text-zinc-700 text-xs">
+                                <div className="flex items-center gap-1.5">
+                                  <span>{cert.cert_code}</span>
+                                  <button
+                                    title="Copy Code"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(cert.cert_code || "");
+                                      alert("Credential code copied!");
+                                    }}
+                                    className="p-1 text-zinc-400 hover:text-zinc-700 rounded hover:bg-zinc-100 transition-colors cursor-pointer"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 002 2h2a2 2 0 002-2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="p-4">
+                                <span className={`inline-flex items-center text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                                  cert.cert_type === "lor"
+                                    ? "bg-violet-50 text-violet-750 border border-violet-100"
+                                    : cert.cert_type === "experience"
+                                      ? "bg-amber-50 text-amber-750 border border-amber-100"
+                                      : "bg-emerald-50 text-emerald-750 border border-emerald-100"
+                                }`}>
+                                  {cert.cert_type || "internship"}
+                                </span>
+                              </td>
+                              <td className="p-4 font-mono text-zinc-550 text-xs">{dateStr}</td>
+                              <td className="p-4">
+                                {cert.status === "active" ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 border border-emerald-150 text-emerald-700 px-2 py-0.5 rounded-full">
+                                    Active
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex flex-col gap-0.5">
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-red-50 border border-red-150 text-red-700 px-2 py-0.5 rounded-full">
+                                      Revoked
+                                    </span>
+                                    {cert.revoke_reason && (
+                                      <span className="text-[10px] text-red-500 italic block max-w-xs truncate">{cert.revoke_reason}</span>
+                                    )}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-4">
+                                {cert.status !== "active" ? (
+                                  <span className="text-zinc-400">—</span>
+                                ) : !cert.intern_id ? (
+                                  <span className="text-zinc-400 text-xs italic">No intern link</span>
+                                ) : emailStatus === "sending" ? (
+                                  <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-150 px-2 py-0.5 rounded-md">
+                                    <span className="w-2 h-2 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                                    Sending...
+                                  </span>
+                                ) : emailStatus === "sent" ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 border border-emerald-150 text-emerald-700 px-2.5 py-1 rounded-lg">
+                                    <CheckCircle className="w-3 h-3 text-emerald-650" /> Sent
+                                  </span>
+                                ) : emailStatus === "failed" ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-red-50 border border-red-150 text-red-700 px-2 py-0.5 rounded-md">
+                                      Failed
+                                    </span>
+                                    <button
+                                      onClick={() => handleSendHistoryEmail(cert.intern_id)}
+                                      className="text-[10px] text-zinc-500 hover:text-zinc-700 font-bold underline cursor-pointer"
+                                    >
+                                      Retry
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => handleSendHistoryEmail(cert.intern_id)}
+                                    className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-605 hover:text-indigo-805 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded-md cursor-pointer"
+                                  >
+                                    <Mail className="w-3.5 h-3.5" /> Send Mail
+                                  </button>
+                                )}
+                              </td>
+                              <td className="p-4 text-right">
+                                {cert.pdf_url ? (
+                                  <div className="inline-flex items-center gap-2">
+                                    <a
+                                      href={getResolvedPdfUrl(cert.pdf_url)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-violet-650 hover:text-violet-855 bg-violet-50 hover:bg-violet-100 border border-violet-200 px-2.5 py-1 rounded-lg transition-all duration-150"
+                                    >
+                                      <LinkIcon className="w-3 h-3" /> View
+                                    </a>
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          const res = await fetch(getResolvedPdfUrl(cert.pdf_url));
+                                          const blob = await res.blob();
+                                          const url = URL.createObjectURL(blob);
+                                          const a = document.createElement("a");
+                                          a.href = url;
+                                          const safeName = (cert.name || "certificate").replace(/[^a-zA-Z0-9_\- ]/g, "_");
+                                          a.download = `${safeName}.pdf`;
+                                          a.click();
+                                          URL.revokeObjectURL(url);
+                                        } catch {
+                                          alert("Failed to download PDF.");
+                                        }
+                                      }}
+                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-all duration-150 cursor-pointer"
+                                    >
+                                      <Download className="w-3 h-3" /> Download
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-zinc-400 text-xs">No PDF</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()
+            )}
+          </div>
+        )}
+
+        {/* Tab 3: Profile Settings */}
+        {activeTab === "profile" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-[fadeIn_0.3s_ease-out]">
+            {/* Update Info Card */}
+            <div className="rounded-[32px] border border-black/5 bg-white p-8 shadow-[0_18px_60px_rgba(0,0,0,0.05)]">
+              <h2 className="font-sans text-xl font-bold text-stone-900 mb-2 flex items-center gap-2">
+                <User className="text-[#5844e9]" /> Admin Information
+              </h2>
+              <p className="text-xs text-zinc-500 mb-6">
+                Update your display name. This name is used to greet you in the panel interface.
+              </p>
+
+              {profileSuccess && (
+                <div className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-800 p-3.5 rounded-xl text-xs flex items-center gap-2 animate-bounce">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                  <span>{profileSuccess}</span>
+                </div>
+              )}
+
+              {profileError && (
+                <div className="mb-4 bg-red-50 border border-red-200 p-3.5 rounded-xl text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-650" />
+                  <span>{profileError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleProfileUpdate} className="space-y-5">
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
+                    Account Email
+                  </label>
+                  <input
+                    type="text"
+                    disabled
+                    value={session.user.email}
+                    className="w-full text-xs bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-500 cursor-not-allowed font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
+                    Display Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={profileName}
+                    onChange={(e) => setProfileName(e.target.value)}
+                    placeholder="Admin Display Name"
+                    className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-800 focus:outline-none focus:border-violet-500 focus:bg-zinc-50 transition-colors"
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={profileSubmitting}
+                    className="bg-[#5844e9] hover:bg-[#4338ca] disabled:opacity-60 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-md transition-all uppercase tracking-wider cursor-pointer"
+                  >
+                    {profileSubmitting ? "Updating..." : "Save Changes"}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Change Password Card */}
+            <div className="rounded-[32px] border border-black/5 bg-white p-8 shadow-[0_18px_60px_rgba(0,0,0,0.05)]">
+              <h2 className="font-sans text-xl font-bold text-stone-900 mb-2 flex items-center gap-2">
+                <KeyRound className="text-[#5844e9]" /> Change Security Password
+              </h2>
+              <p className="text-xs text-zinc-500 mb-6">
+                Update your credentials. Once saved, you must log back in with the new password on future visits.
+              </p>
+
+              <form onSubmit={handleProfileUpdate} className="space-y-5">
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
+                    New Security Password
+                  </label>
+                  <input
+                    type="password"
+                    value={profilePassword}
+                    onChange={(e) => setProfilePassword(e.target.value)}
+                    placeholder="•••••••• (Min 6 characters)"
+                    className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-800 focus:outline-none focus:border-violet-500 focus:bg-zinc-50 transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
+                    Confirm Password
+                  </label>
+                  <input
+                    type="password"
+                    value={profileConfirmPassword}
+                    onChange={(e) => setProfileConfirmPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-800 focus:outline-none focus:border-violet-500 focus:bg-zinc-50 transition-colors"
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={profileSubmitting || !profilePassword}
+                    className="bg-[#5844e9] hover:bg-[#4338ca] disabled:opacity-60 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-md transition-all uppercase tracking-wider cursor-pointer"
+                  >
+                    {profileSubmitting ? "Updating Password..." : "Update Password"}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
 

@@ -1892,6 +1892,13 @@ def manual_send_intern_email(intern_id: str):
             intern_id=intern_id
         )
 
+        # Update email_status in the DB if the column exists (defensive try-except)
+        next_status = "sent" if success else "failed"
+        try:
+            supabase.table("interns").update({"email_status": next_status}).eq("id", intern_id).execute()
+        except Exception as update_err:
+            print(f"Could not update email_status in database: {update_err}")
+
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
