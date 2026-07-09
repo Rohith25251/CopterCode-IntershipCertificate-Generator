@@ -1693,9 +1693,11 @@ async def get_dynamic_pdf(cert_code: str):
                 bg_pdf_bytes = supabase.storage.from_("templates").download(bg_pdf_path)
                 coords_json_bytes = supabase.storage.from_("templates").download(coords_json_path)
                 print(f"Using precompiled overlay dynamic generation for {cert_code} (batch {batch_id})")
-            except Exception:
-                bg_pdf_bytes = None
-                coords_json_bytes = None
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Precompiled download failed: {str(e)} (bg_path={bg_pdf_path}, coords_path={coords_json_path})"
+                )
 
         if bg_pdf_bytes and coords_json_bytes:
             try:
