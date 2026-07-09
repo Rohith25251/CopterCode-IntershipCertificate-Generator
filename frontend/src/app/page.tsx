@@ -29,7 +29,7 @@ import {
   Edit2
 } from "lucide-react";
 import JSZip from "jszip";
-import { supabase } from "@/lib/supabase";
+import { supabase, anonSupabase } from "@/lib/supabase";
 
 // ─── Certificate Font Catalogue ─────────────────────────────────────────────
 interface FontOption {
@@ -367,7 +367,7 @@ export default function AdminDashboard() {
     setHistoryLoading(true);
     setHistoryError("");
     try {
-      const { data, error } = await supabase
+      const { data, error } = await anonSupabase
         .from("certificates")
         .select("*, intern:interns(*)")
         .order("created_at", { ascending: false });
@@ -515,8 +515,8 @@ export default function AdminDashboard() {
     );
 
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
-      const res = await fetch(`${backendUrl.replace(/\/+$/, "")}/api/interns/${row.intern_id}/send-email`, {
+      const base = backendUrl.replace(/\/+$/, "");
+      const res = await fetch(`${base}/api/interns/${row.intern_id}/send-email`, {
         method: "POST"
       });
       const data = await res.json();
