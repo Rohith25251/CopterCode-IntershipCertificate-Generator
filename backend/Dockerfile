@@ -21,6 +21,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy all backend files
 COPY . .
 
+# Copy custom fonts to system fonts folder and rebuild cache so LibreOffice can render them
+RUN mkdir -p /usr/share/fonts/truetype/custom && \
+    cp fonts/*.ttf /usr/share/fonts/truetype/custom/ && \
+    fc-cache -f -v
+
 # Expose FastAPI port
 EXPOSE 5000
 
