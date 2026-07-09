@@ -913,16 +913,6 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="hidden items-center rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-2 shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)] xl:flex">
-              <span className="text-[10px] font-extrabold text-zinc-400 mr-2.5 uppercase tracking-wider">Backend API:</span>
-              <input
-                type="text"
-                value={backendUrl}
-                onChange={(e) => saveBackendUrl(e.target.value)}
-                placeholder="http://localhost:5000"
-                className="text-xs font-bold text-zinc-700 bg-transparent outline-none w-56 border-none"
-              />
-            </div>
 
             {/* Admin user greeting and logout */}
             <div className="flex items-center gap-3 border-l border-zinc-200 pl-4">
@@ -1655,7 +1645,13 @@ export default function AdminDashboard() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-100">
-                        {filtered.map((cert) => {
+                        {filtered.map((cert, idx) => {
+                          const isFirstRowForIntern = cert.intern_id
+                            ? filtered.findIndex((c) => c.intern_id === cert.intern_id) === idx
+                            : true;
+                          const internRowCount = cert.intern_id
+                            ? filtered.filter((c) => c.intern_id === cert.intern_id).length
+                            : 1;
                           const dateStr = cert.issue_date || (cert.created_at ? new Date(cert.created_at).toLocaleDateString() : "—");
                           const emailVal = cert.intern?.email || "—";
                           const emailStatus = cert.intern?.email_status || "pending";
@@ -1712,41 +1708,43 @@ export default function AdminDashboard() {
                                   </span>
                                 )}
                               </td>
-                              <td className="p-4">
-                                {cert.status !== "active" ? (
-                                  <span className="text-zinc-400">—</span>
-                                ) : !cert.intern_id ? (
-                                  <span className="text-zinc-400 text-xs italic">No intern link</span>
-                                ) : emailStatus === "sending" ? (
-                                  <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-150 px-2 py-0.5 rounded-md">
-                                    <span className="w-2 h-2 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
-                                    Sending...
-                                  </span>
-                                ) : emailStatus === "sent" ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 border border-emerald-150 text-emerald-700 px-2.5 py-1 rounded-lg">
-                                    <CheckCircle className="w-3 h-3 text-emerald-650" /> Sent
-                                  </span>
-                                ) : emailStatus === "failed" ? (
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-red-50 border border-red-150 text-red-700 px-2 py-0.5 rounded-md">
-                                      Failed
+                              {isFirstRowForIntern && (
+                                <td className="p-4 align-middle border-l border-r border-zinc-100 bg-zinc-50/20" rowSpan={internRowCount}>
+                                  {cert.status !== "active" ? (
+                                    <span className="text-zinc-400">—</span>
+                                  ) : !cert.intern_id ? (
+                                    <span className="text-zinc-400 text-xs italic">No intern link</span>
+                                  ) : emailStatus === "sending" ? (
+                                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-150 px-2 py-0.5 rounded-md">
+                                      <span className="w-2 h-2 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                                      Sending...
                                     </span>
+                                  ) : emailStatus === "sent" ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 border border-emerald-150 text-emerald-700 px-2.5 py-1 rounded-lg">
+                                      <CheckCircle className="w-3 h-3 text-emerald-650" /> Sent
+                                    </span>
+                                  ) : emailStatus === "failed" ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-red-50 border border-red-150 text-red-700 px-2 py-0.5 rounded-md">
+                                        Failed
+                                      </span>
+                                      <button
+                                        onClick={() => handleSendHistoryEmail(cert.intern_id)}
+                                        className="text-[10px] text-zinc-500 hover:text-zinc-700 font-bold underline cursor-pointer"
+                                      >
+                                        Retry
+                                      </button>
+                                    </div>
+                                  ) : (
                                     <button
                                       onClick={() => handleSendHistoryEmail(cert.intern_id)}
-                                      className="text-[10px] text-zinc-500 hover:text-zinc-700 font-bold underline cursor-pointer"
+                                      className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-605 hover:text-indigo-805 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded-md cursor-pointer"
                                     >
-                                      Retry
+                                      <Mail className="w-3.5 h-3.5" /> Send Mail
                                     </button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    onClick={() => handleSendHistoryEmail(cert.intern_id)}
-                                    className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-605 hover:text-indigo-805 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded-md cursor-pointer"
-                                  >
-                                    <Mail className="w-3.5 h-3.5" /> Send Mail
-                                  </button>
-                                )}
-                              </td>
+                                  )}
+                                </td>
+                              )}
                               <td className="p-4 text-right">
                                 {cert.pdf_url ? (
                                   <div className="inline-flex items-center gap-2">
