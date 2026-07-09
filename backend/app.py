@@ -369,6 +369,41 @@ def convert_pptx_to_pdf_bytes(pptx_bytes: bytes) -> bytes:
     import os
     import subprocess
     
+    # 1. Try ConvertAPI cloud conversion if secret key is present in environment
+    convertapi_secret = os.getenv("CONVERTAPI_SECRET")
+    if convertapi_secret:
+        print("  --> Converting PPTX to PDF using ConvertAPI cloud service...")
+        import base64
+        import json
+        import urllib.request
+        
+        try:
+            pptx_b64 = base64.b64encode(pptx_bytes).decode("utf-8")
+            payload = {
+                "Parameters": [
+                    {
+                        "Name": "File",
+                        "FileValue": {
+                            "Name": "presentation.pptx",
+                            "Data": pptx_b64
+                        }
+                    }
+                ]
+            }
+            url = f"https://v2.convertapi.com/convert/pptx/to/pdf?Secret={convertapi_secret.strip()}"
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=30) as response:
+                res_data = json.loads(response.read().decode("utf-8"))
+                pdf_b64 = res_data["Files"][0]["FileData"]
+                return base64.b64decode(pdf_b64)
+        except Exception as api_err:
+            print(f"  --> ConvertAPI cloud conversion failed: {api_err}. Falling back to local tools...")
+
     # Save the pptx bytes to a temp file
     temp_pptx = tempfile.NamedTemporaryFile(suffix=".pptx", delete=False)
     temp_pptx.write(pptx_bytes)
