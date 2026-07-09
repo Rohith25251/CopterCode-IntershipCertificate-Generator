@@ -1634,6 +1634,17 @@ async def get_dynamic_pdf(cert_code: str):
                 date_val = intern.get("date") or date_val
                 batch_id = intern.get("batch_id") or batch_id
 
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "cert_data_keys": list(cert_data.keys()) if cert_data else None,
+                "cert_data": {k: str(v) for k, v in cert_data.items()} if cert_data else None,
+                "intern_id": str(intern_id) if intern_id else None,
+                "cert_type": cert_type,
+                "batch_id": batch_id,
+            }
+        )
+
         # Prepare replacements
         replacements = {
             "<<NAME>>": intern_name or "",
