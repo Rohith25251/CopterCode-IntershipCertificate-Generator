@@ -148,6 +148,23 @@ function VerifyContent() {
     };
   })();
 
+  const resolvedPdfUrl = (() => {
+    if (!certificate?.pdf_url) return "";
+    const marker = "/api/certificates/";
+    const index = certificate.pdf_url.indexOf(marker);
+    if (index !== -1) {
+      const path = certificate.pdf_url.substring(index);
+      const envBackend = process.env.NEXT_PUBLIC_BACKEND_URL;
+      if (envBackend) {
+        return `${envBackend.replace(/\/+$/, "")}${path}`;
+      }
+      if (certificate.pdf_url.includes("coptercode-certificate.vercel.app/api/backend")) {
+        return `http://localhost:5000${path}`;
+      }
+    }
+    return certificate.pdf_url;
+  })();
+
   // Certificate not found
   if (error === "not_found" && !certificate) {
     return (
@@ -282,14 +299,14 @@ function VerifyContent() {
 
             <div className="flex items-center gap-2">
               <a 
-                href={certificate.pdf_url}
+                href={resolvedPdfUrl}
                 download
                 className="flex items-center gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold text-xs px-4 py-2.5 rounded-xl border border-zinc-200 shadow-sm transition-colors"
               >
                 <FileDown className="w-4 h-4" /> Download PDF
               </a>
               <a 
-                href={certificate.pdf_url}
+                href={resolvedPdfUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all duration-300"
@@ -430,7 +447,7 @@ function VerifyContent() {
             
             <div className="flex-1 w-full bg-zinc-50 rounded-2xl overflow-hidden border border-zinc-200 relative group">
               <iframe 
-                src={`${certificate.pdf_url}#toolbar=0`} 
+                src={`${resolvedPdfUrl}#toolbar=0`} 
                 className="w-full h-full border-0 absolute inset-0"
                 title="Certificate PDF Viewer"
               />

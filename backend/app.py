@@ -1097,7 +1097,13 @@ async def get_dynamic_pdf(cert_code: str):
         from qrcode.image.pil import PilImage
         qr_img = qr.make_image(image_factory=PilImage, fill_color="black", back_color="white")
         qr_io = io.BytesIO()
-        qr_img.save(qr_io, format="PNG")
+        try:
+            qr_img.save(qr_io, format="PNG")
+        except TypeError:
+            # PyPNGImage.save doesn't accept the format parameter
+            qr_io.seek(0)
+            qr_io.truncate(0)
+            qr_img.save(qr_io)
         qr_bytes = qr_io.getvalue()
 
         # 7. Convert and build PDF

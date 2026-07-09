@@ -233,8 +233,22 @@ export default function AdminDashboard() {
   const [step, setStep] = useState<1 | 2>(1);
   const [backendUrl, setBackendUrl] = useState<string>(() => {
     if (typeof window === "undefined") return "http://localhost:5000";
-    return localStorage.getItem("cert_generator_backend_url") || "http://localhost:5000";
+    return localStorage.getItem("cert_generator_backend_url") || 
+           process.env.NEXT_PUBLIC_BACKEND_URL || 
+           "http://localhost:5000";
   });
+
+  const getResolvedPdfUrl = useCallback((url: string | undefined) => {
+    if (!url) return "";
+    const marker = "/api/certificates/";
+    const index = url.indexOf(marker);
+    if (index !== -1) {
+      const path = url.substring(index);
+      const base = backendUrl.replace(/\/+$/, "");
+      return `${base}${path}`;
+    }
+    return url;
+  }, [backendUrl]);
   
   // Files
   const [lorTemplateFile, setLorTemplateFile] = useState<File | null>(null);
@@ -271,7 +285,7 @@ export default function AdminDashboard() {
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         if (!row.pdf_url) continue;
-        const url = row.pdf_url;
+        const url = getResolvedPdfUrl(row.pdf_url);
         try {
           const res = await fetch(url);
           const blob = await res.arrayBuffer();
@@ -1017,7 +1031,7 @@ export default function AdminDashboard() {
                                 <div className="inline-flex items-center gap-2">
                                   {/* View in new tab */}
                                   <a
-                                    href={row.pdf_url}
+                                    href={getResolvedPdfUrl(row.pdf_url)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     title="Open PDF in new tab"
@@ -1031,7 +1045,7 @@ export default function AdminDashboard() {
                                     title="Download PDF"
                                     onClick={async () => {
                                       try {
-                                        const res = await fetch(row.pdf_url!);
+                                        const res = await fetch(getResolvedPdfUrl(row.pdf_url));
                                         const blob = await res.blob();
                                         const url = URL.createObjectURL(blob);
                                         const a = document.createElement("a");

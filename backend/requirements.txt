@@ -4,6 +4,7 @@ pydantic
 pandas
 openpyxl
 qrcode
+pillow
 reportlab
 pypdf
 pymupdf
@@ -11,3 +12,4 @@ supabase
 python-multipart
 python-dotenv
 pywin32
+python-pptx
