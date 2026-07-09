@@ -332,8 +332,9 @@ def get_reportlab_font(font_name: str) -> str:
 
 
 def convert_pptx_to_pdf_bytes(pptx_bytes: bytes) -> bytes:
-    if not HAS_WIN32COM:
-        raise ValueError("PowerPoint COM library (pywin32) is not installed on this system.")
+    import aspose.slides as slides
+    import tempfile
+    import os
     
     # Save the pptx bytes to a temp file
     temp_pptx = tempfile.NamedTemporaryFile(suffix=".pptx", delete=False)
@@ -343,37 +344,19 @@ def convert_pptx_to_pdf_bytes(pptx_bytes: bytes) -> bytes:
     temp_pdf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
     temp_pdf.close() # we just need the name
     
-    powerpoint = None
-    presentation = None
     try:
-        # Initialize PowerPoint COM in background
-        powerpoint = win32com.client.DispatchEx("PowerPoint.Application")
-        
-        abs_pptx = os.path.abspath(temp_pptx.name)
-        abs_pdf = os.path.abspath(temp_pdf.name)
-        
-        presentation = powerpoint.Presentations.Open(abs_pptx, WithWindow=False)
-        presentation.SaveAs(abs_pdf, 32) # 32 = PDF
-        presentation.Close()
-        
+        # Load and convert using Aspose.Slides
+        with slides.Presentation(temp_pptx.name) as presentation:
+            presentation.save(temp_pdf.name, slides.export.SaveFormat.PDF)
+            
         with open(temp_pdf.name, "rb") as f:
             pdf_bytes = f.read()
             
         return pdf_bytes
     except Exception as e:
-        print(f"Failed to convert PPTX to PDF via win32com: {e}")
-        raise ValueError(f"Could not convert PPTX to PDF. Make sure PowerPoint is installed. Details: {e}")
+        print(f"Failed to convert PPTX to PDF via Aspose.Slides: {e}")
+        raise ValueError(f"Could not convert PPTX to PDF. Details: {e}")
     finally:
-        if presentation is not None:
-            try:
-                presentation.Close()
-            except Exception:
-                pass
-        if powerpoint is not None:
-            try:
-                powerpoint.Quit()
-            except Exception:
-                pass
         # Clean up temp files
         try:
             os.remove(temp_pptx.name)
@@ -600,89 +583,6 @@ def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, 
             pass
 
 
-
-def detect_certificate_title_from_pdf(page) -> str:
-    """
-    Detects the certificate type based on the text contents of the PDF page.
-    Returns: 'Internship Certificate', 'Letter Of Recomandation', 'Experience Letter', or 'Certificate'.
-    """
-    text = page.get_text().lower()
-    if "recommendation" in text or "recomandation" in text:
-        return "Letter Of Recomandation"
-    elif "experience certificate" in text or "experience letter" in text:
-        return "Experience Letter"
-    elif "internship" in text:
-        return "Internship Certificate"
-    elif "certificate" in text:
-        return "Certificate"
-    return "Certificate"
-
-
-def generate_certificate_from_pdf_bytes(pdf_bytes: bytes, replacements: dict, qr_bytes: bytes) -> tuple:
-    import fitz
-    import io
-    
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    page = doc[0]
-    
-    # 1. Search for all placeholders and record bounding boxes
-    placeholders = list(replacements.keys()) + ["<<QR>>", "<<QR_CODE>>", "<<QRCODE>>", "«QR»", "«QR_CODE»", "«QRCODE»"]
-    matches_to_redact = []
-    
-    for placeholder in placeholders:
-        rects = page.search_for(placeholder)
-        if not rects:
-            # Try guillomet variation
-            guill_key = placeholder.replace("<<", "«").replace(">>", "»")
-            rects = page.search_for(guill_key)
-        for rect in rects:
-            matches_to_redact.append((placeholder, rect))
-            
-    # 2. Add redactions for all matched placeholders and apply them
-    for placeholder, rect in matches_to_redact:
-        page.add_redact_annot(rect)
-        
-    if matches_to_redact:
-        page.apply_redactions()
-        
-    # 3. Draw replacement values or QR code image
-    for placeholder, rect in matches_to_redact:
-        if placeholder in ("<<QR>>", "<<QR_CODE>>", "<<QRCODE>>", "«QR»", "«QR_CODE»", "«QRCODE»"):
-            # Insert QR image inside the bounding box of the placeholder
-            page.insert_image(rect, stream=qr_bytes)
-        else:
-            val = replacements.get(placeholder, "")
-            # Base font size on rect height (e.g. 80% of rect height)
-            font_size = max(6.0, min(36.0, rect.height * 0.8))
-            
-            # Select font
-            font_name = "helv"  # Default Helvetica
-            # Names and major titles look better in Helvetica-Bold (hebo)
-            if "NAME" in placeholder or "ROLE" in placeholder or "DOMAIN" in placeholder:
-                font_name = "hebo"  # Helvetica-Bold
-            
-            # Draw textbox centered (align = 1)
-            page.insert_textbox(
-                rect,
-                val,
-                fontsize=font_size,
-                fontname=font_name,
-                align=1,  # Center align
-                color=(0, 0, 0)
-            )
-            
-    # Detect cert title
-    cert_title = detect_certificate_title_from_pdf(page)
-    
-    output_io = io.BytesIO()
-    doc.save(output_io, garbage=3, deflate=True)
-    pdf_bytes_out = output_io.getvalue()
-    doc.close()
-    
-    return pdf_bytes_out, cert_title
-
-
-
 def upload_pdf_to_storage(cert_code: str, pdf_bytes: bytes) -> str:
     """
     Uploads the generated PDF to Supabase Storage bucket 'certificates'
@@ -737,29 +637,16 @@ def generate_and_store_pdf(cert_code: str, cert_type: str, intern_data: dict, ba
             else:
                 template_path = batch.get("internship_template_path")
 
-    # Determine file type
-    ext = ".pptx"
-    if template_path:
-        ext = os.path.splitext(template_path)[1].lower()
-    else:
+    if not template_path:
         template_path = f"{batch_id}/template.pptx"
 
-    template_bytes = None
     try:
-        template_bytes = supabase.storage.from_("templates").download(template_path)
+        pptx_bytes = supabase.storage.from_("templates").download(template_path)
     except Exception as dl_err:
-        # Fallbacks: try .pdf first, then .pptx
         try:
-            template_path = f"{batch_id}/template.pdf"
-            template_bytes = supabase.storage.from_("templates").download(template_path)
-            ext = ".pdf"
+            pptx_bytes = supabase.storage.from_("templates").download(f"{batch_id}/template.pptx")
         except Exception:
-            try:
-                template_path = f"{batch_id}/template.pptx"
-                template_bytes = supabase.storage.from_("templates").download(template_path)
-                ext = ".pptx"
-            except Exception:
-                raise ValueError(f"Failed to retrieve template file from Storage bucket: {dl_err}")
+            raise ValueError(f"Failed to retrieve template file from Storage bucket: {dl_err}")
 
     replacements = {
         "<<NAME>>": intern_data.get("name") or "",
@@ -797,10 +684,7 @@ def generate_and_store_pdf(cert_code: str, cert_type: str, intern_data: dict, ba
         qr_img.save(qr_io)
     qr_bytes = qr_io.getvalue()
 
-    if ext == ".pdf":
-        pdf_bytes, cert_title = generate_certificate_from_pdf_bytes(template_bytes, replacements, qr_bytes)
-    else:
-        pdf_bytes, cert_title = generate_certificate_from_pptx_bytes(template_bytes, replacements, qr_bytes)
+    pdf_bytes, cert_title = generate_certificate_from_pptx_bytes(pptx_bytes, replacements, qr_bytes)
 
     public_url = upload_pdf_to_storage(cert_code, pdf_bytes)
     return public_url
@@ -821,21 +705,13 @@ async def create_batch(
             detail="Supabase client is not configured."
         )
 
-    import sys
-    is_linux = sys.platform != 'win32'
-
     for f in (lor_template, experience_template, internship_template):
         if f:
             ext = os.path.splitext(f.filename)[1].lower()
-            if ext not in (".pptx", ".pdf"):
+            if ext != ".pptx":
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Template {f.filename} must be a PPTX or PDF file."
-                )
-            if ext == ".pptx" and is_linux:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="PowerPoint (.pptx) templates are only supported on Windows deployments. Please save your template as a PDF (.pdf) file and upload it instead to work on Vercel/Linux."
+                    detail=f"Template {f.filename} must be a PPTX file."
                 )
 
     try:
@@ -845,35 +721,29 @@ async def create_batch(
 
         if lor_template:
             lor_bytes = await lor_template.read()
-            ext = os.path.splitext(lor_template.filename)[1].lower()
-            lor_path = f"templates/{batch_id}/lor{ext}"
-            content_type = "application/pdf" if ext == ".pdf" else "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            lor_path = f"templates/{batch_id}/lor.pptx"
             supabase.storage.from_("templates").upload(
                 path=lor_path,
                 file=lor_bytes,
-                file_options={"content-type": content_type, "upsert": "true"}
+                file_options={"content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "upsert": "true"}
             )
         
         if experience_template:
             exp_bytes = await experience_template.read()
-            ext = os.path.splitext(experience_template.filename)[1].lower()
-            exp_path = f"templates/{batch_id}/experience{ext}"
-            content_type = "application/pdf" if ext == ".pdf" else "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            exp_path = f"templates/{batch_id}/experience.pptx"
             supabase.storage.from_("templates").upload(
                 path=exp_path,
                 file=exp_bytes,
-                file_options={"content-type": content_type, "upsert": "true"}
+                file_options={"content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "upsert": "true"}
             )
 
         if internship_template:
             int_bytes = await internship_template.read()
-            ext = os.path.splitext(internship_template.filename)[1].lower()
-            int_path = f"templates/{batch_id}/internship{ext}"
-            content_type = "application/pdf" if ext == ".pdf" else "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            int_path = f"templates/{batch_id}/internship.pptx"
             supabase.storage.from_("templates").upload(
                 path=int_path,
                 file=int_bytes,
-                file_options={"content-type": content_type, "upsert": "true"}
+                file_options={"content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "upsert": "true"}
             )
 
         batch_record = {
@@ -1294,32 +1164,22 @@ async def get_dynamic_pdf(cert_code: str):
                     template_path = f"{batch_id}/template.pptx"
 
         # Determine file type
-        ext = ".pptx"
-        if template_path:
-            ext = os.path.splitext(template_path)[1].lower()
-        else:
+        if not template_path:
+            # Absolute default fallback
             template_path = f"{batch_id}/template.pptx"
 
-        # 4. Download template from storage
-        template_bytes = None
+        # 4. Download template PPTX from storage
         try:
-            template_bytes = supabase.storage.from_("templates").download(template_path)
+            pptx_bytes = supabase.storage.from_("templates").download(template_path)
         except Exception as dl_err:
-            # Fallback: try .pdf first, then .pptx
+            # Fallback try template.pptx directly
             try:
-                template_path = f"{batch_id}/template.pdf"
-                template_bytes = supabase.storage.from_("templates").download(template_path)
-                ext = ".pdf"
+                pptx_bytes = supabase.storage.from_("templates").download(f"{batch_id}/template.pptx")
             except Exception:
-                try:
-                    template_path = f"{batch_id}/template.pptx"
-                    template_bytes = supabase.storage.from_("templates").download(template_path)
-                    ext = ".pptx"
-                except Exception:
-                    raise HTTPException(
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail=f"Failed to retrieve template file from Storage bucket: {dl_err}"
-                    )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to retrieve template file from Storage bucket: {dl_err}"
+                )
 
         # 5. Prepare replacements
         replacements = {
@@ -1361,10 +1221,7 @@ async def get_dynamic_pdf(cert_code: str):
         qr_bytes = qr_io.getvalue()
 
         # 7. Convert and build PDF
-        if ext == ".pdf":
-            pdf_bytes, cert_title = generate_certificate_from_pdf_bytes(template_bytes, replacements, qr_bytes)
-        else:
-            pdf_bytes, cert_title = generate_certificate_from_pptx_bytes(template_bytes, replacements, qr_bytes)
+        pdf_bytes, cert_title = generate_certificate_from_pptx_bytes(pptx_bytes, replacements, qr_bytes)
 
         # 8. Return response containing PDF stream
         return Response(
