@@ -68,7 +68,8 @@ def generate_test_pdf():
     qr = qrcode.QRCode(version=1, box_size=10, border=1)
     qr.add_data(qr_url)
     qr.make(fit=True)
-    qr_img = qr.make_image(fill_color="black", back_color="white")
+    from qrcode.image.pil import PilImage
+    qr_img = qr.make_image(image_factory=PilImage, fill_color="black", back_color="white")
     
     qr_io = io.BytesIO()
     try:

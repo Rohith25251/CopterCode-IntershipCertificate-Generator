@@ -6,5 +6,6 @@
   "python.analysis.venvPath": "d:/Projects/CopterCode Certificate Verfication/backend",
   "python.analysis.venv": "venv",
   "python.venvPath": "d:/Projects/CopterCode Certificate Verfication/backend",
-  "python.venv": "venv"
+  "python.venv": "venv",
+  "css.lint.unknownAtRules": "ignore"
 }
