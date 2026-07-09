@@ -324,6 +324,8 @@ def convert_pptx_to_pdf_bytes(pptx_bytes: bytes) -> bytes:
     # Try PowerPoint COM first if on Windows and pywin32 is installed
     if HAS_WIN32COM:
         print("  --> Converting PPTX to PDF using PowerPoint COM...")
+        import pythoncom
+        pythoncom.CoInitialize()
         try:
             powerpoint = win32com.client.DispatchEx("PowerPoint.Application")
             # Open presentation without GUI window
@@ -337,6 +339,8 @@ def convert_pptx_to_pdf_bytes(pptx_bytes: bytes) -> bytes:
             return pdf_bytes
         except Exception as e:
             print(f"  --> PowerPoint COM conversion failed: {e}")
+        finally:
+            pythoncom.CoUninitialize()
 
     # Fallback to headless LibreOffice
     print("  --> Converting PPTX to PDF using LibreOffice headless fallback...")
