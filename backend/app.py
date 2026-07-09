@@ -229,7 +229,12 @@ def send_email_notification(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for dev simplicity
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:5000",
+        "https://coptercode-certificate.vercel.app",
+        "https://coptercode-website.vercel.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -596,6 +601,113 @@ def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, 
 
 
 
+def upload_pdf_to_storage(cert_code: str, pdf_bytes: bytes) -> str:
+    """
+    Uploads the generated PDF to Supabase Storage bucket 'certificates'
+    and returns the public URL.
+    """
+    if not supabase:
+        raise ValueError("Supabase client is not initialized.")
+    
+    bucket_name = "certificates"
+    path = f"{cert_code}.pdf"
+    
+    try:
+        supabase.storage.from_(bucket_name).upload(
+            path=path,
+            file=pdf_bytes,
+            file_options={"content-type": "application/pdf", "upsert": "true"}
+        )
+    except Exception as e:
+        print(f"[storage] Upload failed: {e}. Trying to create bucket '{bucket_name}'...")
+        try:
+            supabase.storage.create_bucket(bucket_name, options={"public": True})
+            supabase.storage.from_(bucket_name).upload(
+                path=path,
+                file=pdf_bytes,
+                file_options={"content-type": "application/pdf", "upsert": "true"}
+            )
+        except Exception as retry_err:
+            print(f"[storage] Retry upload failed: {retry_err}")
+            raise retry_err
+
+    public_url = supabase.storage.from_(bucket_name).get_public_url(path)
+    return public_url
+
+
+def generate_and_store_pdf(cert_code: str, cert_type: str, intern_data: dict, batch_id: str) -> str:
+    """
+    Generates the certificate PDF and uploads it to Supabase Storage.
+    Returns the public URL of the uploaded PDF.
+    """
+    if not supabase:
+        raise ValueError("Supabase client is not configured.")
+
+    template_path = None
+    if batch_id:
+        batch_res = supabase.table("batches").select("*").eq("id", batch_id).execute()
+        if batch_res.data:
+            batch = batch_res.data[0]
+            if cert_type == "lor":
+                template_path = batch.get("lor_template_path")
+            elif cert_type == "experience":
+                template_path = batch.get("experience_template_path")
+            else:
+                template_path = batch.get("internship_template_path")
+
+    if not template_path:
+        template_path = f"{batch_id}/template.pptx"
+
+    try:
+        pptx_bytes = supabase.storage.from_("templates").download(template_path)
+    except Exception as dl_err:
+        try:
+            pptx_bytes = supabase.storage.from_("templates").download(f"{batch_id}/template.pptx")
+        except Exception:
+            raise ValueError(f"Failed to retrieve template file from Storage bucket: {dl_err}")
+
+    replacements = {
+        "<<NAME>>": intern_data.get("name") or "",
+        "<<INSTITUTION>>": intern_data.get("college") or "",
+        "<<COLLEGE>>": intern_data.get("college") or "",
+        "<<YEAR>>": intern_data.get("year") or "",
+        "<<DEPARTMENT>>": intern_data.get("department") or "",
+        "<<DOMAIN>>": intern_data.get("role") or "",
+        "<<ROLE>>": intern_data.get("role") or "",
+        "<<PROJECT>>": intern_data.get("project") or "",
+        "<<INTERNSHIP & LIVE PROJECT AREA>>": intern_data.get("project") or "",
+        "<<BATCH>>": intern_data.get("month") or "",
+        "<<BATCH >>": intern_data.get("month") or "",
+        "<<DATE>>": str(intern_data.get("date")) if intern_data.get("date") else "",
+        "<<DT>>": str(intern_data.get("date")) if intern_data.get("date") else ""
+    }
+
+    qr_url = build_verify_url(cert_code)
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_H,
+        box_size=12,
+        border=2
+    )
+    qr.add_data(qr_url)
+    qr.make(fit=True)
+    from qrcode.image.pil import PilImage
+    qr_img = qr.make_image(image_factory=PilImage, fill_color="black", back_color="white")
+    qr_io = io.BytesIO()
+    try:
+        qr_img.save(qr_io, format="PNG")
+    except TypeError:
+        qr_io.seek(0)
+        qr_io.truncate(0)
+        qr_img.save(qr_io)
+    qr_bytes = qr_io.getvalue()
+
+    pdf_bytes, cert_title = generate_certificate_from_pptx_bytes(pptx_bytes, replacements, qr_bytes)
+
+    public_url = upload_pdf_to_storage(cert_code, pdf_bytes)
+    return public_url
+
+
 @app.post("/api/batch/create")
 async def create_batch(
     batch_id: str = Form(...),
@@ -851,15 +963,34 @@ async def generate_certificates(
             for cert_type, label in certificates_to_create:
                 cert_code = str(uuid.uuid4())
                 
-                # Dynamically point pdf_url to backend dynamic PDF route
-                dynamic_pdf_url = f"{BACKEND_BASE_URL}/api/certificates/{cert_code}/pdf"
+                # Option B: Try to generate and store PDF statically on Supabase Storage immediately
+                try:
+                    pdf_url = generate_and_store_pdf(
+                        cert_code=cert_code,
+                        cert_type=cert_type,
+                        intern_data={
+                            "name": name_val,
+                            "college": college_val,
+                            "year": year_val,
+                            "department": department_val,
+                            "role": role_val,
+                            "project": project_val,
+                            "month": month_val,
+                            "date": date_val
+                        },
+                        batch_id=target_batch_id
+                    )
+                except Exception as gen_err:
+                    print(f"Error generating/storing static PDF for {name_val}: {gen_err}")
+                    # Fallback to dynamic PDF URL
+                    pdf_url = f"{BACKEND_BASE_URL}/api/certificates/{cert_code}/pdf"
 
                 cert_record = {
                     "cert_code": cert_code,
                     "intern_id": intern_id,
                     "cert_type": cert_type,
                     "status": "active",
-                    "pdf_url": dynamic_pdf_url,
+                    "pdf_url": pdf_url,
                     "name": name_val,
                     "college": college_val,
                     "batch": year_val,
@@ -876,7 +1007,7 @@ async def generate_certificates(
                     "type": cert_type,
                     "label": label,
                     "cert_code": cert_code,
-                    "pdf_url": dynamic_pdf_url
+                    "pdf_url": pdf_url
                 })
 
                 # Append to rows results for frontend UI display
@@ -886,7 +1017,7 @@ async def generate_certificates(
                     "department": department_val,
                     "month": f"{label} ({month_val or year_val})",
                     "cert_code": cert_code,
-                    "pdf_url": dynamic_pdf_url,
+                    "pdf_url": pdf_url,
                     "status": "active"
                 })
 
