@@ -63,6 +63,9 @@ def send_email_notification(
     certificates: List[Dict[str, str]],
     intern_id: str
 ):
+    import requests
+    from email.mime.application import MIMEApplication
+
     smtp_server = os.getenv("SMTP_SERVER")
     smtp_port = os.getenv("SMTP_PORT", "587")
     smtp_username = os.getenv("SMTP_USERNAME")
@@ -77,14 +80,19 @@ def send_email_notification(
     try:
         portal_link = f"https://coptercode-website.vercel.app/intern-portal?id={intern_id}"
 
-        msg = MIMEMultipart("alternative")
+        # Use MIMEMultipart("mixed") since we are sending inline HTML + physical file attachments
+        msg = MIMEMultipart("mixed")
         msg["Subject"] = "Congratulations on Successfully Completing Your Internship at CopterCode"
         msg["From"] = f"{smtp_from_name} <{smtp_from_email}>"
         msg["To"] = to_email
 
+        # Create alternative part for HTML body
+        msg_alternative = MIMEMultipart("alternative")
+        msg.attach(msg_alternative)
+
         cert_items_html = ""
         for cert in certificates:
-            cert_items_html += f"<li><strong>{cert['label']}</strong></li>"
+            cert_items_html += f"<li style='margin-bottom: 6px;'><strong>{cert['label']}</strong></li>"
 
         html_content = f"""
         <!DOCTYPE html>
@@ -100,17 +108,26 @@ def send_email_notification(
                     <td align="center">
                         <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.035); border: 1px solid #e2e8f0;">
                             
-                            <!-- Header / B&W Logo -->
+                            <!-- Header / Logo side-by-side -->
                             <tr>
-                                <td align="center" style="background-color: #ffffff; padding: 32px 24px 24px 24px;">
-                                    <img src="https://coptercode-certificate.vercel.app/coptercode-logo.svg" alt="CopterCode Logo" style="height: 54px; width: auto; display: block;" />
+                                <td align="center" style="background-color: #ffffff; padding: 36px 24px 28px 24px;">
+                                    <table border="0" cellpadding="0" cellspacing="0" align="center" style="margin: 0 auto;">
+                                        <tr>
+                                            <td style="vertical-align: middle;">
+                                                <img src="https://coptercode-certificate.vercel.app/coptercode-logo.svg" alt="CopterCode Logo" style="height: 48px; width: auto; display: block; border-radius: 12px;" />
+                                            </td>
+                                            <td style="vertical-align: middle; padding-left: 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 26px; font-weight: 750; color: #0f172a; letter-spacing: -0.5px; line-height: 1;">
+                                                CopterCode
+                                            </td>
+                                        </tr>
+                                    </table>
                                 </td>
                             </tr>
                             
                             <!-- Hero Image -->
                             <tr>
                                 <td style="padding: 0 24px;">
-                                    <img src="https://coptercode-certificate.vercel.app/hero-1.jpg" alt="CopterCode Team" style="width: 100%; height: auto; display: block; border-radius: 12px; object-fit: cover;" />
+                                    <img src="https://coptercode-certificate.vercel.app/hero-3.jpg" alt="CopterCode Team" style="width: 100%; height: auto; display: block; border-radius: 12px; object-fit: cover;" />
                                 </td>
                             </tr>
                             
@@ -127,29 +144,20 @@ def send_email_notification(
                                         As a token of your accomplishments, please find attached the following documents for your reference and future endeavors:
                                     </p>
                                     
-                                    <!-- Bullet list styled inside a neat callout card -->
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f1f5f9; border-radius: 12px; margin-bottom: 24px;">
+                                    <!-- Dynamic list inside a premium left-bordered box -->
+                                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; border-left: 4px solid #5844e9; border-radius: 8px; margin-bottom: 24px;">
                                         <tr>
-                                            <td style="padding: 18px 24px;">
-                                                <ul style="margin: 0; padding: 0 0 0 20px; font-size: 14px; line-height: 1.8; color: #334155; font-weight: bold;">
-                                                    <li style="margin-bottom: 6px;">Internship Certificate</li>
-                                                    <li style="margin-bottom: 6px;">Letter of Recommendation</li>
-                                                    <li style="margin-bottom: 0;">Experience Letter</li>
+                                            <td style="padding: 16px 20px 10px 20px;">
+                                                <ul style="margin: 0; padding: 0 0 0 20px; font-size: 14px; line-height: 1.8; color: #334155;">
+                                                    {cert_items_html}
                                                 </ul>
                                             </td>
                                         </tr>
                                     </table>
                                     
-                                    <!-- Download CTA Button -->
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 32px 0;">
-                                        <tr>
-                                            <td align="center">
-                                                <a href="{portal_link}" target="_blank" style="background-color: #0f172a; color: #ffffff !important; text-decoration: none; font-size: 14px; font-weight: bold; padding: 14px 32px; border-radius: 8px; display: inline-block; letter-spacing: 0.5px; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);">
-                                                    Download Certificate(s)
-                                                </a>
-                                            </td>
-                                        </tr>
-                                    </table>
+                                    <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 24px 0 16px 0;">
+                                        Your certificate(s) have been attached directly to this email for your convenience. You can also view, verify, and share them at any time by visiting your <a href="{portal_link}" target="_blank" style="color: #5844e9 !important; text-decoration: underline; font-weight: 600;">Intern Portal</a>.
+                                    </p>
                                     
                                     <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 18px 0;">
                                         We extend our heartfelt congratulations and best wishes for your future career. We are confident that the skills and knowledge you have gained here will serve you well in all your professional pursuits.
@@ -170,29 +178,17 @@ def send_email_notification(
                                             <td width="55%" valign="top">
                                                 <p style="margin: 0; font-size: 13px; color: #94a3b8; font-weight: 500;">Warm regards,</p>
                                                 <p style="margin: 4px 0 16px 0; font-weight: 700; font-size: 16px; color: #ffffff; letter-spacing: 0.5px;">Team CopterCode</p>
-                                                
-                                                <p style="margin: 0 0 8px 0; font-size: 13px; color: #cbd5e1; line-height: 1.4;">
-                                                    <img src="https://img.icons8.com/material-outlined/24/38bdf8/mail.png" width="15" height="15" style="vertical-align: middle; display: inline-block; margin-right: 8px; border: 0;" />
-                                                    <span style="vertical-align: middle;"><a href="mailto:hr@coptercode.co.in" style="color: #38bdf8 !important; text-decoration: none; font-weight: 500;">hr@coptercode.co.in</a></span>
-                                                </p>
-                                                <p style="margin: 0; font-size: 13px; color: #cbd5e1; line-height: 1.4;">
-                                                    <img src="https://img.icons8.com/material-outlined/24/38bdf8/globe.png" width="15" height="15" style="vertical-align: middle; display: inline-block; margin-right: 8px; border: 0;" />
-                                                    <span style="vertical-align: middle;"><a href="https://www.coptercode.co.in/" target="_blank" style="color: #38bdf8 !important; text-decoration: none; font-weight: 500;">www.coptercode.co.in</a></span>
-                                                </p>
                                             </td>
                                             
                                             <!-- Right Contact & Socials details -->
                                             <td width="45%" align="right" valign="top" style="border-left: 1px solid #334155; padding-left: 24px;">
-                                                <p style="margin: 0; font-size: 13px; color: #94a3b8; font-weight: 500;">Best regards,</p>
-                                                <p style="margin: 4px 0 16px 0; font-weight: 700; font-size: 16px; color: #ffffff; letter-spacing: 0.5px;">HR Team • CopterCode</p>
-                                                
                                                 <p style="margin: 0 0 8px 0; font-size: 13px; color: #cbd5e1; line-height: 1.4;">
-                                                    <img src="https://img.icons8.com/material-outlined/24/38bdf8/instagram-new.png" width="15" height="15" style="vertical-align: middle; display: inline-block; margin-right: 8px; border: 0;" />
-                                                    <span style="vertical-align: middle;"><a href="https://instagram.com/coptercode" target="_blank" style="color: #38bdf8 !important; text-decoration: none; font-weight: 500;">Instagram</a></span>
+                                                    <img src="https://img.icons8.com/material-outlined/24/a5b4fc/mail.png" width="15" height="15" style="vertical-align: middle; display: inline-block; margin-right: 8px; border: 0;" />
+                                                    <span style="vertical-align: middle;"><a href="mailto:hr@coptercode.co.in" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">hr@coptercode.co.in</a></span>
                                                 </p>
                                                 <p style="margin: 0; font-size: 13px; color: #cbd5e1; line-height: 1.4;">
-                                                    <img src="https://img.icons8.com/material-outlined/24/38bdf8/mail.png" width="15" height="15" style="vertical-align: middle; display: inline-block; margin-right: 8px; border: 0;" />
-                                                    <span style="vertical-align: middle;"><a href="mailto:hr@coptercode.co.in" style="color: #38bdf8 !important; text-decoration: none; font-weight: 500;">hr@coptercode.co.in</a></span>
+                                                    <img src="https://img.icons8.com/material-outlined/24/a5b4fc/globe.png" width="15" height="15" style="vertical-align: middle; display: inline-block; margin-right: 8px; border: 0;" />
+                                                    <span style="vertical-align: middle;"><a href="https://www.coptercode.co.in/" target="_blank" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">www.coptercode.co.in</a></span>
                                                 </p>
                                             </td>
                                         </tr>
@@ -212,7 +208,23 @@ def send_email_notification(
         </html>
         """
 
-        msg.attach(MIMEText(html_content, "html"))
+        msg_alternative.attach(MIMEText(html_content, "html"))
+
+        # Fetch and attach certificates directly
+        for cert in certificates:
+            try:
+                pdf_url = cert.get("pdf_url")
+                if pdf_url:
+                    # Download the PDF file bytes
+                    pdf_res = requests.get(pdf_url, timeout=15)
+                    if pdf_res.status_code == 200:
+                        part = MIMEApplication(pdf_res.content, Name=f"{cert['label']}.pdf")
+                        part['Content-Disposition'] = f'attachment; filename="{cert["label"]}.pdf"'
+                        msg.attach(part)
+                    else:
+                        print(f"Failed to fetch PDF for attachment: {pdf_url} (status: {pdf_res.status_code})")
+            except Exception as att_err:
+                print(f"Error attaching certificate {cert.get('label')}: {att_err}")
 
         server = smtplib.SMTP(smtp_server, int(smtp_port))
         if int(smtp_port) == 587:

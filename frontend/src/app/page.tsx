@@ -328,12 +328,10 @@ export default function AdminDashboard() {
     const row = generationResults[index];
     if (!row.intern_id) return;
 
-    // Set row status to sending
-    setGenerationResults((prev) => {
-      const updated = [...prev];
-      updated[index] = { ...row, email_status: "sending" };
-      return updated;
-    });
+    // Set row status to sending for all rows with the same intern_id
+    setGenerationResults((prev) =>
+      prev.map((r) => (r.intern_id === row.intern_id ? { ...r, email_status: "sending" } : r))
+    );
 
     try {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
@@ -343,38 +341,39 @@ export default function AdminDashboard() {
       const data = await res.json();
       
       setGenerationResults((prev) => {
-        const updated = [...prev];
-        if (res.ok && data.status === "success") {
-          updated[index] = { ...updated[index], email_status: "sent" };
-        } else {
-          updated[index] = { ...updated[index], email_status: "failed" };
-        }
-        return updated;
+        const nextStatus = res.ok && data.status === "success" ? "sent" : "failed";
+        return prev.map((r) => (r.intern_id === row.intern_id ? { ...r, email_status: nextStatus } : r));
       });
     } catch (err) {
       console.error(err);
-      setGenerationResults((prev) => {
-        const updated = [...prev];
-        updated[index] = { ...updated[index], email_status: "failed" };
-        return updated;
-      });
+      setGenerationResults((prev) =>
+        prev.map((r) => (r.intern_id === row.intern_id ? { ...r, email_status: "failed" } : r))
+      );
     }
   };
 
   const handleSendAllEmails = async () => {
-    // Get all active rows with intern_id that aren't already successfully sent
-    const pendingRowsIndices = generationResults
-      .map((row, idx) => ({ row, idx }))
-      .filter(({ row }) => row.intern_id && row.status === "active" && row.email_status !== "sent");
+    // Find unique intern_ids that are pending
+    const seen = new Set<string>();
+    const pendingIndices: number[] = [];
 
-    if (pendingRowsIndices.length === 0) {
+    generationResults.forEach((row, idx) => {
+      if (row.intern_id && row.status === "active" && !seen.has(row.intern_id)) {
+        seen.add(row.intern_id);
+        if (row.email_status !== "sent") {
+          pendingIndices.push(idx);
+        }
+      }
+    });
+
+    if (pendingIndices.length === 0) {
       alert("No pending emails to send.");
       return;
     }
 
     setIsSendingEmails(true);
-    for (let i = 0; i < pendingRowsIndices.length; i++) {
-      const { idx } = pendingRowsIndices[i];
+    for (let i = 0; i < pendingIndices.length; i++) {
+      const idx = pendingIndices[i];
       await handleSendEmail(idx);
     }
     setIsSendingEmails(false);
@@ -1025,7 +1024,7 @@ export default function AdminDashboard() {
                           <button
                             onClick={handleSendAllEmails}
                             disabled={isSendingEmails}
-                            className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-650 to-indigo-650 hover:from-blue-550 hover:to-indigo-550 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-2.5 px-5 rounded-xl shadow-md text-xs transition-all duration-300 cursor-pointer"
+                            className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-2.5 px-5 rounded-xl shadow-md text-xs transition-all duration-300 cursor-pointer"
                           >
                             {isSendingEmails ? (
                               <>
@@ -1086,105 +1085,116 @@ export default function AdminDashboard() {
                           </td>
                         </tr>
                       ) : (
-                        generationResults.map((row, idx) => (
-                          <tr key={idx} className="hover:bg-zinc-50/50 transition-colors">
-                            <td className="p-4 font-bold text-zinc-800">{row.name}</td>
-                            <td className="p-4 text-zinc-650">{row.college}</td>
-                            <td className="p-4 text-zinc-650">{row.department || "—"}</td>
-                            <td className="p-4 font-mono text-zinc-500 text-xs">{row.month || row.year || "—"}</td>
-                            <td className="p-4 font-mono text-zinc-700 text-xs">
-                              {row.cert_code || <span className="text-zinc-400">—</span>}
-                            </td>
-                            <td className="p-4">
-                              {row.status === "active" ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 border border-emerald-150 text-emerald-700 px-2 py-0.5 rounded-full">
-                                  Success
-                                </span>
-                              ) : (
-                                <span className="inline-flex flex-col gap-0.5">
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-red-50 border border-red-150 text-red-700 px-2 py-0.5 rounded-full w-max">
-                                    Error
-                                  </span>
-                                  <span className="text-[10px] text-red-600 block max-w-xs truncate">{row.error}</span>
-                                </span>
-                              )}
-                            </td>
-                            <td className="p-4">
-                              {row.status !== "active" ? (
-                                <span className="text-zinc-400">—</span>
-                              ) : row.email_status === "sending" ? (
-                                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-150 px-2.5 py-1 rounded-lg">
-                                  <span className="w-2.5 h-2.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
-                                  Sending...
-                                </span>
-                              ) : row.email_status === "sent" ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 border border-emerald-150 text-emerald-700 px-2.5 py-1 rounded-lg">
-                                  <CheckCircle className="w-3 h-3 text-emerald-650" /> Sent
-                                </span>
-                              ) : row.email_status === "failed" ? (
-                                <div className="inline-flex items-center gap-2">
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-red-50 border border-red-150 text-red-700 px-2.5 py-1 rounded-lg">
-                                    <AlertCircle className="w-3 h-3 text-red-650" /> Failed
-                                  </span>
-                                  <button
-                                    onClick={() => handleSendEmail(idx)}
-                                    className="text-[10px] text-zinc-500 hover:text-zinc-700 font-bold underline cursor-pointer"
-                                  >
-                                    Retry
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => handleSendEmail(idx)}
-                                  className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-605 hover:text-indigo-805 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg transition-all duration-150 cursor-pointer"
-                                >
-                                  <Mail className="w-3 h-3" /> Send Email
-                                </button>
-                              )}
-                            </td>
-                            <td className="p-4 text-right">
-                              {row.pdf_url ? (
-                                <div className="inline-flex items-center gap-2">
-                                  {/* View in new tab */}
-                                  <a
-                                    href={getResolvedPdfUrl(row.pdf_url)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    title="Open PDF in new tab"
-                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-violet-600 hover:text-violet-800 bg-violet-50 hover:bg-violet-100 border border-violet-200 px-2.5 py-1 rounded-lg transition-all duration-150"
-                                  >
-                                    <LinkIcon className="w-3 h-3" /> View
-                                  </a>
+                        generationResults.map((row, idx) => {
+                          const isFirstRowForIntern = row.intern_id
+                            ? generationResults.findIndex((r) => r.intern_id === row.intern_id) === idx
+                            : true;
+                          const internRowCount = row.intern_id
+                            ? generationResults.filter((r) => r.intern_id === row.intern_id).length
+                            : 1;
 
-                                  {/* Force-download */}
-                                  <button
-                                    title="Download PDF"
-                                    onClick={async () => {
-                                      try {
-                                        const res = await fetch(getResolvedPdfUrl(row.pdf_url));
-                                        const blob = await res.blob();
-                                        const url = URL.createObjectURL(blob);
-                                        const a = document.createElement("a");
-                                        a.href = url;
-                                        const safeName = (row.name || "certificate").replace(/[^a-zA-Z0-9_\- ]/g, "_");
-                                        a.download = `${safeName}.pdf`;
-                                        a.click();
-                                        URL.revokeObjectURL(url);
-                                      } catch {
-                                        alert("Failed to download PDF. Please try View instead.");
-                                      }
-                                    }}
-                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-all duration-150 cursor-pointer"
-                                  >
-                                    <Download className="w-3 h-3" /> Download
-                                  </button>
-                                </div>
-                              ) : (
-                                <span className="text-zinc-400 text-xs font-bold">Unsaved</span>
+                          return (
+                            <tr key={idx} className="hover:bg-zinc-50/50 transition-colors">
+                              <td className="p-4 font-bold text-zinc-800">{row.name}</td>
+                              <td className="p-4 text-zinc-650">{row.college}</td>
+                              <td className="p-4 text-zinc-650">{row.department || "—"}</td>
+                              <td className="p-4 font-mono text-zinc-500 text-xs">{row.month || row.year || "—"}</td>
+                              <td className="p-4 font-mono text-zinc-700 text-xs">
+                                {row.cert_code || <span className="text-zinc-400">—</span>}
+                              </td>
+                              <td className="p-4">
+                                {row.status === "active" ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 border border-emerald-150 text-emerald-700 px-2 py-0.5 rounded-full">
+                                    Success
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex flex-col gap-0.5">
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-red-50 border border-red-150 text-red-700 px-2 py-0.5 rounded-full w-max">
+                                      Error
+                                    </span>
+                                    <span className="text-[10px] text-red-600 block max-w-xs truncate">{row.error}</span>
+                                  </span>
+                                )}
+                              </td>
+                              {isFirstRowForIntern && (
+                                <td className="p-4 align-middle border-l border-r border-zinc-100 bg-zinc-50/20" rowSpan={internRowCount}>
+                                  {row.status !== "active" ? (
+                                    <span className="text-zinc-400">—</span>
+                                  ) : row.email_status === "sending" ? (
+                                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-150 px-2.5 py-1 rounded-lg">
+                                      <span className="w-2.5 h-2.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                                      Sending...
+                                    </span>
+                                  ) : row.email_status === "sent" ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 border border-emerald-150 text-emerald-700 px-2.5 py-1 rounded-lg">
+                                      <CheckCircle className="w-3 h-3 text-emerald-650" /> Sent
+                                    </span>
+                                  ) : row.email_status === "failed" ? (
+                                    <div className="inline-flex items-center gap-2">
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-red-50 border border-red-150 text-red-700 px-2.5 py-1 rounded-lg">
+                                        <AlertCircle className="w-3 h-3 text-red-650" /> Failed
+                                      </span>
+                                      <button
+                                        onClick={() => handleSendEmail(idx)}
+                                        className="text-[10px] text-zinc-500 hover:text-zinc-700 font-bold underline cursor-pointer"
+                                      >
+                                        Retry
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleSendEmail(idx)}
+                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-605 hover:text-indigo-805 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg transition-all duration-150 cursor-pointer"
+                                    >
+                                      <Mail className="w-3 h-3" /> Send Email
+                                    </button>
+                                  )}
+                                </td>
                               )}
-                            </td>
-                          </tr>
-                        ))
+                              <td className="p-4 text-right">
+                                {row.pdf_url ? (
+                                  <div className="inline-flex items-center gap-2">
+                                    {/* View in new tab */}
+                                    <a
+                                      href={getResolvedPdfUrl(row.pdf_url)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title="Open PDF in new tab"
+                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-violet-600 hover:text-violet-800 bg-violet-50 hover:bg-violet-100 border border-violet-200 px-2.5 py-1 rounded-lg transition-all duration-150"
+                                    >
+                                      <LinkIcon className="w-3 h-3" /> View
+                                    </a>
+
+                                    {/* Force-download */}
+                                    <button
+                                      title="Download PDF"
+                                      onClick={async () => {
+                                        try {
+                                          const res = await fetch(getResolvedPdfUrl(row.pdf_url));
+                                          const blob = await res.blob();
+                                          const url = URL.createObjectURL(blob);
+                                          const a = document.createElement("a");
+                                          a.href = url;
+                                          const safeName = (row.name || "certificate").replace(/[^a-zA-Z0-9_\- ]/g, "_");
+                                          a.download = `${safeName}.pdf`;
+                                          a.click();
+                                          URL.revokeObjectURL(url);
+                                        } catch {
+                                          alert("Failed to download PDF. Please try View instead.");
+                                        }
+                                      }}
+                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-all duration-150 cursor-pointer"
+                                    >
+                                      <Download className="w-3 h-3" /> Download
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-zinc-400 text-xs font-bold">Unsaved</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
