@@ -18,9 +18,9 @@ from email.mime.multipart import MIMEMultipart
 try:
     import win32com.client
     HAS_WIN32COM = True
-except ImportError:
+except ImportError: 
     HAS_WIN32COM = False
-
+ 
 # QR generation library
 import qrcode
 
