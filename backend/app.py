@@ -27,7 +27,36 @@ import qrcode
 # Supabase python client
 from supabase import create_client, Client
 
+# ReportLab & PyPDF Imports
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.platypus import Paragraph, Frame
+from reportlab.platypus.flowables import KeepInFrame
+from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
+from reportlab.lib.utils import ImageReader
+from pypdf import PdfReader, PdfWriter
+
 load_dotenv()
+
+def register_fonts():
+    fonts_dir = os.path.join(os.path.dirname(__file__), "fonts")
+    if not os.path.exists(fonts_dir):
+        print("WARNING: Fonts directory not found at", fonts_dir)
+        return
+    for filename in os.listdir(fonts_dir):
+        if filename.lower().endswith(".ttf"):
+            font_name = os.path.splitext(filename)[0]
+            font_path = os.path.join(fonts_dir, filename)
+            try:
+                pdfmetrics.registerFont(TTFont(font_name, font_path))
+                print(f"Registered font: {font_name} from {font_path}")
+            except Exception as e:
+                print(f"Failed to register font {font_name}: {e}")
+
+# Register fonts on startup
+register_fonts()
+
 
 app = FastAPI(title="Certificate Generator API")
 
@@ -662,37 +691,29 @@ def generate_and_store_pdf(cert_code: str, cert_type: str, intern_data: dict, ba
     if not supabase:
         raise ValueError("Supabase client is not configured.")
 
-    template_bytes = None
-    ext = ".pptx"
-
+    bg_pdf_path = None
+    coords_json_path = None
     if batch_id:
-        batch_res = supabase.table("batches").select("*").eq("id", batch_id).execute()
-        if batch_res.data:
-            batch = batch_res.data[0]
-            if cert_type == "lor":
-                template_path = batch.get("lor_template_path")
-            elif cert_type == "experience":
-                template_path = batch.get("experience_template_path")
-            else:
-                template_path = batch.get("internship_template_path")
+        if cert_type == "lor":
+            bg_pdf_path = f"templates/{batch_id}/lor_background.pdf"
+            coords_json_path = f"templates/{batch_id}/lor_coordinates.json"
+        elif cert_type == "experience":
+            bg_pdf_path = f"templates/{batch_id}/experience_background.pdf"
+            coords_json_path = f"templates/{batch_id}/experience_coordinates.json"
+        else:
+            bg_pdf_path = f"templates/{batch_id}/internship_background.pdf"
+            coords_json_path = f"templates/{batch_id}/internship_coordinates.json"
 
-    if template_path:
-        ext = os.path.splitext(template_path)[1].lower()
+    bg_pdf_bytes = None
+    coords_json_bytes = None
+    if bg_pdf_path and coords_json_path:
         try:
-            template_bytes = supabase.storage.from_("templates").download(template_path)
+            bg_pdf_bytes = supabase.storage.from_("templates").download(bg_pdf_path)
+            coords_json_bytes = supabase.storage.from_("templates").download(coords_json_path)
+            print(f"Using precompiled overlay generation for {cert_code} (batch {batch_id})")
         except Exception:
-            pass
-
-    if not template_bytes:
-        try:
-            template_bytes = supabase.storage.from_("templates").download(f"{batch_id}/template.pptx")
-            ext = ".pptx"
-        except Exception:
-            try:
-                template_bytes = supabase.storage.from_("templates").download(f"{batch_id}/template.html")
-                ext = ".html"
-            except Exception as dl_err:
-                raise ValueError(f"Failed to retrieve template file from Storage bucket: {dl_err}")
+            bg_pdf_bytes = None
+            coords_json_bytes = None
 
     replacements = {
         "<<NAME>>": intern_data.get("name") or "",
@@ -730,6 +751,47 @@ def generate_and_store_pdf(cert_code: str, cert_type: str, intern_data: dict, ba
         qr_img.save(qr_io)
     qr_bytes = qr_io.getvalue()
 
+    if bg_pdf_bytes and coords_json_bytes:
+        try:
+            pdf_bytes = generate_overlay_pdf_bytes(bg_pdf_bytes, coords_json_bytes, replacements, qr_bytes)
+            public_url = upload_pdf_to_storage(cert_code, pdf_bytes)
+            return public_url
+        except Exception as overlay_err:
+            print(f"Failed precompiled overlay generation, falling back to legacy pipeline: {overlay_err}")
+
+    # Fallback to Legacy Pipeline
+    template_bytes = None
+    ext = ".pptx"
+
+    if batch_id:
+        batch_res = supabase.table("batches").select("*").eq("id", batch_id).execute()
+        if batch_res.data:
+            batch = batch_res.data[0]
+            if cert_type == "lor":
+                template_path = batch.get("lor_template_path")
+            elif cert_type == "experience":
+                template_path = batch.get("experience_template_path")
+            else:
+                template_path = batch.get("internship_template_path")
+
+    if template_path:
+        ext = os.path.splitext(template_path)[1].lower()
+        try:
+            template_bytes = supabase.storage.from_("templates").download(template_path)
+        except Exception:
+            pass
+
+    if not template_bytes:
+        try:
+            template_bytes = supabase.storage.from_("templates").download(f"{batch_id}/template.pptx")
+            ext = ".pptx"
+        except Exception:
+            try:
+                template_bytes = supabase.storage.from_("templates").download(f"{batch_id}/template.html")
+                ext = ".html"
+            except Exception as dl_err:
+                raise ValueError(f"Failed to retrieve template file from Storage bucket: {dl_err}")
+
     if ext == ".pptx":
         pdf_bytes, cert_title = generate_certificate_from_pptx_bytes(template_bytes, replacements, qr_bytes)
     else:
@@ -737,6 +799,334 @@ def generate_and_store_pdf(cert_code: str, cert_type: str, intern_data: dict, ba
 
     public_url = upload_pdf_to_storage(cert_code, pdf_bytes)
     return public_url
+
+
+
+def has_placeholders(text: str) -> bool:
+    if not text:
+        return False
+    # Matches <<...>>, {{...}}, or «...»
+    pattern = r'(<<.*?>>|\{\{.*?\}\}|«.*?»)'
+    return bool(re.search(pattern, text))
+
+
+def get_pptx_alignment_name(alignment) -> str:
+    # PP_ALIGN enum values:
+    # LEFT = 1, CENTER = 2, RIGHT = 3, JUSTIFY = 4
+    if alignment == 1:
+        return "left"
+    elif alignment == 2:
+        return "center"
+    elif alignment == 3:
+        return "right"
+    elif alignment == 4:
+        return "justify"
+    return "center"
+
+
+def get_font_properties(paragraph, run=None):
+    font = run.font if (run and run.font) else paragraph.font
+    
+    # Font name
+    font_name = font.name
+    if not font_name and paragraph.font:
+        font_name = paragraph.font.name
+    if not font_name:
+        font_name = "Arial"
+        
+    # Font size
+    font_size = None
+    if font.size:
+        font_size = font.size.pt
+    elif paragraph.font and paragraph.font.size:
+        font_size = paragraph.font.size.pt
+    if not font_size:
+        font_size = 12.0
+        
+    # Bold
+    bold = font.bold
+    if bold is None and paragraph.font:
+        bold = paragraph.font.bold
+    bold = bool(bold)
+    
+    # Color
+    color_hex = "#000000"
+    try:
+        if font.color and font.color.type == 1:
+            color_hex = f"#{font.color.rgb[0]:02x}{font.color.rgb[1]:02x}{font.color.rgb[2]:02x}"
+        elif paragraph.font and paragraph.font.color and paragraph.font.color.type == 1:
+            color_hex = f"#{paragraph.font.color.rgb[0]:02x}{paragraph.font.color.rgb[1]:02x}{paragraph.font.color.rgb[2]:02x}"
+    except Exception:
+        pass
+        
+    return font_name, font_size, bold, color_hex
+
+
+def get_paragraph_html(paragraph) -> str:
+    if not paragraph.runs:
+        return paragraph.text.replace("&", "&amp;")
+    html_parts = []
+    for run in paragraph.runs:
+        text = run.text
+        if not text:
+            continue
+        escaped_text = text.replace("&", "&amp;")
+        if run.font.bold:
+            escaped_text = f"<b>{escaped_text}</b>"
+        if run.font.italic:
+            escaped_text = f"<i>{escaped_text}</i>"
+        if run.font.color and run.font.color.type == 1:
+            c = run.font.color.rgb
+            hex_color = f"#{c[0]:02x}{c[1]:02x}{c[2]:02x}"
+            escaped_text = f'<font color="{hex_color}">{escaped_text}</font>'
+        if run.font.name:
+            escaped_text = f'<font name="{run.font.name}">{escaped_text}</font>'
+        if run.font.size:
+            escaped_text = f'<font size="{run.font.size.pt}">{escaped_text}</font>'
+        html_parts.append(escaped_text)
+    return "".join(html_parts)
+
+
+def precompile_pptx_template(pptx_bytes: bytes) -> tuple:
+    """
+    Parses PPTX file, extracts all placeholder layouts, builds a JSON coordinate map,
+    clears placeholder text in PPTX to blank them out, and returns:
+    (blanked_pptx_bytes, coordinates_json_bytes)
+    """
+    import json
+    from pptx import Presentation
+    import tempfile
+    
+    temp_in = tempfile.NamedTemporaryFile(suffix=".pptx", delete=False)
+    temp_in.write(pptx_bytes)
+    temp_in.close()
+    
+    try:
+        prs = Presentation(temp_in.name)
+        slide = prs.slides[0]
+        
+        slide_width = prs.slide_width / 12700
+        slide_height = prs.slide_height / 12700
+        
+        placeholders_metadata = []
+        default_keys = [
+            "<<NAME>>", "<<INSTITUTION>>", "<<COLLEGE>>", "<<YEAR>>", "<<DEPARTMENT>>",
+            "<<DOMAIN>>", "<<ROLE>>", "<<PROJECT>>", "<<INTERNSHIP & LIVE PROJECT AREA>>",
+            "<<BATCH>>", "<<BATCH >>", "<<DATE>>", "<<DT>>", "<<QR>>", "<<QR_CODE>>", "<<QRCODE>>"
+        ]
+        
+        for shape in list(slide.shapes):
+            if shape.has_text_frame:
+                text_frame = shape.text_frame
+                combined_text = text_frame.text.strip()
+                
+                if not has_placeholders(combined_text):
+                    continue
+                
+                # Defragment paragraph runs to resolve split placeholders
+                for paragraph in text_frame.paragraphs:
+                    defragment_paragraph(paragraph, default_keys)
+                
+                combined_text = text_frame.text.strip()
+                
+                left_pt = shape.left / 12700
+                top_pt = shape.top / 12700
+                width_pt = shape.width / 12700
+                height_pt = shape.height / 12700
+                
+                is_qr = False
+                for qr_key in ("<<QR>>", "<<QR_CODE>>", "<<QRCODE>>", "«QR»", "«QR_CODE»", "«QRCODE»"):
+                    if qr_key in combined_text:
+                        is_qr = True
+                        break
+                
+                if is_qr:
+                    placeholders_metadata.append({
+                        "type": "qr",
+                        "box": {
+                            "left": left_pt,
+                            "top": top_pt,
+                            "width": width_pt,
+                            "height": height_pt
+                        }
+                    })
+                else:
+                    paragraphs_meta = []
+                    for paragraph in text_frame.paragraphs:
+                        align = get_pptx_alignment_name(paragraph.alignment)
+                        text_template = get_paragraph_html(paragraph)
+                        font_name, font_size, font_bold, font_color = get_font_properties(paragraph, paragraph.runs[0] if paragraph.runs else None)
+                        
+                        paragraphs_meta.append({
+                            "align": align,
+                            "text_template": text_template,
+                            "font_name": font_name,
+                            "font_size": font_size,
+                            "font_bold": font_bold,
+                            "font_color": font_color
+                        })
+                        
+                    placeholders_metadata.append({
+                        "type": "text",
+                        "box": {
+                            "left": left_pt,
+                            "top": top_pt,
+                            "width": width_pt,
+                            "height": height_pt
+                        },
+                        "paragraphs": paragraphs_meta
+                    })
+                
+                # Blank out text
+                for paragraph in text_frame.paragraphs:
+                    for run in paragraph.runs:
+                        run.text = ""
+                        
+        temp_out = tempfile.NamedTemporaryFile(suffix=".pptx", delete=False)
+        temp_out.close()
+        prs.save(temp_out.name)
+        
+        with open(temp_out.name, "rb") as f:
+            blanked_pptx_bytes = f.read()
+            
+        try:
+            os.remove(temp_out.name)
+        except Exception:
+            pass
+            
+        coord_map = {
+            "slide_width": slide_width,
+            "slide_height": slide_height,
+            "placeholders": placeholders_metadata
+        }
+        coordinates_json_bytes = json.dumps(coord_map, indent=2).encode("utf-8")
+        
+        return blanked_pptx_bytes, coordinates_json_bytes
+        
+    finally:
+        try:
+            os.remove(temp_in.name)
+        except Exception:
+            pass
+
+
+def replace_tokens(template_str: str, replacements: dict) -> str:
+    replaced = template_str
+    for key, val in replacements.items():
+        replaced = replaced.replace(key, val)
+        curly_key = key.replace("<<", "{{").replace(">>", "}}")
+        replaced = replaced.replace(curly_key, val)
+        guill_key = key.replace("<<", "«").replace(">>", "»")
+        replaced = replaced.replace(guill_key, val)
+    return replaced
+
+
+def generate_overlay_pdf_bytes(
+    background_pdf_bytes: bytes,
+    coordinates_json_bytes: bytes,
+    replacements: dict,
+    qr_bytes: bytes
+) -> bytes:
+    import json
+    import io
+    from reportlab.pdfgen import canvas
+    
+    coords = json.loads(coordinates_json_bytes.decode("utf-8"))
+    slide_width = coords.get("slide_width", 720.0)
+    slide_height = coords.get("slide_height", 540.0)
+    placeholders = coords.get("placeholders", [])
+    
+    overlay_io = io.BytesIO()
+    can = canvas.Canvas(overlay_io, pagesize=(slide_width, slide_height))
+    
+    qr_reader = ImageReader(io.BytesIO(qr_bytes)) if qr_bytes else None
+    
+    for p in placeholders:
+        p_type = p.get("type")
+        box = p.get("box", {})
+        left_pt = box.get("left", 0.0)
+        top_pt = box.get("top", 0.0)
+        width_pt = box.get("width", 0.0)
+        height_pt = box.get("height", 0.0)
+        
+        bottom_pt = slide_height - (top_pt + height_pt)
+        
+        if p_type == "qr" and qr_reader:
+            can.drawImage(qr_reader, left_pt, bottom_pt, width_pt, height_pt)
+        elif p_type == "text":
+            paragraphs = p.get("paragraphs", [])
+            flowables = []
+            for p_meta in paragraphs:
+                text_template = p_meta.get("text_template", "")
+                replaced_text = replace_tokens(text_template, replacements)
+                
+                # Clean visual spaces and comma formatting
+                replaced_text = re.sub(r',([a-zA-Z])', r', \1', replaced_text)
+                replaced_text = re.sub(r'\s{2,}', ' ', replaced_text)
+                
+                align_map = {"left": TA_LEFT, "center": TA_CENTER, "right": TA_RIGHT, "justify": TA_JUSTIFY}
+                alignment = align_map.get(p_meta.get("align"), TA_CENTER)
+                
+                font_name = p_meta.get("font_name", "Arial")
+                font_size = p_meta.get("font_size", 12.0)
+                font_bold = p_meta.get("font_bold", False)
+                font_color = p_meta.get("font_color", "#000000")
+                
+                font_name_lower = font_name.lower()
+                font_resolved = "Helvetica"
+                
+                if "canva sans" in font_name_lower or "canvasans" in font_name_lower:
+                    font_resolved = "CanvaSans-Bold" if font_bold else "CanvaSans-Regular"
+                elif "calibri" in font_name_lower:
+                    font_resolved = "Calibri-Bold" if font_bold else "Calibri"
+                elif "codec" in font_name_lower or "codecpro" in font_name_lower:
+                    font_resolved = "CodecPro-Bold" if font_bold else "CodecPro-Regular"
+                elif "arial" in font_name_lower or "helvetica" in font_name_lower or "sans" in font_name_lower:
+                    font_resolved = "Helvetica-Bold" if font_bold else "Helvetica"
+                else:
+                    if font_name in pdfmetrics.getRegisteredFontNames():
+                        font_resolved = font_name
+                    elif font_bold and f"{font_name}-Bold" in pdfmetrics.getRegisteredFontNames():
+                        font_resolved = f"{font_name}-Bold"
+                    else:
+                        font_resolved = "Helvetica-Bold" if font_bold else "Helvetica"
+                
+                style = ParagraphStyle(
+                    name=f"Style_{uuid.uuid4().hex[:8]}",
+                    fontName=font_resolved,
+                    fontSize=font_size,
+                    leading=font_size * 1.25,
+                    textColor=font_color,
+                    alignment=alignment
+                )
+                
+                flowables.append(Paragraph(replaced_text, style))
+                
+            frame = Frame(left_pt, bottom_pt, width_pt, height_pt,
+                          leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
+            
+            kif = KeepInFrame(width_pt, height_pt, flowables, mode='shrink')
+            frame.addFromList([kif], can)
+            
+    can.save()
+    overlay_io.seek(0)
+    
+    bg_reader = PdfReader(io.BytesIO(background_pdf_bytes))
+    overlay_reader = PdfReader(overlay_io)
+    
+    writer = PdfWriter()
+    bg_page = bg_reader.pages[0]
+    overlay_page = overlay_reader.pages[0]
+    
+    bg_page.merge_page(overlay_page)
+    writer.add_page(bg_page)
+    
+    for i in range(1, len(bg_reader.pages)):
+        writer.add_page(bg_reader.pages[i])
+        
+    out_pdf_io = io.BytesIO()
+    writer.write(out_pdf_io)
+    return out_pdf_io.getvalue()
 
 
 @app.post("/api/batch/create")
@@ -778,6 +1168,23 @@ async def create_batch(
                 file=lor_bytes,
                 file_options={"content-type": content_type, "upsert": "true"}
             )
+            if ext == ".pptx":
+                try:
+                    blanked_pptx, coordinates_json = precompile_pptx_template(lor_bytes)
+                    background_pdf = convert_pptx_to_pdf_bytes(blanked_pptx)
+                    supabase.storage.from_("templates").upload(
+                        path=f"templates/{batch_id}/lor_background.pdf",
+                        file=background_pdf,
+                        file_options={"content-type": "application/pdf", "upsert": "true"}
+                    )
+                    supabase.storage.from_("templates").upload(
+                        path=f"templates/{batch_id}/lor_coordinates.json",
+                        file=coordinates_json,
+                        file_options={"content-type": "application/json", "upsert": "true"}
+                    )
+                    print(f"Pre-compiled LOR PPTX template for batch {batch_id} successfully.")
+                except Exception as pre_err:
+                    print(f"Failed to pre-compile LOR template for batch {batch_id}: {pre_err}")
         
         if experience_template:
             exp_bytes = await experience_template.read()
@@ -789,6 +1196,23 @@ async def create_batch(
                 file=exp_bytes,
                 file_options={"content-type": content_type, "upsert": "true"}
             )
+            if ext == ".pptx":
+                try:
+                    blanked_pptx, coordinates_json = precompile_pptx_template(exp_bytes)
+                    background_pdf = convert_pptx_to_pdf_bytes(blanked_pptx)
+                    supabase.storage.from_("templates").upload(
+                        path=f"templates/{batch_id}/experience_background.pdf",
+                        file=background_pdf,
+                        file_options={"content-type": "application/pdf", "upsert": "true"}
+                    )
+                    supabase.storage.from_("templates").upload(
+                        path=f"templates/{batch_id}/experience_coordinates.json",
+                        file=coordinates_json,
+                        file_options={"content-type": "application/json", "upsert": "true"}
+                    )
+                    print(f"Pre-compiled Experience PPTX template for batch {batch_id} successfully.")
+                except Exception as pre_err:
+                    print(f"Failed to pre-compile Experience template for batch {batch_id}: {pre_err}")
 
         if internship_template:
             int_bytes = await internship_template.read()
@@ -800,6 +1224,23 @@ async def create_batch(
                 file=int_bytes,
                 file_options={"content-type": content_type, "upsert": "true"}
             )
+            if ext == ".pptx":
+                try:
+                    blanked_pptx, coordinates_json = precompile_pptx_template(int_bytes)
+                    background_pdf = convert_pptx_to_pdf_bytes(blanked_pptx)
+                    supabase.storage.from_("templates").upload(
+                        path=f"templates/{batch_id}/internship_background.pdf",
+                        file=background_pdf,
+                        file_options={"content-type": "application/pdf", "upsert": "true"}
+                    )
+                    supabase.storage.from_("templates").upload(
+                        path=f"templates/{batch_id}/internship_coordinates.json",
+                        file=coordinates_json,
+                        file_options={"content-type": "application/json", "upsert": "true"}
+                    )
+                    print(f"Pre-compiled Internship PPTX template for batch {batch_id} successfully.")
+                except Exception as pre_err:
+                    print(f"Failed to pre-compile Internship template for batch {batch_id}: {pre_err}")
 
         batch_record = {
             "id": batch_id,
@@ -818,6 +1259,7 @@ async def create_batch(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create batch: {str(e)}"
         )
+
 
 
 
@@ -1192,7 +1634,83 @@ async def get_dynamic_pdf(cert_code: str):
                 date_val = intern.get("date") or date_val
                 batch_id = intern.get("batch_id") or batch_id
 
-        # 3. Retrieve template path from batches table
+        # Prepare replacements
+        replacements = {
+            "<<NAME>>": intern_name or "",
+            "<<INSTITUTION>>": college or "",
+            "<<COLLEGE>>": college or "",
+            "<<YEAR>>": year or "",
+            "<<DEPARTMENT>>": department or "",
+            "<<DOMAIN>>": role or "",
+            "<<ROLE>>": role or "",
+            "<<PROJECT>>": project or "",
+            "<<INTERNSHIP & LIVE PROJECT AREA>>": project or "",
+            "<<BATCH>>": month or "",
+            "<<BATCH >>": month or "",
+            "<<DATE>>": str(date_val) if date_val else "",
+            "<<DT>>": str(date_val) if date_val else ""
+        }
+
+        # Generate QR code bytes pointing to verification URL
+        qr_url = build_verify_url(cert_code)
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_H,
+            box_size=12,
+            border=2
+        )
+        qr.add_data(qr_url)
+        qr.make(fit=True)
+        from qrcode.image.pil import PilImage
+        qr_img = qr.make_image(image_factory=PilImage, fill_color="black", back_color="white")
+        qr_io = io.BytesIO()
+        try:
+            qr_img.save(qr_io, format="PNG")
+        except TypeError:
+            qr_io.seek(0)
+            qr_io.truncate(0)
+            qr_img.save(qr_io)
+        qr_bytes = qr_io.getvalue()
+
+        # Try pre-compiled overlay rendering!
+        bg_pdf_path = None
+        coords_json_path = None
+        if batch_id:
+            if cert_type == "lor":
+                bg_pdf_path = f"templates/{batch_id}/lor_background.pdf"
+                coords_json_path = f"templates/{batch_id}/lor_coordinates.json"
+            elif cert_type == "experience":
+                bg_pdf_path = f"templates/{batch_id}/experience_background.pdf"
+                coords_json_path = f"templates/{batch_id}/experience_coordinates.json"
+            else:
+                bg_pdf_path = f"templates/{batch_id}/internship_background.pdf"
+                coords_json_path = f"templates/{batch_id}/internship_coordinates.json"
+
+        bg_pdf_bytes = None
+        coords_json_bytes = None
+        if bg_pdf_path and coords_json_path:
+            try:
+                bg_pdf_bytes = supabase.storage.from_("templates").download(bg_pdf_path)
+                coords_json_bytes = supabase.storage.from_("templates").download(coords_json_path)
+                print(f"Using precompiled overlay dynamic generation for {cert_code} (batch {batch_id})")
+            except Exception:
+                bg_pdf_bytes = None
+                coords_json_bytes = None
+
+        if bg_pdf_bytes and coords_json_bytes:
+            try:
+                pdf_bytes = generate_overlay_pdf_bytes(bg_pdf_bytes, coords_json_bytes, replacements, qr_bytes)
+                return Response(
+                    content=pdf_bytes,
+                    media_type="application/pdf",
+                    headers={
+                        "Content-Disposition": f"inline; filename={cert_code}.pdf"
+                    }
+                )
+            except Exception as overlay_err:
+                print(f"Failed dynamic precompiled overlay generation, falling back to legacy pipeline: {overlay_err}")
+
+        # 3. Fallback: Retrieve template path from batches table
         template_path = None
         if batch_id:
             batch_res = supabase.table("batches").select("*").eq("id", batch_id).execute()
@@ -1234,46 +1752,7 @@ async def get_dynamic_pdf(cert_code: str):
                         detail=f"Failed to retrieve template file from Storage bucket: {dl_err}"
                     )
 
-        # 5. Prepare replacements
-        replacements = {
-            "<<NAME>>": intern_name or "",
-            "<<INSTITUTION>>": college or "",
-            "<<COLLEGE>>": college or "",
-            "<<YEAR>>": year or "",
-            "<<DEPARTMENT>>": department or "",
-            "<<DOMAIN>>": role or "",
-            "<<ROLE>>": role or "",
-            "<<PROJECT>>": project or "",
-            "<<INTERNSHIP & LIVE PROJECT AREA>>": project or "",
-            "<<BATCH>>": month or "",
-            "<<BATCH >>": month or "",
-            "<<DATE>>": str(date_val) if date_val else "",
-            "<<DT>>": str(date_val) if date_val else ""
-        }
-
-        # 6. Generate QR code bytes pointing to verification URL
-        qr_url = build_verify_url(cert_code)
-        qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_H,
-            box_size=12,
-            border=2
-        )
-        qr.add_data(qr_url)
-        qr.make(fit=True)
-        from qrcode.image.pil import PilImage
-        qr_img = qr.make_image(image_factory=PilImage, fill_color="black", back_color="white")
-        qr_io = io.BytesIO()
-        try:
-            qr_img.save(qr_io, format="PNG")
-        except TypeError:
-            # PyPNGImage.save doesn't accept the format parameter
-            qr_io.seek(0)
-            qr_io.truncate(0)
-            qr_img.save(qr_io)
-        qr_bytes = qr_io.getvalue()
-
-        # 7. Convert and build PDF
+        # 7. Convert and build PDF via legacy method
         if ext == ".pptx":
             pdf_bytes, cert_title = generate_certificate_from_pptx_bytes(template_bytes, replacements, qr_bytes)
         else:
@@ -1295,6 +1774,7 @@ async def get_dynamic_pdf(cert_code: str):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate dynamic certificate PDF: {str(e)}"
         )
+
 
 
 @app.post("/api/interns/{intern_id}/send-email")
