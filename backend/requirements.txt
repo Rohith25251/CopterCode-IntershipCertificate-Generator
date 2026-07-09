@@ -5,9 +5,6 @@ pandas
 openpyxl
 qrcode
 pillow
-reportlab
-pypdf
-pymupdf
 supabase
 python-multipart
 python-dotenv

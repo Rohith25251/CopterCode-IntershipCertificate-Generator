@@ -21,13 +21,7 @@ try:
 except ImportError:
     HAS_WIN32COM = False
 
-# PDF & QR generation libraries
-import fitz  # PyMuPDF
-from reportlab.pdfgen import canvas
-from reportlab.lib.utils import ImageReader
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from pypdf import PdfReader, PdfWriter
+# QR generation library
 import qrcode
 
 # Supabase python client
@@ -260,72 +254,8 @@ if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
         print(f"Error initializing Supabase client: {e}")
 
 # ───────────────────────────────────────────────────────────────────
-# Font management
+# Document conversion
 # ───────────────────────────────────────────────────────────────────
-FONT_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "font_cache")
-os.makedirs(FONT_CACHE_DIR, exist_ok=True)
-
-# ReportLab built-in font names — these require no download
-BUILTIN_FONTS = {
-    "Helvetica", "Helvetica-Bold", "Helvetica-Oblique", "Helvetica-BoldOblique",
-    "Times-Roman", "Times-Bold", "Times-Italic", "Times-BoldItalic",
-    "Courier", "Courier-Bold", "Courier-Oblique", "Courier-BoldOblique",
-}
-
-# Track already-registered custom fonts in this process to avoid re-registering
-_REGISTERED_FONTS: set = set()
-
-
-def get_reportlab_font(font_name: str) -> str:
-    """
-    Returns a font name usable by ReportLab canvas.setFont().
-    For Google Fonts, downloads the TTF to font_cache/ on first use
-    and registers it with pdfmetrics.  Falls back to Helvetica on errors.
-    """
-    if not font_name or font_name in BUILTIN_FONTS:
-        return font_name or "Helvetica"
-
-    if font_name in _REGISTERED_FONTS:
-        return font_name  # already registered in this process
-
-    safe_name = re.sub(r"[^A-Za-z0-9_-]", "_", font_name)
-    cache_path = os.path.join(FONT_CACHE_DIR, f"{safe_name}.ttf")
-
-    if not os.path.exists(cache_path):
-        # Download TTF from Google Fonts CSS API (using Android 4 User-Agent to force direct TTF link in response)
-        try:
-            api_url = f"https://fonts.googleapis.com/css?family={font_name.replace(' ', '+')}"
-            req = urllib.request.Request(
-                api_url,
-                headers={"User-Agent": "Mozilla/5.0 (Linux; U; Android 4.0.3; ko-kr; LG-L160L Build/IML74K) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30"}
-            )
-            css_bytes = urllib.request.urlopen(req, timeout=15).read()
-            css_text = css_bytes.decode("utf-8")
-
-            # Extract the TTF URL from src: url(https://...ttf)
-            ttf_match = re.search(r"src:\s*url\(([^)]+\.ttf)\)", css_text, re.IGNORECASE)
-            if not ttf_match:
-                print(f"[font] No TTF URL found for '{font_name}', falling back to Helvetica")
-                return "Helvetica"
-
-            ttf_url = ttf_match.group(1).strip().strip("'\"")
-            print(f"[font] Downloading '{font_name}' from {ttf_url}")
-            urllib.request.urlretrieve(ttf_url, cache_path)
-        except Exception as download_err:
-            print(f"[font] Failed to download '{font_name}': {download_err}")
-            return "Helvetica"
-
-    # Register the TTF with ReportLab
-    if os.path.exists(cache_path):
-        try:
-            pdfmetrics.registerFont(TTFont(font_name, cache_path))
-            _REGISTERED_FONTS.add(font_name)
-            print(f"[font] Registered '{font_name}'")
-            return font_name
-        except Exception as reg_err:
-            print(f"[font] Failed to register '{font_name}': {reg_err}")
-
-    return "Helvetica"
 
 
 
