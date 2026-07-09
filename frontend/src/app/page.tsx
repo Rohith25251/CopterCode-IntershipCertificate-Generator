@@ -15,7 +15,8 @@ import {
   Trash2,
   ChevronDown,
   Search,
-  Type
+  Type,
+  Mail
 } from "lucide-react";
 import JSZip from "jszip";
 
@@ -193,6 +194,9 @@ interface CertRow {
   pdf_url?: string;
   status: "active" | "error" | "pending" | "processing";
   error?: string;
+  intern_id?: string;
+  email?: string;
+  email_status?: "pending" | "sending" | "sent" | "failed";
 }
 
 // ─── Field Box type (left-top corner + width/height, all as fractions 0–1) ──────────────────
@@ -316,6 +320,64 @@ export default function AdminDashboard() {
       setIsZipping(false);
       setZipProgress({ done: 0, total: 0 });
     }
+  };
+
+  const [isSendingEmails, setIsSendingEmails] = useState<boolean>(false);
+
+  const handleSendEmail = async (index: number) => {
+    const row = generationResults[index];
+    if (!row.intern_id) return;
+
+    // Set row status to sending
+    setGenerationResults((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...row, email_status: "sending" };
+      return updated;
+    });
+
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+      const res = await fetch(`${backendUrl.replace(/\/+$/, "")}/api/interns/${row.intern_id}/send-email`, {
+        method: "POST"
+      });
+      const data = await res.json();
+      
+      setGenerationResults((prev) => {
+        const updated = [...prev];
+        if (res.ok && data.status === "success") {
+          updated[index] = { ...updated[index], email_status: "sent" };
+        } else {
+          updated[index] = { ...updated[index], email_status: "failed" };
+        }
+        return updated;
+      });
+    } catch (err) {
+      console.error(err);
+      setGenerationResults((prev) => {
+        const updated = [...prev];
+        updated[index] = { ...updated[index], email_status: "failed" };
+        return updated;
+      });
+    }
+  };
+
+  const handleSendAllEmails = async () => {
+    // Get all active rows with intern_id that aren't already successfully sent
+    const pendingRowsIndices = generationResults
+      .map((row, idx) => ({ row, idx }))
+      .filter(({ row }) => row.intern_id && row.status === "active" && row.email_status !== "sent");
+
+    if (pendingRowsIndices.length === 0) {
+      alert("No pending emails to send.");
+      return;
+    }
+
+    setIsSendingEmails(true);
+    for (let i = 0; i < pendingRowsIndices.length; i++) {
+      const { idx } = pendingRowsIndices[i];
+      await handleSendEmail(idx);
+    }
+    setIsSendingEmails(false);
   };
 
   // Hero Section Fading Slideshow
@@ -926,36 +988,57 @@ export default function AdminDashboard() {
                     </p>
                   </div>
 
-                  {!isGenerating && excelDownloadUrl && (
+                  {!isGenerating && generationResults.length > 0 && (
                     <div className="flex items-center gap-3">
-                      <a
-                        href={excelDownloadUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-2.5 px-5 rounded-xl shadow-md text-xs transition-all duration-300"
-                      >
-                        <Download className="w-4 h-4" /> Download Result Excel Sheet
-                      </a>
+                      {excelDownloadUrl && (
+                        <a
+                          href={excelDownloadUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-2.5 px-5 rounded-xl shadow-md text-xs transition-all duration-300"
+                        >
+                          <Download className="w-4 h-4" /> Download Result Excel Sheet
+                        </a>
+                      )}
 
                       {generationResults.some((r) => r.pdf_url && r.status === "active") && (
-                        <button
-                          onClick={handleDownloadAllZip}
-                          disabled={isZipping}
-                          className="inline-flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-2.5 px-5 rounded-xl shadow-md text-xs transition-all duration-300"
-                        >
-                          {isZipping ? (
-                            <>
-                              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                              {zipProgress.total > 0
-                                ? `Packing ${zipProgress.done}/${zipProgress.total}…`
-                                : "Preparing…"}
-                            </>
-                          ) : (
-                            <>
-                              <Download className="w-4 h-4" /> Download All PDFs as ZIP
-                            </>
-                          )}
-                        </button>
+                        <>
+                          <button
+                            onClick={handleDownloadAllZip}
+                            disabled={isZipping}
+                            className="inline-flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-2.5 px-5 rounded-xl shadow-md text-xs transition-all duration-300 cursor-pointer"
+                          >
+                            {isZipping ? (
+                              <>
+                                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                {zipProgress.total > 0
+                                  ? `Packing ${zipProgress.done}/${zipProgress.total}…`
+                                  : "Preparing…"}
+                              </>
+                            ) : (
+                              <>
+                                <Download className="w-4 h-4" /> Download All PDFs as ZIP
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            onClick={handleSendAllEmails}
+                            disabled={isSendingEmails}
+                            className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-650 to-indigo-650 hover:from-blue-550 hover:to-indigo-550 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-2.5 px-5 rounded-xl shadow-md text-xs transition-all duration-300 cursor-pointer"
+                          >
+                            {isSendingEmails ? (
+                              <>
+                                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                Sending Emails…
+                              </>
+                            ) : (
+                              <>
+                                <Mail className="w-4 h-4" /> Send Emails to All
+                              </>
+                            )}
+                          </button>
+                        </>
                       )}
                     </div>
                   )}
@@ -990,13 +1073,14 @@ export default function AdminDashboard() {
                         <th className="p-4">Batch</th>
                         <th className="p-4">Certificate ID</th>
                         <th className="p-4">Status</th>
+                        <th className="p-4">Email Status</th>
                         <th className="p-4 text-right">PDF File</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100">
                       {isGenerating ? (
                         <tr>
-                          <td colSpan={7} className="p-8 text-center text-zinc-500 text-xs">
+                          <td colSpan={8} className="p-8 text-center text-zinc-500 text-xs">
                             <div className="w-8 h-8 border-2 border-zinc-200 border-t-violet-500 rounded-full animate-spin mx-auto mb-3" />
                             Overlaying PDF fields and uploading certificates...
                           </td>
@@ -1023,6 +1107,39 @@ export default function AdminDashboard() {
                                   </span>
                                   <span className="text-[10px] text-red-600 block max-w-xs truncate">{row.error}</span>
                                 </span>
+                              )}
+                            </td>
+                            <td className="p-4">
+                              {row.status !== "active" ? (
+                                <span className="text-zinc-400">—</span>
+                              ) : row.email_status === "sending" ? (
+                                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-150 px-2.5 py-1 rounded-lg">
+                                  <span className="w-2.5 h-2.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                                  Sending...
+                                </span>
+                              ) : row.email_status === "sent" ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 border border-emerald-150 text-emerald-700 px-2.5 py-1 rounded-lg">
+                                  <CheckCircle className="w-3 h-3 text-emerald-650" /> Sent
+                                </span>
+                              ) : row.email_status === "failed" ? (
+                                <div className="inline-flex items-center gap-2">
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-red-50 border border-red-150 text-red-700 px-2.5 py-1 rounded-lg">
+                                    <AlertCircle className="w-3 h-3 text-red-650" /> Failed
+                                  </span>
+                                  <button
+                                    onClick={() => handleSendEmail(idx)}
+                                    className="text-[10px] text-zinc-500 hover:text-zinc-700 font-bold underline cursor-pointer"
+                                  >
+                                    Retry
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => handleSendEmail(idx)}
+                                  className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-605 hover:text-indigo-805 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg transition-all duration-150 cursor-pointer"
+                                >
+                                  <Mail className="w-3 h-3" /> Send Email
+                                </button>
                               )}
                             </td>
                             <td className="p-4 text-right">
@@ -1057,7 +1174,7 @@ export default function AdminDashboard() {
                                         alert("Failed to download PDF. Please try View instead.");
                                       }
                                     }}
-                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-all duration-150"
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-all duration-150 cursor-pointer"
                                   >
                                     <Download className="w-3 h-3" /> Download
                                   </button>
@@ -1095,22 +1212,22 @@ export default function AdminDashboard() {
       {/* Premium Process Stage Overlay Loader */}
       {isProcessing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-md transition-all duration-300">
-          <div className="max-w-md w-full mx-6 bg-white border border-[#b4914c]/15 rounded-3xl p-8 shadow-[0_30px_100px_rgba(0,0,0,0.06)] flex flex-col items-center text-center relative overflow-hidden">
+          <div className="max-w-md w-full mx-6 bg-white border border-[#5844e9]/15 rounded-3xl p-8 shadow-[0_30px_100px_rgba(0,0,0,0.06)] flex flex-col items-center text-center relative overflow-hidden">
             
             {/* Ambient decorative light glow inside loader */}
-            <div className="absolute -top-12 -right-12 w-24 h-24 bg-[#b4914c]/5 rounded-full blur-2xl pointer-events-none" />
-            <div className="absolute -bottom-12 -left-12 w-24 h-24 bg-[#137461]/5 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute -top-12 -right-12 w-24 h-24 bg-[#5844e9]/5 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute -bottom-12 -left-12 w-24 h-24 bg-[#10b981]/5 rounded-full blur-2xl pointer-events-none" />
 
             {/* Spinning Nested Rings Animation */}
             <div className="relative w-28 h-28 mb-6 flex items-center justify-center">
               {/* Outer Glow Ring */}
-              <div className="absolute inset-0 rounded-full border border-dashed border-[#b4914c]/20 animate-[spin_12s_linear_infinite]" />
+              <div className="absolute inset-0 rounded-full border border-dashed border-[#5844e9]/20 animate-[spin_12s_linear_infinite]" />
               
               {/* Mid Ring */}
               <div className="absolute inset-2 rounded-full border-2 border-violet-100 border-t-violet-600 animate-[spin_1.5s_linear_infinite]" />
               
               {/* Inner Reverse Ring */}
-              <div className="absolute inset-4 rounded-full border border-dashed border-[#137461]/30 animate-[spin_6s_linear_infinite_reverse]" />
+              <div className="absolute inset-4 rounded-full border border-dashed border-[#10b981]/30 animate-[spin_6s_linear_infinite_reverse]" />
               
               {/* Core Icon */}
               <div className="absolute w-12 h-12 rounded-full bg-zinc-50 flex items-center justify-center shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]">
@@ -1120,7 +1237,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* Stage Title */}
-            <span className="text-[9px] font-bold uppercase tracking-[0.24em] text-[#846328] bg-[#b4914c]/8 px-3 py-1 rounded-full border border-[#b4914c]/15 mb-3">
+            <span className="text-[9px] font-bold uppercase tracking-[0.24em] text-[#4338ca] bg-[#5844e9]/8 px-3 py-1 rounded-full border border-[#5844e9]/15 mb-3">
               {processingStage === 1 && "Stage 01 — Parsing Template"}
               {processingStage === 2 && "Stage 02 — Compiling Certificates"}
             </span>

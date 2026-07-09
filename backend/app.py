@@ -103,14 +103,14 @@ def send_email_notification(
                             <!-- Header / B&W Logo -->
                             <tr>
                                 <td align="center" style="background-color: #ffffff; padding: 32px 24px 24px 24px;">
-                                    <img src="https://copter-code-intership-certificate-g.vercel.app/coptercode-logo-bw.svg" alt="CopterCode Logo" style="height: 54px; width: auto; display: block;" />
+                                    <img src="https://coptercode-certificate.vercel.app/coptercode-logo.svg" alt="CopterCode Logo" style="height: 54px; width: auto; display: block;" />
                                 </td>
                             </tr>
                             
                             <!-- Hero Image -->
                             <tr>
                                 <td style="padding: 0 24px;">
-                                    <img src="https://copter-code-intership-certificate-g.vercel.app/hero-img.jpg" alt="CopterCode Team" style="width: 100%; height: auto; display: block; border-radius: 12px; object-fit: cover;" />
+                                    <img src="https://coptercode-certificate.vercel.app/hero-1.jpg" alt="CopterCode Team" style="width: 100%; height: auto; display: block; border-radius: 12px; object-fit: cover;" />
                                 </td>
                             </tr>
                             
@@ -168,25 +168,31 @@ def send_email_notification(
                                         <tr>
                                             <!-- Left Signature details -->
                                             <td width="55%" valign="top">
-                                                <p style="margin: 0; font-weight: bold; font-size: 14px; color: #ffffff;">Warm regards,</p>
-                                                <p style="margin: 2px 0 16px 0; font-weight: 500; color: #94a3b8;">Team CopterCode</p>
+                                                <p style="margin: 0; font-size: 13px; color: #94a3b8; font-weight: 500;">Warm regards,</p>
+                                                <p style="margin: 4px 0 16px 0; font-weight: 700; font-size: 16px; color: #ffffff; letter-spacing: 0.5px;">Team CopterCode</p>
                                                 
-                                                <p style="margin: 0; color: #cbd5e1; font-size: 12px;">
-                                                    ✉️ <a href="mailto:hr@coptercode.co.in" style="color: #38bdf8 !important; text-decoration: none;">hr@coptercode.co.in</a><br>
-                                                    🌐 <a href="https://www.coptercode.co.in/" target="_blank" style="color: #38bdf8 !important; text-decoration: none;">www.coptercode.co.in</a>
+                                                <p style="margin: 0 0 8px 0; font-size: 13px; color: #cbd5e1; line-height: 1.4;">
+                                                    <img src="https://img.icons8.com/material-outlined/24/38bdf8/mail.png" width="15" height="15" style="vertical-align: middle; display: inline-block; margin-right: 8px; border: 0;" />
+                                                    <span style="vertical-align: middle;"><a href="mailto:hr@coptercode.co.in" style="color: #38bdf8 !important; text-decoration: none; font-weight: 500;">hr@coptercode.co.in</a></span>
+                                                </p>
+                                                <p style="margin: 0; font-size: 13px; color: #cbd5e1; line-height: 1.4;">
+                                                    <img src="https://img.icons8.com/material-outlined/24/38bdf8/globe.png" width="15" height="15" style="vertical-align: middle; display: inline-block; margin-right: 8px; border: 0;" />
+                                                    <span style="vertical-align: middle;"><a href="https://www.coptercode.co.in/" target="_blank" style="color: #38bdf8 !important; text-decoration: none; font-weight: 500;">www.coptercode.co.in</a></span>
                                                 </p>
                                             </td>
                                             
                                             <!-- Right Contact & Socials details -->
                                             <td width="45%" align="right" valign="top" style="border-left: 1px solid #334155; padding-left: 24px;">
-                                                <p style="margin: 0; font-weight: bold; color: #ffffff; font-size: 12px;">Best regards,</p>
-                                                <p style="margin: 2px 0 16px 0; font-weight: 500; color: #94a3b8;">HR Team • CopterCode</p>
+                                                <p style="margin: 0; font-size: 13px; color: #94a3b8; font-weight: 500;">Best regards,</p>
+                                                <p style="margin: 4px 0 16px 0; font-weight: 700; font-size: 16px; color: #ffffff; letter-spacing: 0.5px;">HR Team • CopterCode</p>
                                                 
-                                                <p style="margin: 0; font-size: 11px;">
-                                                    📸 <a href="https://instagram.com/coptercode" target="_blank" style="color: #38bdf8 !important; text-decoration: none;">Instagram</a>
+                                                <p style="margin: 0 0 8px 0; font-size: 13px; color: #cbd5e1; line-height: 1.4;">
+                                                    <img src="https://img.icons8.com/material-outlined/24/38bdf8/instagram-new.png" width="15" height="15" style="vertical-align: middle; display: inline-block; margin-right: 8px; border: 0;" />
+                                                    <span style="vertical-align: middle;"><a href="https://instagram.com/coptercode" target="_blank" style="color: #38bdf8 !important; text-decoration: none; font-weight: 500;">Instagram</a></span>
                                                 </p>
-                                                <p style="margin: 4px 0 0 0; font-size: 11px; color: #cbd5e1;">
-                                                    Mail Id: <a href="mailto:hr@coptercode.co.in" style="color: #38bdf8 !important; text-decoration: none;">hr@coptercode.co.in</a>
+                                                <p style="margin: 0; font-size: 13px; color: #cbd5e1; line-height: 1.4;">
+                                                    <img src="https://img.icons8.com/material-outlined/24/38bdf8/mail.png" width="15" height="15" style="vertical-align: middle; display: inline-block; margin-right: 8px; border: 0;" />
+                                                    <span style="vertical-align: middle;"><a href="mailto:hr@coptercode.co.in" style="color: #38bdf8 !important; text-decoration: none; font-weight: 500;">hr@coptercode.co.in</a></span>
                                                 </p>
                                             </td>
                                         </tr>
@@ -1028,19 +1034,11 @@ async def generate_certificates(
                     "month": f"{label} ({month_val or year_val})",
                     "cert_code": cert_code,
                     "pdf_url": pdf_url,
-                    "status": "active"
+                    "status": "active",
+                    "intern_id": str(intern_id),
+                    "email": email_val,
+                    "email_status": "pending"
                 })
-
-            # 3. Trigger Email Notification (if any certificate is generated)
-            if email_certificates:
-                background_tasks.add_task(
-                    send_email_notification,
-                    email_val,
-                    name_val,
-                    month_val or year_val,
-                    email_certificates,
-                    str(intern_id)
-                )
 
         except Exception as row_error:
             print(f"Row {index} failed: {row_error}")
@@ -1275,6 +1273,90 @@ async def get_dynamic_pdf(cert_code: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate dynamic certificate PDF: {str(e)}"
+        )
+
+
+@app.post("/api/interns/{intern_id}/send-email")
+def manual_send_intern_email(intern_id: str):
+    """
+    Manually triggers email dispatch for a specific intern.
+    Loads intern details and all associated certificates, then sends SMTP email.
+    """
+    if not supabase:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Supabase client is not configured."
+        )
+
+    try:
+        # 1. Fetch Intern details
+        intern_res = supabase.table("interns").select("*").eq("id", intern_id).execute()
+        if not intern_res.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Intern with ID {intern_id} not found."
+            )
+        intern_data = intern_res.data[0]
+        email_val = intern_data.get("email")
+        name_val = intern_data.get("name")
+        month_val = intern_data.get("month")
+        year_val = intern_data.get("year")
+
+        if not email_val:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Intern does not have a configured email address."
+            )
+
+        # 2. Fetch associated certificates
+        certs_res = supabase.table("certificates").select("*").eq("intern_id", intern_id).execute()
+        if not certs_res.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No certificates found associated with intern ID {intern_id}."
+            )
+
+        email_certificates = []
+        for c in certs_res.data:
+            cert_type = c.get("cert_type") or "internship"
+            label = "Certificate"
+            if cert_type == "lor":
+                label = "Letter of Recommendation"
+            elif cert_type == "experience":
+                label = "Experience Letter"
+            elif cert_type == "internship":
+                label = "Internship Certificate"
+
+            email_certificates.append({
+                "type": cert_type,
+                "label": label,
+                "cert_code": c.get("cert_code"),
+                "pdf_url": c.get("pdf_url")
+            })
+
+        # 3. Call email notification
+        success = send_email_notification(
+            to_email=email_val,
+            intern_name=name_val,
+            batch_title=month_val or year_val,
+            certificates=email_certificates,
+            intern_id=intern_id
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="SMTP dispatch failed. Check backend credentials and SMTP server config."
+            )
+
+        return {"status": "success", "message": f"Email successfully dispatched to {email_val}."}
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to dispatch email: {str(e)}"
         )
 
 
