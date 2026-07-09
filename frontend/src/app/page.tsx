@@ -232,10 +232,9 @@ export default function AdminDashboard() {
   // App state (1 = upload assets, 2 = generation run)
   const [step, setStep] = useState<1 | 2>(1);
   const [backendUrl, setBackendUrl] = useState<string>(() => {
-    if (typeof window === "undefined") return "http://localhost:5000";
-    return localStorage.getItem("cert_generator_backend_url") || 
-           process.env.NEXT_PUBLIC_BACKEND_URL || 
-           "http://localhost:5000";
+    const envUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+    if (typeof window === "undefined") return envUrl;
+    return localStorage.getItem("cert_generator_backend_url") || envUrl;
   });
 
   const getResolvedPdfUrl = useCallback((url: string | undefined) => {

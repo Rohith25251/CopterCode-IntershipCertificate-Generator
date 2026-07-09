@@ -158,9 +158,6 @@ function VerifyContent() {
       if (envBackend) {
         return `${envBackend.replace(/\/+$/, "")}${path}`;
       }
-      if (certificate.pdf_url.includes("coptercode-certificate.vercel.app/api/backend")) {
-        return `http://localhost:5000${path}`;
-      }
     }
     return certificate.pdf_url;
   })();
