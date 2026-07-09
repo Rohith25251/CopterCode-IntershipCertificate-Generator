@@ -1021,6 +1021,25 @@ def replace_tokens(template_str: str, replacements: dict) -> str:
     return replaced
 
 
+def resolve_reportlab_font(font_name: str, font_bold: bool = False) -> str:
+    font_name_lower = font_name.lower()
+    if "canva sans" in font_name_lower or "canvasans" in font_name_lower:
+        return "CanvaSans-Bold" if font_bold else "CanvaSans-Regular"
+    elif "calibri" in font_name_lower:
+        return "Calibri-Bold" if font_bold else "Calibri"
+    elif "codec" in font_name_lower or "codecpro" in font_name_lower:
+        return "CodecPro-Bold" if font_bold else "CodecPro-Regular"
+    elif "arial" in font_name_lower or "helvetica" in font_name_lower or "sans" in font_name_lower:
+        return "Helvetica-Bold" if font_bold else "Helvetica"
+    else:
+        if font_name in pdfmetrics.getRegisteredFontNames():
+            return font_name
+        elif font_bold and f"{font_name}-Bold" in pdfmetrics.getRegisteredFontNames():
+            return f"{font_name}-Bold"
+        else:
+            return "Helvetica-Bold" if font_bold else "Helvetica"
+
+
 def generate_overlay_pdf_bytes(
     background_pdf_bytes: bytes,
     coordinates_json_bytes: bytes,
@@ -1064,6 +1083,15 @@ def generate_overlay_pdf_bytes(
                 replaced_text = re.sub(r',([a-zA-Z])', r', \1', replaced_text)
                 replaced_text = re.sub(r'\s{2,}', ' ', replaced_text)
                 
+                # Resolve nested <font name="..."> tags in HTML
+                def replace_font_tag(match):
+                    font_attr = match.group(1)
+                    is_bold = "bold" in font_attr.lower()
+                    resolved = resolve_reportlab_font(font_attr, is_bold)
+                    return f'<font name="{resolved}">'
+                
+                replaced_text = re.sub(r'<font\s+name="([^"]+)">', replace_font_tag, replaced_text)
+                
                 align_map = {"left": TA_LEFT, "center": TA_CENTER, "right": TA_RIGHT, "justify": TA_JUSTIFY}
                 alignment = align_map.get(p_meta.get("align"), TA_CENTER)
                 
@@ -1072,24 +1100,7 @@ def generate_overlay_pdf_bytes(
                 font_bold = p_meta.get("font_bold", False)
                 font_color = p_meta.get("font_color", "#000000")
                 
-                font_name_lower = font_name.lower()
-                font_resolved = "Helvetica"
-                
-                if "canva sans" in font_name_lower or "canvasans" in font_name_lower:
-                    font_resolved = "CanvaSans-Bold" if font_bold else "CanvaSans-Regular"
-                elif "calibri" in font_name_lower:
-                    font_resolved = "Calibri-Bold" if font_bold else "Calibri"
-                elif "codec" in font_name_lower or "codecpro" in font_name_lower:
-                    font_resolved = "CodecPro-Bold" if font_bold else "CodecPro-Regular"
-                elif "arial" in font_name_lower or "helvetica" in font_name_lower or "sans" in font_name_lower:
-                    font_resolved = "Helvetica-Bold" if font_bold else "Helvetica"
-                else:
-                    if font_name in pdfmetrics.getRegisteredFontNames():
-                        font_resolved = font_name
-                    elif font_bold and f"{font_name}-Bold" in pdfmetrics.getRegisteredFontNames():
-                        font_resolved = f"{font_name}-Bold"
-                    else:
-                        font_resolved = "Helvetica-Bold" if font_bold else "Helvetica"
+                font_resolved = resolve_reportlab_font(font_name, font_bold)
                 
                 style = ParagraphStyle(
                     name=f"Style_{uuid.uuid4().hex[:8]}",
