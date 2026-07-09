@@ -388,7 +388,7 @@ export default function AdminDashboard() {
       return;
     }
     if (!lorTemplateFile && !experienceTemplateFile && !internshipTemplateFile) {
-      setErrorMsg("Please upload at least one PPTX certificate template (LOR, Experience, or Internship).");
+      setErrorMsg("Please upload at least one HTML or PPTX certificate template (LOR, Experience, or Internship).");
       return;
     }
 
@@ -584,7 +584,7 @@ export default function AdminDashboard() {
                 {step === 2 && "Compile Batch Certificate Run"}
               </h3>
               <p className="mt-1.5 text-xs text-stone-600 leading-relaxed max-w-3xl">
-                {step === 1 && "Note: Select the base certificate template (PDF/PPTX) and the intern details Excel sheet (.xlsx). The system will automatically convert, parse, and prepare your files."}
+                {step === 1 && "Note: Select the base HTML or PPTX certificate templates and the intern details Excel sheet (.xlsx)."}
                 {step === 2 && "Note: Verify intern record mappings and run the generator. The platform will automatically locate placeholders (e.g. <<NAME>>, <<COLLEGE>>), redact them, insert details, generate QRs, and compile certificates."}
               </p>
             </div>
@@ -610,13 +610,13 @@ export default function AdminDashboard() {
             </h2>
             <form onSubmit={handleBatchCreate} className="space-y-8">
               
-              {/* Three PPTX Templates Grid */}
+              {/* Three HTML or PPTX Templates Grid */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 
                 {/* 1. LOR Template */}
                 <div className="relative group">
                   <label className="block text-sm font-bold text-zinc-400 mb-2">
-                    1. Letter of Recommendation (LOR) PPTX
+                    1. Letter of Recommendation (LOR) HTML or PPTX
                   </label>
                   <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${
                     lorTemplateFile 
@@ -625,7 +625,7 @@ export default function AdminDashboard() {
                   }`}>
                     <input 
                       type="file" 
-                      accept="application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
+                      accept="text/html,.html,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
                       onChange={(e) => setLorTemplateFile(e.target.files?.[0] || null)}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
@@ -644,7 +644,7 @@ export default function AdminDashboard() {
                       </div>
                     ) : (
                       <div className="text-center">
-                        <p className="text-xs font-semibold text-zinc-200">Upload LOR PPTX</p>
+                        <p className="text-xs font-semibold text-zinc-200">Upload LOR HTML or PPTX</p>
                         <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
                       </div>
                     )}
@@ -654,7 +654,7 @@ export default function AdminDashboard() {
                 {/* 2. Experience Letter Template */}
                 <div className="relative group">
                   <label className="block text-sm font-bold text-zinc-400 mb-2">
-                    2. Experience Letter PPTX
+                    2. Experience Letter HTML or PPTX
                   </label>
                   <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${
                     experienceTemplateFile 
@@ -663,7 +663,7 @@ export default function AdminDashboard() {
                   }`}>
                     <input 
                       type="file" 
-                      accept="application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
+                      accept="text/html,.html,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
                       onChange={(e) => setExperienceTemplateFile(e.target.files?.[0] || null)}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
@@ -682,7 +682,7 @@ export default function AdminDashboard() {
                       </div>
                     ) : (
                       <div className="text-center">
-                        <p className="text-xs font-semibold text-zinc-200">Upload Experience PPTX</p>
+                        <p className="text-xs font-semibold text-zinc-200">Upload Experience HTML or PPTX</p>
                         <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
                       </div>
                     )}
@@ -692,7 +692,7 @@ export default function AdminDashboard() {
                 {/* 3. Internship Certificate Template */}
                 <div className="relative group">
                   <label className="block text-sm font-bold text-zinc-400 mb-2">
-                    3. Internship Certificate PPTX
+                    3. Internship Certificate HTML or PPTX
                   </label>
                   <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${
                     internshipTemplateFile 
@@ -701,7 +701,7 @@ export default function AdminDashboard() {
                   }`}>
                     <input 
                       type="file" 
-                      accept="application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
+                      accept="text/html,.html,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
                       onChange={(e) => setInternshipTemplateFile(e.target.files?.[0] || null)}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
@@ -720,7 +720,7 @@ export default function AdminDashboard() {
                       </div>
                     ) : (
                       <div className="text-center">
-                        <p className="text-xs font-semibold text-zinc-200">Upload Internship PPTX</p>
+                        <p className="text-xs font-semibold text-zinc-200">Upload Internship HTML or PPTX</p>
                         <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
                       </div>
                     )}
