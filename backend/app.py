@@ -57,6 +57,100 @@ def register_fonts():
 # Register fonts on startup
 register_fonts()
 
+import asyncio
+import time
+import tempfile
+
+class SimpleTTLCache:
+    def __init__(self, maxsize=200, ttl=600):
+        self.maxsize = maxsize
+        self.ttl = ttl
+        self.cache = {}
+        
+    def get(self, key):
+        if key in self.cache:
+            val, expiry = self.cache[key]
+            if time.time() < expiry:
+                return val
+            del self.cache[key]
+        return None
+        
+    def set(self, key, val):
+        if len(self.cache) >= self.maxsize:
+            now = time.time()
+            expired = [k for k, (v, exp) in self.cache.items() if now >= exp]
+            if expired:
+                for k in expired:
+                    del self.cache[k]
+            else:
+                first_key = next(iter(self.cache))
+                del self.cache[first_key]
+        self.cache[key] = (val, time.time() + self.ttl)
+
+template_cache = {}  # slot_id (e.g. "slot-1") -> pptx_bytes
+pdf_cache = SimpleTTLCache(maxsize=200, ttl=600)  # cert_code -> pdf_bytes
+
+soffice_lock = asyncio.Semaphore(1)
+
+async def convert_pptx_to_pdf_bytes_async(pptx_bytes: bytes) -> bytes:
+    async with soffice_lock:
+        temp_pptx = tempfile.NamedTemporaryFile(suffix=".pptx", delete=False)
+        temp_pptx.write(pptx_bytes)
+        temp_pptx.close()
+        
+        out_dir = os.path.dirname(os.path.abspath(temp_pptx.name))
+        try:
+            cmd = ["soffice", "--headless", "--convert-to", "pdf", os.path.abspath(temp_pptx.name), "--outdir", out_dir]
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                if HAS_WIN32COM:
+                    import pythoncom
+                    pythoncom.CoInitialize()
+                    try:
+                        temp_pdf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+                        temp_pdf.close()
+                        powerpoint = win32com.client.DispatchEx("PowerPoint.Application")
+                        presentation = powerpoint.Presentations.Open(os.path.abspath(temp_pptx.name), WithWindow=False)
+                        presentation.SaveAs(os.path.abspath(temp_pdf.name), 32)
+                        presentation.Close()
+                        powerpoint.Quit()
+                        with open(temp_pdf.name, "rb") as f:
+                            pdf_bytes = f.read()
+                        try:
+                            os.remove(temp_pdf.name)
+                        except Exception:
+                            pass
+                        return pdf_bytes
+                    except Exception as com_err:
+                        print(f"Async Windows COM fallback failed: {com_err}")
+                    finally:
+                        pythoncom.CoUninitialize()
+                raise ValueError(f"LibreOffice conversion failed (returncode {proc.returncode}): {stderr.decode() or stdout.decode()}")
+                
+            base_name = os.path.splitext(os.path.basename(temp_pptx.name))[0]
+            lo_pdf_path = os.path.join(out_dir, f"{base_name}.pdf")
+            if os.path.exists(lo_pdf_path):
+                with open(lo_pdf_path, "rb") as f:
+                    pdf_bytes = f.read()
+                try:
+                    os.remove(lo_pdf_path)
+                except Exception:
+                    pass
+                return pdf_bytes
+            else:
+                raise ValueError("Converted PDF not found in output directory")
+        finally:
+            try:
+                os.remove(temp_pptx.name)
+            except Exception:
+                pass
+
+
 
 app = FastAPI(title="Certificate Generator API")
 
@@ -85,7 +179,7 @@ def build_verify_url(cert_code: str) -> str:
 BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://localhost:5000").strip()
 
 
-def send_email_notification(
+async def send_email_notification(
     to_email: str,
     intern_name: str,
     batch_title: str,
@@ -214,44 +308,46 @@ def send_email_notification(
                                     <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px 0;">
                                         Please feel free to stay in touch with us for any guidance or opportunities. We look forward to seeing you achieve great success ahead.
                                     </p>
+                                    
+                                    <p style="margin: 24px 0 0 0; font-size: 14px; color: #475569; font-weight: 500; line-height: 1.5;">
+                                        Best regards,<br>
+                                        <span style="font-weight: 700; font-size: 15px; color: #0f172a; display: block; margin: 4px 0 2px 0;">HR Team</span>
+                                        <span style="font-weight: 600; color: #334155;">CopterCode</span>
+                                    </p>
                                 </td>
                             </tr>
                             
                             <!-- Premium B&W Signature & Footer -->
                             <tr>
-                                <td style="background-color: #0f172a; padding: 36px; color: #f8fafc; font-size: 13px; line-height: 1.6; border-bottom-left-radius: 15px; border-bottom-right-radius: 15px;">
+                                <td style="background-color: #0f172a; padding: 24px 36px; color: #f8fafc; font-size: 13px; line-height: 1.6; border-bottom-left-radius: 15px; border-bottom-right-radius: 15px;">
                                     <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                         <tr>
                                             <!-- Left Signature details -->
-                                            <td width="50%" valign="top">
-                                                <p style="margin: 0; font-size: 13px; color: #94a3b8; font-weight: 500;">Warm regards,</p>
-                                                <p style="margin: 4px 0 12px 0; font-weight: 700; font-size: 16px; color: #ffffff; letter-spacing: 0.5px;">Team CopterCode</p>
-                                                <p style="margin: 0 0 6px 0; font-size: 13px; color: #cbd5e1; line-height: 1.4;">
-                                                    📞 +91 80721 93600
-                                                </p>
-                                                <p style="margin: 0 0 6px 0; font-size: 13px; color: #cbd5e1; line-height: 1.4;">
-                                                    ✉️ <a href="mailto:hr@coptercode.co.in" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">hr@coptercode.co.in</a>
-                                                </p>
-                                                <p style="margin: 0 0 6px 0; font-size: 13px; color: #cbd5e1; line-height: 1.4;">
-                                                    🌐 <a href="https://www.coptercode.co.in/" target="_blank" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">https://www.coptercode.co.in/</a>
-                                                </p>
-                                                <p style="margin: 0 0 6px 0; font-size: 13px; color: #cbd5e1; line-height: 1.4;">
-                                                    🔗 <a href="https://www.instagram.com/coptercode/" target="_blank" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">Instagram</a>
-                                                </p>
-                                            </td>
-                                            
-                                            <!-- Right Contact details -->
-                                            <td width="50%" align="right" valign="top" style="border-left: 1px solid #334155; padding-left: 24px;">
-                                                <p style="margin: 0; font-size: 13px; color: #94a3b8; font-weight: 500;">Best regards,</p>
-                                                <p style="margin: 4px 0 2px 0; font-weight: 700; font-size: 16px; color: #ffffff; letter-spacing: 0.5px;">HR Team</p>
-                                                <p style="margin: 0 0 12px 0; font-weight: 600; font-size: 14px; color: #cbd5e1;">CopterCode</p>
-                                                <p style="margin: 0; font-size: 13px; color: #cbd5e1; line-height: 1.4;">
-                                                    Mail Id: <a href="mailto:hr@coptercode.co.in" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">hr@coptercode.co.in</a>
-                                                </p>
+                                            <td valign="top" align="left">
+                                                <!-- Horizontal links row -->
+                                                <table cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse;">
+                                                    <tr>
+                                                        <td style="padding-right: 16px; font-size: 13px; color: #cbd5e1;">
+                                                            <a href="mailto:hr@coptercode.co.in" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">hr@coptercode.co.in</a>
+                                                        </td>
+                                                        <td style="padding-right: 16px; font-size: 13px; color: #334155;">|</td>
+                                                        <td style="padding-right: 16px; font-size: 13px; color: #cbd5e1;">
+                                                            <a href="https://www.coptercode.co.in/" target="_blank" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">https://www.coptercode.co.in/</a>
+                                                        </td>
+                                                        <td style="padding-right: 16px; font-size: 13px; color: #334155;">|</td>
+                                                        <td style="padding-right: 16px; font-size: 13px; color: #cbd5e1;">
+                                                            <a href="https://www.instagram.com/coptercode/" target="_blank" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">Instagram</a>
+                                                        </td>
+                                                        <td style="padding-right: 16px; font-size: 13px; color: #334155;">|</td>
+                                                        <td style="font-size: 13px; color: #cbd5e1;">
+                                                            <a href="https://www.linkedin.com/company/coptercode/" target="_blank" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">LinkedIn</a>
+                                                        </td>
+                                                    </tr>
+                                                </table>
                                             </td>
                                         </tr>
                                         <tr>
-                                            <td colspan="2" align="center" style="padding-top: 28px; border-top: 1px solid #334155; margin-top: 24px; font-size: 10px; color: #64748b;">
+                                            <td align="center" style="padding-top: 20px; border-top: 1px solid #334155; margin-top: 0; font-size: 10px; color: #64748b;">
                                                 This is an automated message. Please do not reply directly to this mail.
                                             </td>
                                         </tr>
@@ -267,6 +363,21 @@ def send_email_notification(
         """
 
         msg_alternative.attach(MIMEText(html_content, "html"))
+
+        # Generate and attach certificates dynamically in memory
+        for cert in certificates:
+            try:
+                pdf_bytes = await get_pdf_bytes_for_certificate(cert["cert_code"])
+                part = MIMEApplication(pdf_bytes, _subtype="pdf")
+                safe_name = re.sub(r'[\\/*?:"<>|]', "_", str(intern_name)).strip()
+                part.add_header(
+                    "Content-Disposition",
+                    "attachment",
+                    filename=f"{safe_name}_{cert['label']}.pdf"
+                )
+                msg.attach(part)
+            except Exception as attachment_err:
+                print(f"Failed to generate and attach PDF {cert['cert_code']} to email: {attachment_err}")
 
         server = smtplib.SMTP(smtp_server, int(smtp_port))
         if int(smtp_port) == 587:
@@ -692,6 +803,14 @@ def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, 
             os.remove(temp_pptx.name)
         except Exception:
             pass
+
+
+def render_certificate_pdf(template_bytes: bytes, replacements: dict, qr_bytes: bytes, ext: str = ".pptx") -> bytes:
+    if ext.lower() == ".pptx":
+        pdf_bytes, _ = generate_certificate_from_pptx_bytes(template_bytes, replacements, qr_bytes)
+    else:
+        pdf_bytes, _ = generate_certificate_from_html_bytes(template_bytes, replacements, qr_bytes)
+    return pdf_bytes
 
 
 def upload_pdf_to_storage(cert_code: str, pdf_bytes: bytes) -> str:
@@ -1185,6 +1304,87 @@ def generate_overlay_pdf_bytes(
     return out_pdf_io.getvalue()
 
 
+@app.post("/api/templates/upload")
+async def upload_template(
+    slot: int = Form(...),
+    template_file: UploadFile = File(...)
+):
+    if slot not in (1, 2, 3):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Slot must be 1, 2, or 3."
+        )
+        
+    filename = template_file.filename.lower()
+    ext = os.path.splitext(filename)[1]
+    if ext != ".pptx":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Template file must be a .pptx file."
+        )
+        
+    try:
+        pptx_bytes = await template_file.read()
+        
+        # Save to temp file to read with python-pptx
+        temp_file = tempfile.NamedTemporaryFile(suffix=".pptx", delete=False)
+        temp_file.write(pptx_bytes)
+        temp_file.close()
+        
+        placeholders = set()
+        try:
+            from pptx import Presentation
+            prs = Presentation(temp_file.name)
+            for slide in prs.slides:
+                for shape in slide.shapes:
+                    if shape.has_text_frame:
+                        text = shape.text_frame.text
+                        found = re.findall(r'(<<.*?>>|\{\{.*?\}\}|«.*?»)', text)
+                        for f in found:
+                            placeholders.add(f)
+        finally:
+            try:
+                os.remove(temp_file.name)
+            except Exception:
+                pass
+                
+        # Upload template to storage at templates/slot-{slot}.pptx, overwriting
+        path = f"templates/slot-{slot}.pptx"
+        content_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        
+        if not supabase:
+            raise ValueError("Supabase client not configured.")
+            
+        supabase.storage.from_("templates").upload(
+            path=path,
+            file=pptx_bytes,
+            file_options={"content-type": content_type, "upsert": "true"}
+        )
+        
+        # Upsert template row in batches table
+        batch_record = {
+            "id": f"slot-{slot}",
+            "month": f"Slot {slot} Template",
+            "issue_date": datetime.utcnow().date().isoformat(),
+            "internship_template_path": path
+        }
+        supabase.table("batches").upsert(batch_record).execute()
+        
+        # Cache the template bytes in memory
+        template_cache[f"slot-{slot}"] = pptx_bytes
+        
+        return {
+            "status": "success",
+            "slot": slot,
+            "placeholders": sorted(list(placeholders))
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload and parse template: {str(e)}"
+        )
+
+
 @app.post("/api/batch/create")
 async def create_batch(
     batch_id: str = Form(...),
@@ -1498,35 +1698,15 @@ async def generate_certificates(
 
             for cert_type, label in certificates_to_create:
                 cert_code = str(uuid.uuid4())
-                
-                # Option B: Try to generate and store PDF statically on Supabase Storage immediately
-                try:
-                    pdf_url = generate_and_store_pdf(
-                        cert_code=cert_code,
-                        cert_type=cert_type,
-                        intern_data={
-                            "name": name_val,
-                            "college": college_val,
-                            "year": year_val,
-                            "department": department_val,
-                            "role": role_val,
-                            "project": project_val,
-                            "month": month_val,
-                            "date": date_val
-                        },
-                        batch_id=target_batch_id
-                    )
-                except Exception as gen_err:
-                    print(f"Error generating/storing static PDF for {name_val}: {gen_err}")
-                    # Fallback to dynamic PDF URL
-                    pdf_url = f"{BACKEND_BASE_URL}/api/certificates/{cert_code}/pdf"
+                verify_url = build_verify_url(cert_code)
+                dynamic_pdf_url = f"{BACKEND_BASE_URL}/certificate/{cert_code}.pdf"
 
                 cert_record = {
                     "cert_code": cert_code,
                     "intern_id": intern_id,
                     "cert_type": cert_type,
                     "status": "active",
-                    "pdf_url": pdf_url,
+                    "pdf_url": dynamic_pdf_url,
                     "name": name_val,
                     "college": college_val,
                     "batch": year_val,
@@ -1543,7 +1723,8 @@ async def generate_certificates(
                     "type": cert_type,
                     "label": label,
                     "cert_code": cert_code,
-                    "pdf_url": pdf_url
+                    "pdf_url": dynamic_pdf_url,
+                    "verify_url": verify_url
                 })
 
                 # Append to rows results for frontend UI display
@@ -1553,7 +1734,8 @@ async def generate_certificates(
                     "department": department_val,
                     "month": f"{label} ({month_val or year_val})",
                     "cert_code": cert_code,
-                    "pdf_url": pdf_url,
+                    "verify_url": verify_url,
+                    "pdf_url": dynamic_pdf_url,
                     "status": "active",
                     "intern_id": str(intern_id),
                     "email": email_val,
@@ -1632,13 +1814,230 @@ def lookup_certificate(cert_code: str):
         )
 
 
+async def get_pdf_bytes_for_certificate(cert_code: str) -> bytes:
+    # 0. Check PDF cache first
+    cached_pdf = pdf_cache.get(cert_code)
+    if cached_pdf:
+        return cached_pdf
+
+    if not supabase:
+        raise ValueError("Supabase client is not configured.")
+
+    # 1. Fetch certificate record
+    res = supabase.table("certificates").select("*").eq("cert_code", cert_code).execute()
+    if not res.data:
+        res = supabase.table("certificates").select("*").eq("cert_code", cert_code.upper()).execute()
+    if not res.data:
+        res = supabase.table("certificates").select("*").eq("cert_code", cert_code.lower()).execute()
+
+    if not res.data:
+        raise ValueError(f"Certificate with code {cert_code} not found.")
+    
+    cert_data = res.data[0]
+    intern_id = cert_data.get("intern_id")
+    cert_type = cert_data.get("cert_type") or "internship"
+    batch_id = cert_data.get("template_id") or cert_data.get("batch_id")
+
+    intern_name = cert_data.get("name")
+    college = cert_data.get("college")
+    year = cert_data.get("batch")
+    department = cert_data.get("department")
+    role = cert_data.get("role")
+    project = cert_data.get("project")
+    month = cert_data.get("month")
+    date_val = cert_data.get("issue_date")
+
+    if intern_id:
+        intern_res = supabase.table("interns").select("*").eq("id", intern_id).execute()
+        if intern_res.data:
+            intern = intern_res.data[0]
+            intern_name = intern.get("name") or intern_name
+            college = intern.get("college") or college
+            year = intern.get("year") or year
+            department = intern.get("department") or department
+            role = intern.get("role") or role
+            project = intern.get("project") or project
+            month = intern.get("month") or month
+            date_val = intern.get("date") or date_val
+            batch_id = intern.get("batch_id") or batch_id
+
+    if not batch_id:
+        batch_id = "slot-1"
+
+    replacements = {
+        "<<NAME>>": intern_name or "",
+        "<<INSTITUTION>>": college or "",
+        "<<COLLEGE>>": college or "",
+        "<<YEAR>>": year or "",
+        "<<DEPARTMENT>>": department or "",
+        "<<DOMAIN>>": role or "",
+        "<<ROLE>>": role or "",
+        "<<PROJECT>>": project or "",
+        "<<INTERNSHIP & LIVE PROJECT AREA>>": project or "",
+        "<<BATCH>>": month or "",
+        "<<BATCH >>": month or "",
+        "<<DATE>>": str(date_val) if date_val else "",
+        "<<DT>>": str(date_val) if date_val else ""
+    }
+
+    qr_url = build_verify_url(cert_code)
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_H,
+        box_size=12,
+        border=2
+    )
+    qr.add_data(qr_url)
+    qr.make(fit=True)
+    from qrcode.image.pil import PilImage
+    qr_img = qr.make_image(image_factory=PilImage, fill_color="black", back_color="white")
+    qr_io = io.BytesIO()
+    try:
+        qr_img.save(qr_io, format="PNG")
+    except TypeError:
+        qr_io.seek(0)
+        qr_io.truncate(0)
+        qr_img.save(qr_io)
+    qr_bytes = qr_io.getvalue()
+
+    bg_pdf_bytes = None
+    coords_json_bytes = None
+
+    if batch_id and not batch_id.startswith("slot-"):
+        import re
+        batch_id_stripped = batch_id.strip()
+        batch_id_normalized = re.sub(r'\s+', '_', batch_id_stripped.lower())
+        
+        candidates = []
+        if batch_id_stripped:
+            candidates.append(batch_id_stripped)
+        if batch_id_normalized and batch_id_normalized != batch_id_stripped:
+            candidates.append(batch_id_normalized)
+            
+        base_bg = f"{cert_type}_background.pdf"
+        base_coords = f"{cert_type}_coordinates.json"
+        
+        located_bg_path = None
+        located_coords_path = None
+        
+        for folder in candidates:
+            test_bg = f"templates/{folder}/{base_bg}"
+            test_coords = f"templates/{folder}/{base_coords}"
+            try:
+                files = supabase.storage.from_("templates").list(f"templates/{folder}")
+                file_names = [f["name"] for f in files] if files else []
+                if base_bg in file_names and base_coords in file_names:
+                    located_bg_path = test_bg
+                    located_coords_path = test_coords
+                    break
+            except Exception:
+                pass
+        
+        if located_bg_path and located_coords_path:
+            try:
+                bg_pdf_bytes = supabase.storage.from_("templates").download(located_bg_path)
+                coords_json_bytes = supabase.storage.from_("templates").download(located_coords_path)
+            except Exception:
+                pass
+
+    if bg_pdf_bytes and coords_json_bytes:
+        try:
+            pdf_bytes = generate_overlay_pdf_bytes(bg_pdf_bytes, coords_json_bytes, replacements, qr_bytes)
+            pdf_cache.set(cert_code, pdf_bytes)
+            return pdf_bytes
+        except Exception as overlay_err:
+            print(f"Failed precompiled overlay generation: {overlay_err}")
+
+    template_bytes = template_cache.get(batch_id)
+    ext = ".pptx"
+    template_path = None
+
+    if not template_bytes:
+        batch_res = supabase.table("batches").select("*").eq("id", batch_id).execute()
+        if batch_res.data:
+            batch = batch_res.data[0]
+            if cert_type == "lor":
+                template_path = batch.get("lor_template_path")
+            elif cert_type == "experience":
+                template_path = batch.get("experience_template_path")
+            else:
+                template_path = batch.get("internship_template_path")
+            
+            if not template_path and batch_id.startswith("slot-"):
+                template_path = f"templates/{batch_id}.pptx"
+        else:
+            if batch_id.startswith("slot-"):
+                template_path = f"templates/{batch_id}.pptx"
+            else:
+                template_path = f"templates/{batch_id}/template.pptx"
+
+        if template_path:
+            ext = os.path.splitext(template_path)[1].lower()
+            try:
+                template_bytes = supabase.storage.from_("templates").download(template_path)
+                template_cache[batch_id] = template_bytes
+            except Exception:
+                pass
+
+        if not template_bytes:
+            for path_candidate, ext_candidate in [
+                (f"{batch_id}/template.pptx", ".pptx"),
+                (f"{batch_id}/template.html", ".html"),
+                (f"slot-1.pptx", ".pptx")
+            ]:
+                try:
+                    template_bytes = supabase.storage.from_("templates").download(path_candidate)
+                    ext = ext_candidate
+                    template_cache[batch_id] = template_bytes
+                    break
+                except Exception:
+                    continue
+
+        if not template_bytes:
+            raise ValueError(f"Template file not found for batch/slot: {batch_id}.")
+
+    if ext == ".pptx":
+        modified_pptx_bytes, _ = generate_certificate_from_pptx_bytes(template_bytes, replacements, qr_bytes)
+        pdf_bytes = await convert_pptx_to_pdf_bytes_async(modified_pptx_bytes)
+    else:
+        pdf_bytes, _ = generate_certificate_from_html_bytes(template_bytes, replacements, qr_bytes)
+
+    pdf_cache.set(cert_code, pdf_bytes)
+    return pdf_bytes
+
+
+@app.get("/certificate/{cert_code}.pdf")
 @app.get("/api/certificates/{cert_code}/pdf")
 async def get_dynamic_pdf(cert_code: str):
     """
     Generates and returns the PDF for a specific certificate dynamically.
-    Downloads the templates from the bucket, parses data, replaces placeholders,
-    runs the conversion, and serves raw PDF bytes.
+    Utilizes template caching, transient PDF caching, and serialized LibreOffice conversion.
     """
+    try:
+        safe_name = "certificate"
+        try:
+            res = supabase.table("certificates").select("name").eq("cert_code", cert_code).execute()
+            if res.data:
+                safe_name = re.sub(r'[\\/*?:"<>|]', "_", str(res.data[0].get("name") or "certificate")).strip()
+        except:
+            pass
+
+        pdf_bytes = await get_pdf_bytes_for_certificate(cert_code)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"inline; filename={safe_name}_{cert_code}.pdf"
+            }
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate dynamic certificate PDF: {str(e)}"
+        )
+
     if not supabase:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1664,7 +2063,7 @@ async def get_dynamic_pdf(cert_code: str):
         # 2. Retrieve intern and batch details
         intern_id = cert_data.get("intern_id")
         cert_type = cert_data.get("cert_type") or "internship"
-        batch_id = cert_data.get("template_id") # stored as template_id for compatibility
+        batch_id = cert_data.get("template_id") or cert_data.get("batch_id")
 
         # Fallback details from certificate record itself for old entries
         intern_name = cert_data.get("name")
@@ -1681,15 +2080,18 @@ async def get_dynamic_pdf(cert_code: str):
             intern_res = supabase.table("interns").select("*").eq("id", intern_id).execute()
             if intern_res.data:
                 intern = intern_res.data[0]
-                intern_name = intern.get("name")
-                college = intern.get("college")
-                year = intern.get("year")
-                department = intern.get("department")
-                role = intern.get("role")
-                project = intern.get("project")
-                month = intern.get("month")
+                intern_name = intern.get("name") or intern_name
+                college = intern.get("college") or college
+                year = intern.get("year") or year
+                department = intern.get("department") or department
+                role = intern.get("role") or role
+                project = intern.get("project") or project
+                month = intern.get("month") or month
                 date_val = intern.get("date") or date_val
                 batch_id = intern.get("batch_id") or batch_id
+
+        if not batch_id:
+            batch_id = "slot-1"
 
         # Prepare replacements
         replacements = {
@@ -1729,16 +2131,15 @@ async def get_dynamic_pdf(cert_code: str):
             qr_img.save(qr_io)
         qr_bytes = qr_io.getvalue()
 
-        # Try pre-compiled overlay rendering!
+        # Try pre-compiled overlay rendering if available
         bg_pdf_bytes = None
         coords_json_bytes = None
 
-        if batch_id:
+        if batch_id and not batch_id.startswith("slot-"):
             import re
             batch_id_stripped = batch_id.strip()
             batch_id_normalized = re.sub(r'\s+', '_', batch_id_stripped.lower())
             
-            # Candidate folders to search for
             candidates = []
             if batch_id_stripped:
                 candidates.append(batch_id_stripped)
@@ -1750,57 +2151,48 @@ async def get_dynamic_pdf(cert_code: str):
             
             located_bg_path = None
             located_coords_path = None
-            inspect_error = None
             
             for folder in candidates:
                 test_bg = f"templates/{folder}/{base_bg}"
                 test_coords = f"templates/{folder}/{base_coords}"
                 try:
-                    # Query files in storage
                     files = supabase.storage.from_("templates").list(f"templates/{folder}")
                     file_names = [f["name"] for f in files] if files else []
-                    
                     if base_bg in file_names and base_coords in file_names:
                         located_bg_path = test_bg
                         located_coords_path = test_coords
-                        inspect_error = None
                         break
-                    else:
-                        missing = []
-                        if base_bg not in file_names:
-                            missing.append(test_bg)
-                        if base_coords not in file_names:
-                            missing.append(test_coords)
-                        inspect_error = f"Template files missing in storage folder '{folder}': {', '.join(missing)}"
-                except Exception as list_err:
-                    inspect_error = f"Failed to inspect storage folder '{folder}': {str(list_err)}"
+                except Exception:
+                    pass
             
             if located_bg_path and located_coords_path:
                 try:
                     bg_pdf_bytes = supabase.storage.from_("templates").download(located_bg_path)
                     coords_json_bytes = supabase.storage.from_("templates").download(located_coords_path)
-                    print(f"Using precompiled overlay dynamic generation for {cert_code} (batch {batch_id})")
-                except Exception as e:
-                    print(f"Failed to download precompiled template files for batch {batch_id}: {e}. Falling back to legacy rendering...")
-            else:
-                print(f"Precompiled template files not found for batch {batch_id}. Details: {inspect_error or 'Folder not found'}. Falling back to legacy rendering...")
+                except Exception:
+                    pass
 
         if bg_pdf_bytes and coords_json_bytes:
             try:
                 pdf_bytes = generate_overlay_pdf_bytes(bg_pdf_bytes, coords_json_bytes, replacements, qr_bytes)
+                pdf_cache.set(cert_code, pdf_bytes)
+                safe_name = re.sub(r'[\\/*?:"<>|]', "_", str(intern_name or "certificate")).strip()
                 return Response(
                     content=pdf_bytes,
                     media_type="application/pdf",
                     headers={
-                        "Content-Disposition": f"inline; filename={cert_code}.pdf"
+                        "Content-Disposition": f"inline; filename={safe_name}_{cert_code}.pdf"
                     }
                 )
             except Exception as overlay_err:
                 print(f"Failed dynamic precompiled overlay generation, falling back to legacy pipeline: {overlay_err}")
 
-        # 3. Fallback: Retrieve template path from batches table
+        # Try to retrieve template bytes (from memory cache or storage)
+        template_bytes = template_cache.get(batch_id)
+        ext = ".pptx"
         template_path = None
-        if batch_id:
+
+        if not template_bytes:
             batch_res = supabase.table("batches").select("*").eq("id", batch_id).execute()
             if batch_res.data:
                 batch = batch_res.data[0]
@@ -1810,48 +2202,58 @@ async def get_dynamic_pdf(cert_code: str):
                     template_path = batch.get("experience_template_path")
                 else:
                     template_path = batch.get("internship_template_path")
+                
+                if not template_path and batch_id.startswith("slot-"):
+                    template_path = f"templates/{batch_id}.pptx"
             else:
-                # Fallback to old templates table lookup (backward compatible)
-                template_res = supabase.table("templates").select("*").eq("id", batch_id).execute()
-                if template_res.data:
-                    template_path = f"{batch_id}/template.pptx"
+                if batch_id.startswith("slot-"):
+                    template_path = f"templates/{batch_id}.pptx"
+                else:
+                    template_path = f"templates/{batch_id}/template.pptx"
 
-        template_bytes = None
-        ext = ".pptx"
-
-        if template_path:
-            ext = os.path.splitext(template_path)[1].lower()
-            try:
-                template_bytes = supabase.storage.from_("templates").download(template_path)
-            except Exception:
-                pass
-
-        if not template_bytes:
-            try:
-                template_bytes = supabase.storage.from_("templates").download(f"{batch_id}/template.pptx")
-                ext = ".pptx"
-            except Exception:
+            if template_path:
+                ext = os.path.splitext(template_path)[1].lower()
                 try:
-                    template_bytes = supabase.storage.from_("templates").download(f"{batch_id}/template.html")
-                    ext = ".html"
-                except Exception as dl_err:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f"Template files missing for batch {batch_id}. Could not locate template file (PPTX/HTML) in storage."
-                    )
+                    template_bytes = supabase.storage.from_("templates").download(template_path)
+                    template_cache[batch_id] = template_bytes
+                except Exception:
+                    pass
 
-        # 7. Convert and build PDF via legacy method
+            if not template_bytes:
+                for path_candidate, ext_candidate in [
+                    (f"{batch_id}/template.pptx", ".pptx"),
+                    (f"{batch_id}/template.html", ".html"),
+                    (f"slot-1.pptx", ".pptx")
+                ]:
+                    try:
+                        template_bytes = supabase.storage.from_("templates").download(path_candidate)
+                        ext = ext_candidate
+                        template_cache[batch_id] = template_bytes
+                        break
+                    except Exception:
+                        continue
+
+            if not template_bytes:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Template file could not be found for batch/slot: {batch_id}."
+                )
+
         if ext == ".pptx":
-            pdf_bytes, cert_title = generate_certificate_from_pptx_bytes(template_bytes, replacements, qr_bytes)
+            modified_pptx_bytes, _ = generate_certificate_from_pptx_bytes(template_bytes, replacements, qr_bytes)
+            pdf_bytes = await convert_pptx_to_pdf_bytes_async(modified_pptx_bytes)
         else:
-            pdf_bytes, cert_title = generate_certificate_from_html_bytes(template_bytes, replacements, qr_bytes)
+            pdf_bytes, _ = generate_certificate_from_html_bytes(template_bytes, replacements, qr_bytes)
 
-        # 8. Return response containing PDF stream
+        # Cache the generated PDF
+        pdf_cache.set(cert_code, pdf_bytes)
+
+        safe_name = re.sub(r'[\\/*?:"<>|]', "_", str(intern_name or "certificate")).strip()
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f"inline; filename={cert_code}.pdf"
+                "Content-Disposition": f"inline; filename={safe_name}_{cert_code}.pdf"
             }
         )
 
@@ -1866,7 +2268,7 @@ async def get_dynamic_pdf(cert_code: str):
 
 
 @app.post("/api/interns/{intern_id}/send-email")
-def manual_send_intern_email(intern_id: str):
+async def manual_send_intern_email(intern_id: str):
     """
     Manually triggers email dispatch for a specific intern.
     Loads intern details and all associated certificates, then sends SMTP email.
@@ -1924,7 +2326,7 @@ def manual_send_intern_email(intern_id: str):
             })
 
         # 3. Call email notification
-        success = send_email_notification(
+        success = await send_email_notification(
             to_email=email_val,
             intern_name=name_val,
             batch_title=month_val or year_val,

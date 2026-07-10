@@ -150,13 +150,15 @@ function VerifyContent() {
 
   const resolvedPdfUrl = (() => {
     if (!certificate?.pdf_url) return "";
-    const marker = "/api/certificates/";
-    const index = certificate.pdf_url.indexOf(marker);
-    if (index !== -1) {
-      const path = certificate.pdf_url.substring(index);
-      const envBackend = process.env.NEXT_PUBLIC_BACKEND_URL;
-      if (envBackend) {
-        return `${envBackend.replace(/\/+$/, "")}${path}`;
+    const markers = ["/api/certificates/", "/certificate/"];
+    for (const marker of markers) {
+      const index = certificate.pdf_url.indexOf(marker);
+      if (index !== -1) {
+        const path = certificate.pdf_url.substring(index);
+        const envBackend = process.env.NEXT_PUBLIC_BACKEND_URL;
+        if (envBackend) {
+          return `${envBackend.replace(/\/+$/, "")}${path}`;
+        }
       }
     }
     return certificate.pdf_url;

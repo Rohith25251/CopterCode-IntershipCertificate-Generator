@@ -482,12 +482,14 @@ export default function AdminDashboard() {
 
   const getResolvedPdfUrl = useCallback((url: string | undefined) => {
     if (!url) return "";
-    const marker = "/api/certificates/";
-    const index = url.indexOf(marker);
-    if (index !== -1) {
-      const path = url.substring(index);
-      const base = backendUrl.replace(/\/+$/, "");
-      return `${base}${path}`;
+    const markers = ["/api/certificates/", "/certificate/"];
+    for (const marker of markers) {
+      const index = url.indexOf(marker);
+      if (index !== -1) {
+        const path = url.substring(index);
+        const base = backendUrl.replace(/\/+$/, "");
+        return `${base}${path}`;
+      }
     }
     return url;
   }, [backendUrl]);
