@@ -7,9 +7,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice-impress \
     libreoffice-common \
     fonts-dejavu \
+    fonts-dejavu-extra \
     fonts-liberation \
+    fonts-open-sans \
+    fonts-noto-core \
+    fonts-urw-base35 \
     fontconfig \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && fc-cache -f
+
+# LibreOffice requires HOME to write profile data
+ENV HOME=/tmp
 
 # Set working directory
 WORKDIR /app

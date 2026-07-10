@@ -99,8 +99,19 @@ async def convert_pptx_to_pdf_bytes_async(pptx_bytes: bytes) -> bytes:
         temp_pptx.close()
         
         out_dir = os.path.dirname(os.path.abspath(temp_pptx.name))
+        # Use a dedicated user profile per conversion to avoid file-lock collisions in Docker
+        lo_profile_dir = os.path.join(tempfile.gettempdir(), f"lo_profile_{os.getpid()}")
+        os.makedirs(lo_profile_dir, exist_ok=True)
         try:
-            cmd = ["soffice", "--headless", "--convert-to", "pdf", os.path.abspath(temp_pptx.name), "--outdir", out_dir]
+            cmd = [
+                "soffice",
+                f"-env:UserInstallation=file://{lo_profile_dir}",
+                "--headless",
+                "--norestore",
+                "--convert-to", "pdf",
+                os.path.abspath(temp_pptx.name),
+                "--outdir", out_dir
+            ]
             use_fallback = False
             try:
                 proc = await asyncio.create_subprocess_exec(
@@ -1994,102 +2005,67 @@ async def get_pdf_bytes_for_certificate(cert_code: str) -> bytes:
         qr_img.save(qr_io)
     qr_bytes = qr_io.getvalue()
 
-    bg_pdf_bytes = None
-    coords_json_bytes = None
 
-    if batch_id and not batch_id.startswith("slot-"):
-        import re
-        batch_id_stripped = batch_id.strip()
-        batch_id_normalized = re.sub(r'\s+', '_', batch_id_stripped.lower())
-        
-        candidates = []
-        if batch_id_stripped:
-            candidates.append(batch_id_stripped)
-        if batch_id_normalized and batch_id_normalized != batch_id_stripped:
-            candidates.append(batch_id_normalized)
-            
-        base_bg = f"{cert_type}_background.pdf"
-        base_coords = f"{cert_type}_coordinates.json"
-        
-        located_bg_path = None
-        located_coords_path = None
-        
-        for folder in candidates:
-            test_bg = f"templates/{folder}/{base_bg}"
-            test_coords = f"templates/{folder}/{base_coords}"
-            try:
-                files = supabase.storage.from_("templates").list(f"templates/{folder}")
-                file_names = [f["name"] for f in files] if files else []
-                if base_bg in file_names and base_coords in file_names:
-                    located_bg_path = test_bg
-                    located_coords_path = test_coords
-                    break
-            except Exception:
-                pass
-        
-        if located_bg_path and located_coords_path:
-            try:
-                bg_pdf_bytes = supabase.storage.from_("templates").download(located_bg_path)
-                coords_json_bytes = supabase.storage.from_("templates").download(located_coords_path)
-            except Exception:
-                pass
-
-    if bg_pdf_bytes and coords_json_bytes:
-        try:
-            pdf_bytes = generate_overlay_pdf_bytes(bg_pdf_bytes, coords_json_bytes, replacements, qr_bytes)
-            pdf_cache.set(cert_code, pdf_bytes)
-            return pdf_bytes
-        except Exception as overlay_err:
-            print(f"Failed precompiled overlay generation: {overlay_err}")
-
-    template_bytes = template_cache.get(batch_id)
+    # 3. Resolve the .pptx template file path and download it.
+    #    We go directly to the .pptx — NEVER use the overlay pipeline,
+    #    because the overlay only renders dynamic text and drops all static
+    #    elements (footer, logo, decorative lines, signature image).
+    template_bytes = None
     ext = ".pptx"
-    template_path = None
+
+    # Priority 1: named file e.g. templates/BATCH_TEST1/internship.pptx
+    if batch_id and not batch_id.startswith("slot-"):
+        import re as _re
+        batch_id_stripped = batch_id.strip()
+        batch_id_normalized = _re.sub(r'\s+', '_', batch_id_stripped.lower())
+        cert_type_file = f"{cert_type}.pptx"
+
+        for folder in [batch_id_stripped, batch_id_normalized]:
+            if not folder:
+                continue
+            try:
+                candidate = f"templates/{folder}/{cert_type_file}"
+                template_bytes = supabase.storage.from_("templates").download(candidate)
+                print(f"[pdf] Using named PPTX: {candidate}")
+                break
+            except Exception:
+                pass
+
+    # Priority 2: slot-based path e.g. templates/slot-1.pptx
+    if not template_bytes:
+        slot_path = f"templates/{batch_id}.pptx"
+        try:
+            template_bytes = supabase.storage.from_("templates").download(slot_path)
+            print(f"[pdf] Using slot PPTX: {slot_path}")
+        except Exception:
+            pass
+
+    # Priority 3: batches table lookup
+    if not template_bytes:
+        try:
+            batch_res = supabase.table("batches").select("*").eq("id", batch_id).execute()
+            if batch_res.data:
+                batch = batch_res.data[0]
+                if cert_type == "lor":
+                    template_path = batch.get("lor_template_path")
+                elif cert_type == "experience":
+                    template_path = batch.get("experience_template_path")
+                else:
+                    template_path = batch.get("internship_template_path")
+                if template_path:
+                    ext = os.path.splitext(template_path)[1].lower() or ".pptx"
+                    template_bytes = supabase.storage.from_("templates").download(template_path)
+                    print(f"[pdf] Using batches-table path: {template_path}")
+        except Exception:
+            pass
 
     if not template_bytes:
-        batch_res = supabase.table("batches").select("*").eq("id", batch_id).execute()
-        if batch_res.data:
-            batch = batch_res.data[0]
-            if cert_type == "lor":
-                template_path = batch.get("lor_template_path")
-            elif cert_type == "experience":
-                template_path = batch.get("experience_template_path")
-            else:
-                template_path = batch.get("internship_template_path")
-            
-            if not template_path and batch_id.startswith("slot-"):
-                template_path = f"templates/{batch_id}.pptx"
-        else:
-            if batch_id.startswith("slot-"):
-                template_path = f"templates/{batch_id}.pptx"
-            else:
-                template_path = f"templates/{batch_id}/template.pptx"
+        raise ValueError(f"Template PPTX not found for batch '{batch_id}' / cert_type '{cert_type}'. "
+                         f"Upload templates/{{batch_id}}/{{cert_type}}.pptx to storage.")
 
-        if template_path:
-            ext = os.path.splitext(template_path)[1].lower()
-            try:
-                template_bytes = supabase.storage.from_("templates").download(template_path)
-                template_cache[batch_id] = template_bytes
-            except Exception:
-                pass
-
-        if not template_bytes:
-            for path_candidate, ext_candidate in [
-                (f"{batch_id}/template.pptx", ".pptx"),
-                (f"{batch_id}/template.html", ".html"),
-                (f"slot-1.pptx", ".pptx")
-            ]:
-                try:
-                    template_bytes = supabase.storage.from_("templates").download(path_candidate)
-                    ext = ext_candidate
-                    template_cache[batch_id] = template_bytes
-                    break
-                except Exception:
-                    continue
-
-        if not template_bytes:
-            raise ValueError(f"Template file not found for batch/slot: {batch_id}.")
-
+    # 4. In-place placeholder replacement inside the PPTX (Technique 1).
+    #    This preserves every font, colour, image, line, footer — EVERYTHING
+    #    from the original designer template. Only <<PLACEHOLDER>> text changes.
     if ext == ".pptx":
         modified_pptx_bytes, _ = generate_certificate_from_pptx_bytes(template_bytes, replacements, qr_bytes)
         pdf_bytes = await convert_pptx_to_pdf_bytes_async(modified_pptx_bytes)
@@ -2098,6 +2074,7 @@ async def get_pdf_bytes_for_certificate(cert_code: str) -> bytes:
 
     pdf_cache.set(cert_code, pdf_bytes)
     return pdf_bytes
+
 
 
 @app.get("/certificate/{cert_code}.pdf")
@@ -2230,113 +2207,61 @@ async def get_dynamic_pdf(cert_code: str):
             qr_img.save(qr_io)
         qr_bytes = qr_io.getvalue()
 
-        # Try pre-compiled overlay rendering if available
-        bg_pdf_bytes = None
-        coords_json_bytes = None
+        # Resolve the .pptx template directly — skip the overlay pipeline entirely.
+        # The overlay drops all static content (footer, logo, lines, signature).
+        template_bytes = None
+        ext = ".pptx"
 
+        # Priority 1: named file e.g. templates/BATCH_TEST1/internship.pptx
         if batch_id and not batch_id.startswith("slot-"):
-            import re
             batch_id_stripped = batch_id.strip()
             batch_id_normalized = re.sub(r'\s+', '_', batch_id_stripped.lower())
-            
-            candidates = []
-            if batch_id_stripped:
-                candidates.append(batch_id_stripped)
-            if batch_id_normalized and batch_id_normalized != batch_id_stripped:
-                candidates.append(batch_id_normalized)
-                
-            base_bg = f"{cert_type}_background.pdf"
-            base_coords = f"{cert_type}_coordinates.json"
-            
-            located_bg_path = None
-            located_coords_path = None
-            
-            for folder in candidates:
-                test_bg = f"templates/{folder}/{base_bg}"
-                test_coords = f"templates/{folder}/{base_coords}"
+            cert_type_file = f"{cert_type}.pptx"
+            for folder in [batch_id_stripped, batch_id_normalized]:
+                if not folder:
+                    continue
                 try:
-                    files = supabase.storage.from_("templates").list(f"templates/{folder}")
-                    file_names = [f["name"] for f in files] if files else []
-                    if base_bg in file_names and base_coords in file_names:
-                        located_bg_path = test_bg
-                        located_coords_path = test_coords
-                        break
-                except Exception:
-                    pass
-            
-            if located_bg_path and located_coords_path:
-                try:
-                    bg_pdf_bytes = supabase.storage.from_("templates").download(located_bg_path)
-                    coords_json_bytes = supabase.storage.from_("templates").download(located_coords_path)
+                    candidate = f"templates/{folder}/{cert_type_file}"
+                    template_bytes = supabase.storage.from_("templates").download(candidate)
+                    print(f"[pdf] Using named PPTX: {candidate}")
+                    break
                 except Exception:
                     pass
 
-        if bg_pdf_bytes and coords_json_bytes:
+        # Priority 2: slot-based path e.g. templates/slot-1.pptx
+        if not template_bytes:
+            slot_path = f"templates/{batch_id}.pptx"
             try:
-                pdf_bytes = generate_overlay_pdf_bytes(bg_pdf_bytes, coords_json_bytes, replacements, qr_bytes)
-                pdf_cache.set(cert_code, pdf_bytes)
-                safe_name = re.sub(r'[\\/*?:"<>|]', "_", str(intern_name or "certificate")).strip()
-                return Response(
-                    content=pdf_bytes,
-                    media_type="application/pdf",
-                    headers={
-                        "Content-Disposition": f"inline; filename={safe_name}_{cert_code}.pdf"
-                    }
-                )
-            except Exception as overlay_err:
-                print(f"Failed dynamic precompiled overlay generation, falling back to legacy pipeline: {overlay_err}")
+                template_bytes = supabase.storage.from_("templates").download(slot_path)
+                print(f"[pdf] Using slot PPTX: {slot_path}")
+            except Exception:
+                pass
 
-        # Try to retrieve template bytes (from memory cache or storage)
-        template_bytes = template_cache.get(batch_id)
-        ext = ".pptx"
-        template_path = None
+        # Priority 3: batches table lookup
+        if not template_bytes:
+            try:
+                batch_res = supabase.table("batches").select("*").eq("id", batch_id).execute()
+                if batch_res.data:
+                    batch = batch_res.data[0]
+                    if cert_type == "lor":
+                        template_path = batch.get("lor_template_path")
+                    elif cert_type == "experience":
+                        template_path = batch.get("experience_template_path")
+                    else:
+                        template_path = batch.get("internship_template_path")
+                    if template_path:
+                        ext = os.path.splitext(template_path)[1].lower() or ".pptx"
+                        template_bytes = supabase.storage.from_("templates").download(template_path)
+                        print(f"[pdf] Using batches-table path: {template_path}")
+            except Exception:
+                pass
 
         if not template_bytes:
-            batch_res = supabase.table("batches").select("*").eq("id", batch_id).execute()
-            if batch_res.data:
-                batch = batch_res.data[0]
-                if cert_type == "lor":
-                    template_path = batch.get("lor_template_path")
-                elif cert_type == "experience":
-                    template_path = batch.get("experience_template_path")
-                else:
-                    template_path = batch.get("internship_template_path")
-                
-                if not template_path and batch_id.startswith("slot-"):
-                    template_path = f"templates/{batch_id}.pptx"
-            else:
-                if batch_id.startswith("slot-"):
-                    template_path = f"templates/{batch_id}.pptx"
-                else:
-                    template_path = f"templates/{batch_id}/template.pptx"
-
-            if template_path:
-                ext = os.path.splitext(template_path)[1].lower()
-                try:
-                    template_bytes = supabase.storage.from_("templates").download(template_path)
-                    template_cache[batch_id] = template_bytes
-                except Exception:
-                    pass
-
-            if not template_bytes:
-                for path_candidate, ext_candidate in [
-                    (f"{batch_id}/template.pptx", ".pptx"),
-                    (f"{batch_id}/template.html", ".html"),
-                    (f"slot-1.pptx", ".pptx")
-                ]:
-                    try:
-                        template_bytes = supabase.storage.from_("templates").download(path_candidate)
-                        ext = ext_candidate
-                        template_cache[batch_id] = template_bytes
-                        break
-                    except Exception:
-                        continue
-
-            if not template_bytes:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Template file could not be found for batch/slot: {batch_id}."
-                )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Template PPTX not found for batch '{batch_id}' / cert_type '{cert_type}'. "
+                       f"Upload templates/{{batch_id}}/{{cert_type}}.pptx to storage."
+            )
 
         if ext == ".pptx":
             modified_pptx_bytes, _ = generate_certificate_from_pptx_bytes(template_bytes, replacements, qr_bytes)
@@ -2344,7 +2269,6 @@ async def get_dynamic_pdf(cert_code: str):
         else:
             pdf_bytes, _ = generate_certificate_from_html_bytes(template_bytes, replacements, qr_bytes)
 
-        # Cache the generated PDF
         pdf_cache.set(cert_code, pdf_bytes)
 
         safe_name = re.sub(r'[\\/*?:"<>|]', "_", str(intern_name or "certificate")).strip()
