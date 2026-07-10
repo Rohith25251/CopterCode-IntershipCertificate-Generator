@@ -102,12 +102,16 @@ def send_email_notification(
     smtp_from_email = os.getenv("SMTP_FROM_EMAIL")
     smtp_from_name = os.getenv("SMTP_FROM_NAME", "CopterCode Team")
 
+    intern_portal_base_url = os.getenv("INTERN_PORTAL_BASE_URL", "https://coptercode-website.vercel.app/intern-portal").strip().rstrip("/")
+    email_logo_url = os.getenv("EMAIL_LOGO_URL", "https://coptercode-website.vercel.app/coptercode-logo.svg").strip()
+    email_hero_image_url = os.getenv("EMAIL_HERO_IMAGE_URL", "https://coptercode-website.vercel.app/hero-3.jpg").strip()
+
     if not smtp_server or not smtp_username or not smtp_password or not smtp_from_email:
         print("WARNING: SMTP credentials not fully configured. Skipping email dispatch.")
         return False
 
     try:
-        portal_link = f"https://coptercode-website.vercel.app/intern-portal?id={intern_id}"
+        portal_link = f"{intern_portal_base_url}?id={intern_id}"
 
         # Use MIMEMultipart("mixed") since we are sending inline HTML + physical file attachments
         msg = MIMEMultipart("mixed")
@@ -143,7 +147,7 @@ def send_email_notification(
                                     <table border="0" cellpadding="0" cellspacing="0" align="center" style="margin: 0 auto;">
                                         <tr>
                                             <td style="vertical-align: middle;">
-                                                <img src="https://coptercode-certificate.vercel.app/coptercode-logo.svg" alt="CopterCode Logo" style="height: 48px; width: auto; display: block; border-radius: 12px;" />
+                                                <img src="{email_logo_url}" alt="CopterCode Logo" style="height: 48px; width: auto; display: block; border-radius: 12px;" />
                                             </td>
                                             <td style="vertical-align: middle; padding-left: 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 26px; font-weight: 750; color: #0f172a; letter-spacing: -0.5px; line-height: 1;">
                                                 CopterCode
@@ -156,7 +160,7 @@ def send_email_notification(
                             <!-- Hero Image -->
                             <tr>
                                 <td style="padding: 0 24px;">
-                                    <img src="https://coptercode-certificate.vercel.app/hero-3.jpg" alt="CopterCode Team" style="width: 100%; height: auto; display: block; border-radius: 12px; object-fit: cover;" />
+                                    <img src="{email_hero_image_url}" alt="CopterCode Team" style="width: 100%; height: auto; display: block; border-radius: 12px; object-fit: cover;" />
                                 </td>
                             </tr>
                             
