@@ -26,7 +26,9 @@ import {
   KeyRound,
   ShieldCheck,
   Activity,
-  Edit2
+  Edit2,
+  Users,
+  X
 } from "lucide-react";
 import JSZip from "jszip";
 import { supabase, anonSupabase } from "@/lib/supabase";
@@ -270,6 +272,62 @@ export default function AdminDashboard() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
   const [historyQuery, setHistoryQuery] = useState("");
+  const [selectedDept, setSelectedDept] = useState("");
+  const [selectedDomain, setSelectedDomain] = useState("");
+  const [selectedCollege, setSelectedCollege] = useState("");
+  const [selectedBatch, setSelectedBatch] = useState("");
+
+  // Dynamically calculate stats and unique filter values from historyCerts
+  const { batchCounts, totalUniqueInterns, uniqueDepts, uniqueDomains, uniqueColleges, uniqueBatches } = React.useMemo(() => {
+    const internMap = new Map<string, { name: string; email: string; batch: string }>();
+    const depts = new Set<string>();
+    const domains = new Set<string>();
+    const colleges = new Set<string>();
+    const batches = new Set<string>();
+
+    historyCerts.forEach((c) => {
+      // Collect raw values for unique filters
+      const d = c.department || c.intern?.department;
+      if (d) depts.add(d);
+      
+      const r = c.role || c.intern?.role;
+      if (r) domains.add(r);
+      
+      const col = c.college || c.intern?.college;
+      if (col) colleges.add(col);
+      
+      const b = c.month || c.intern?.month;
+      if (b) batches.add(b);
+
+      // Collect for unique intern grouping
+      const internId = c.intern_id || `${c.name || ''}-${c.intern?.email || ''}`;
+      if (!internMap.has(internId)) {
+        internMap.set(internId, {
+          name: c.name || c.intern?.name || "Unknown",
+          email: c.intern?.email || "",
+          batch: b || "Unknown Batch",
+        });
+      }
+    });
+
+    const counts: Record<string, number> = {};
+    let total = 0;
+
+    internMap.forEach((intern) => {
+      const b = intern.batch;
+      counts[b] = (counts[b] || 0) + 1;
+      total++;
+    });
+
+    return {
+      batchCounts: counts,
+      totalUniqueInterns: total,
+      uniqueDepts: Array.from(depts).sort(),
+      uniqueDomains: Array.from(domains).sort(),
+      uniqueColleges: Array.from(colleges).sort(),
+      uniqueBatches: Array.from(batches).sort(),
+    };
+  }, [historyCerts]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -1583,17 +1641,173 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Filter/Search Bar */}
-            <div className="mb-6 flex gap-3">
-              <div className="flex-1 flex items-center gap-2.5 bg-zinc-50 border border-zinc-200 rounded-2xl px-4 py-3 shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)]">
-                <Search size={16} className="text-zinc-400 shrink-0" />
-                <input
-                  type="text"
-                  value={historyQuery}
-                  onChange={(e) => setHistoryQuery(e.target.value)}
-                  placeholder="Search by intern name, college, email, or credential code..."
-                  className="flex-1 text-xs bg-transparent outline-none text-zinc-700 placeholder:text-zinc-400"
-                />
+            {/* Analytics Stats Grid */}
+            {!historyLoading && historyCerts.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-xs font-extrabold text-zinc-450 uppercase tracking-wider mb-4">Internship Analytics</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Total Interns Card */}
+                  <div className="bg-gradient-to-br from-[#5844e9] to-[#7f6cf2] rounded-[24px] p-5 text-white shadow-sm flex flex-col justify-between relative overflow-hidden group">
+                    <div className="absolute right-0 top-0 translate-x-2 -translate-y-2 opacity-10 group-hover:scale-110 transition-transform duration-500">
+                      <Users size={120} />
+                    </div>
+                    <div className="z-10">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">Total Unique Interns</p>
+                      <h4 className="text-3xl font-extrabold mt-1 tracking-tight">{totalUniqueInterns}</h4>
+                    </div>
+                    <div className="mt-4 flex items-center gap-1 text-[10px] text-violet-100 font-medium z-10">
+                      <Activity size={12} className="animate-pulse" />
+                      <span>Across all active batches</span>
+                    </div>
+                  </div>
+
+                  {/* Batch Cards */}
+                  {Object.entries(batchCounts).map(([batchName, count]) => {
+                    const isSelected = selectedBatch === batchName;
+                    return (
+                      <div
+                        key={batchName}
+                        onClick={() => setSelectedBatch(isSelected ? "" : batchName)}
+                        className={`rounded-[24px] p-5 border transition-all duration-300 cursor-pointer flex flex-col justify-between group relative overflow-hidden select-none ${
+                          isSelected
+                            ? "bg-violet-50/50 border-[#5844e9] shadow-[0_4px_20px_rgba(88,68,233,0.08)]"
+                            : "bg-white border-zinc-150 hover:border-zinc-350 hover:bg-zinc-50/30 hover:shadow-md"
+                        }`}
+                      >
+                        {isSelected && (
+                          <div className="absolute right-4 top-4 bg-[#5844e9] text-white p-1 rounded-full">
+                            <CheckCircle size={12} />
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 group-hover:text-[#5844e9] transition-colors">
+                            {batchName}
+                          </p>
+                          <h4 className="text-3xl font-extrabold mt-1 tracking-tight text-zinc-800">
+                            {count}
+                          </h4>
+                        </div>
+                        <div className="mt-4 text-[10px] font-bold text-zinc-400 flex items-center gap-1 group-hover:text-[#5844e9] transition-colors">
+                          <span>{isSelected ? "Filter active (click to clear)" : "Click to filter interns"}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Filter/Search Section */}
+            <div className="mb-8 bg-zinc-50/30 border border-zinc-150 rounded-[24px] p-5 shadow-sm space-y-4">
+              <div className="flex flex-col md:flex-row gap-3">
+                {/* Search Input */}
+                <div className="flex-1 flex items-center gap-2.5 bg-white border border-zinc-200 rounded-xl px-4 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.02)] focus-within:ring-2 focus-within:ring-violet-500/20 focus-within:border-violet-500 transition-all">
+                  <Search size={15} className="text-zinc-400 shrink-0" />
+                  <input
+                    type="text"
+                    value={historyQuery}
+                    onChange={(e) => setHistoryQuery(e.target.value)}
+                    placeholder="Search by intern name, college, email, or credential code..."
+                    className="flex-1 text-xs bg-transparent outline-none text-zinc-700 placeholder:text-zinc-450"
+                  />
+                  {historyQuery && (
+                    <button onClick={() => setHistoryQuery("")} className="text-zinc-400 hover:text-zinc-650 cursor-pointer">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+                
+                {/* Clear All Filters Button */}
+                {(historyQuery || selectedDept || selectedDomain || selectedCollege || selectedBatch) && (
+                  <button
+                    onClick={() => {
+                      setHistoryQuery("");
+                      setSelectedDept("");
+                      setSelectedDomain("");
+                      setSelectedCollege("");
+                      setSelectedBatch("");
+                    }}
+                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 border border-dashed border-red-200 text-red-650 bg-red-50/30 hover:bg-red-50 hover:border-red-300 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
+                  >
+                    <Trash2 size={14} />
+                    Reset Filters
+                  </button>
+                )}
+              </div>
+
+              {/* Dynamic Dropdowns Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Batch Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Batch</label>
+                  <div className="relative">
+                    <select
+                      value={selectedBatch}
+                      onChange={(e) => setSelectedBatch(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-3 py-2.5 pr-8 appearance-none text-zinc-700 outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all cursor-pointer"
+                    >
+                      <option value="">All Batches</option>
+                      {uniqueBatches.map((b) => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Department Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Department</label>
+                  <div className="relative">
+                    <select
+                      value={selectedDept}
+                      onChange={(e) => setSelectedDept(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-3 py-2.5 pr-8 appearance-none text-zinc-700 outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all cursor-pointer"
+                    >
+                      <option value="">All Departments</option>
+                      {uniqueDepts.map((d) => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Domain Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Domain / Role</label>
+                  <div className="relative">
+                    <select
+                      value={selectedDomain}
+                      onChange={(e) => setSelectedDomain(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-3 py-2.5 pr-8 appearance-none text-zinc-700 outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all cursor-pointer"
+                    >
+                      <option value="">All Domains</option>
+                      {uniqueDomains.map((r) => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* College Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">College Name</label>
+                  <div className="relative">
+                    <select
+                      value={selectedCollege}
+                      onChange={(e) => setSelectedCollege(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-3 py-2.5 pr-8 appearance-none text-zinc-700 outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all cursor-pointer"
+                    >
+                      <option value="">All Colleges</option>
+                      {uniqueColleges.map((colName) => (
+                        <option key={colName} value={colName}>{colName}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1607,18 +1821,39 @@ export default function AdminDashboard() {
             {historyLoading ? (
               <div className="py-20 text-center">
                 <div className="w-10 h-10 border-2 border-zinc-200 border-t-violet-600 rounded-full animate-spin mx-auto mb-4" />
-                <p className="text-xs font-bold text-zinc-500">Querying Supabase database...</p>
+                <p className="text-xs font-bold text-zinc-550">Querying Supabase database...</p>
               </div>
             ) : (
               (() => {
                 const filtered = historyCerts.filter((c) => {
+                  // Search query filter
                   const q = historyQuery.toLowerCase().trim();
-                  if (!q) return true;
-                  const name = (c.name || "").toLowerCase();
-                  const college = (c.college || "").toLowerCase();
-                  const code = (c.cert_code || "").toLowerCase();
-                  const email = (c.intern?.email || "").toLowerCase();
-                  return name.includes(q) || college.includes(q) || code.includes(q) || email.includes(q);
+                  if (q) {
+                    const name = (c.name || "").toLowerCase();
+                    const college = (c.college || "").toLowerCase();
+                    const code = (c.cert_code || "").toLowerCase();
+                    const email = (c.intern?.email || "").toLowerCase();
+                    const matchesQuery = name.includes(q) || college.includes(q) || code.includes(q) || email.includes(q);
+                    if (!matchesQuery) return false;
+                  }
+
+                  // Department filter
+                  const dept = c.department || c.intern?.department;
+                  if (selectedDept && dept !== selectedDept) return false;
+
+                  // Domain (Role) filter
+                  const r = c.role || c.intern?.role;
+                  if (selectedDomain && r !== selectedDomain) return false;
+
+                  // College filter
+                  const col = c.college || c.intern?.college;
+                  if (selectedCollege && col !== selectedCollege) return false;
+
+                  // Batch filter
+                  const batch = c.month || c.intern?.month;
+                  if (selectedBatch && batch !== selectedBatch) return false;
+
+                  return true;
                 });
 
                 if (filtered.length === 0) {
