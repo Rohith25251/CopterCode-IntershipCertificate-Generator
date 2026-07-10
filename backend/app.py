@@ -456,7 +456,11 @@ def convert_pptx_to_pdf_bytes(pptx_bytes: bytes) -> bytes:
             raise ValueError(f"LibreOffice conversion output file not found: {lo_pdf_path}")
     except Exception as e:
         print(f"  --> LibreOffice conversion failed: {e}")
-        raise ValueError(f"Could not convert PPTX to PDF using PowerPoint COM or LibreOffice fallback. Details: {e}")
+        raise ValueError(
+            f"Could not convert PPTX to PDF using PowerPoint COM or LibreOffice fallback. Details: {e}. "
+            "If you are running in a serverless function (like Vercel) where LibreOffice is not installed, "
+            "please set the CONVERTAPI_SECRET environment variable to use ConvertAPI's cloud conversion service."
+        )
     finally:
         # Clean up temp files
         try:
