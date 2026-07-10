@@ -288,6 +288,8 @@ app.add_middleware(
         "http://localhost:5000",
         "https://coptercode-certificate.vercel.app",
         "https://coptercode-website.vercel.app",
+        "https://coptercode.co.in"
+        "https://cert-gen.coptercode.co.in"
     ],
     allow_credentials=True,
     allow_methods=["*"],
