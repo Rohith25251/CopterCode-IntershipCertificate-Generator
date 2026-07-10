@@ -1182,8 +1182,8 @@ async def create_batch(
     issue_date: str = Form(...),
     lor_template: Optional[UploadFile] = File(None),
     experience_template: Optional[UploadFile] = File(None),
-    internship_template: Optional[UploadFile] = File(None)
 ):
+    batch_id = batch_id.strip()
     if not supabase:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1324,7 +1324,7 @@ async def generate_certificates(
     based on their LOR, Experience, and Internship selections.
     Emails certificates to interns.
     """
-    target_batch_id = batch_id or template_id
+    target_batch_id = (batch_id or template_id or "").strip()
     if not target_batch_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1719,30 +1719,66 @@ async def get_dynamic_pdf(cert_code: str):
         qr_bytes = qr_io.getvalue()
 
         # Try pre-compiled overlay rendering!
-        bg_pdf_path = None
-        coords_json_path = None
-        if batch_id:
-            if cert_type == "lor":
-                bg_pdf_path = f"templates/{batch_id}/lor_background.pdf"
-                coords_json_path = f"templates/{batch_id}/lor_coordinates.json"
-            elif cert_type == "experience":
-                bg_pdf_path = f"templates/{batch_id}/experience_background.pdf"
-                coords_json_path = f"templates/{batch_id}/experience_coordinates.json"
-            else:
-                bg_pdf_path = f"templates/{batch_id}/internship_background.pdf"
-                coords_json_path = f"templates/{batch_id}/internship_coordinates.json"
-
         bg_pdf_bytes = None
         coords_json_bytes = None
-        if bg_pdf_path and coords_json_path:
-            try:
-                bg_pdf_bytes = supabase.storage.from_("templates").download(bg_pdf_path)
-                coords_json_bytes = supabase.storage.from_("templates").download(coords_json_path)
-                print(f"Using precompiled overlay dynamic generation for {cert_code} (batch {batch_id})")
-            except Exception as e:
+
+        if batch_id:
+            import re
+            batch_id_stripped = batch_id.strip()
+            batch_id_normalized = re.sub(r'\s+', '_', batch_id_stripped.lower())
+            
+            # Candidate folders to search for
+            candidates = []
+            if batch_id_stripped:
+                candidates.append(batch_id_stripped)
+            if batch_id_normalized and batch_id_normalized != batch_id_stripped:
+                candidates.append(batch_id_normalized)
+                
+            base_bg = f"{cert_type}_background.pdf"
+            base_coords = f"{cert_type}_coordinates.json"
+            
+            located_bg_path = None
+            located_coords_path = None
+            inspect_error = None
+            
+            for folder in candidates:
+                test_bg = f"templates/{folder}/{base_bg}"
+                test_coords = f"templates/{folder}/{base_coords}"
+                try:
+                    # Query files in storage
+                    files = supabase.storage.from_("templates").list(f"templates/{folder}")
+                    file_names = [f["name"] for f in files] if files else []
+                    
+                    if base_bg in file_names and base_coords in file_names:
+                        located_bg_path = test_bg
+                        located_coords_path = test_coords
+                        inspect_error = None
+                        break
+                    else:
+                        missing = []
+                        if base_bg not in file_names:
+                            missing.append(test_bg)
+                        if base_coords not in file_names:
+                            missing.append(test_coords)
+                        inspect_error = f"Template files missing in storage folder '{folder}': {', '.join(missing)}"
+                except Exception as list_err:
+                    inspect_error = f"Failed to inspect storage folder '{folder}': {str(list_err)}"
+            
+            if located_bg_path and located_coords_path:
+                try:
+                    bg_pdf_bytes = supabase.storage.from_("templates").download(located_bg_path)
+                    coords_json_bytes = supabase.storage.from_("templates").download(located_coords_path)
+                    print(f"Using precompiled overlay dynamic generation for {cert_code} (batch {batch_id})")
+                except Exception as e:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Template files missing for batch {batch_id}: {str(e)} (bg_path={located_bg_path}, coords_path={located_coords_path})"
+                    )
+            else:
+                # Raise clean 404 template missing error instead of raw 500
                 raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Precompiled download failed: {str(e)} (bg_path={bg_pdf_path}, coords_path={coords_json_path})"
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Template files missing for batch {batch_id}. Details: {inspect_error or 'Folder not found in templates storage bucket'}"
                 )
 
         if bg_pdf_bytes and coords_json_bytes:
