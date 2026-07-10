@@ -1771,16 +1771,9 @@ async def get_dynamic_pdf(cert_code: str):
                     coords_json_bytes = supabase.storage.from_("templates").download(located_coords_path)
                     print(f"Using precompiled overlay dynamic generation for {cert_code} (batch {batch_id})")
                 except Exception as e:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f"Template files missing for batch {batch_id}: {str(e)} (bg_path={located_bg_path}, coords_path={located_coords_path})"
-                    )
+                    print(f"Failed to download precompiled template files for batch {batch_id}: {e}. Falling back to legacy rendering...")
             else:
-                # Raise clean 404 template missing error instead of raw 500
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Template files missing for batch {batch_id}. Details: {inspect_error or 'Folder not found in templates storage bucket'}"
-                )
+                print(f"Precompiled template files not found for batch {batch_id}. Details: {inspect_error or 'Folder not found'}. Falling back to legacy rendering...")
 
         if bg_pdf_bytes and coords_json_bytes:
             try:
@@ -1833,8 +1826,8 @@ async def get_dynamic_pdf(cert_code: str):
                     ext = ".html"
                 except Exception as dl_err:
                     raise HTTPException(
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail=f"Failed to retrieve template file from Storage bucket: {dl_err}"
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Template files missing for batch {batch_id}. Could not locate template file (PPTX/HTML) in storage."
                     )
 
         # 7. Convert and build PDF via legacy method
