@@ -12,4 +12,4 @@ pywin32; sys_platform == 'win32'
 python-pptx
 xhtml2pdf
 pypdf
-
+numpy==1.26.4
