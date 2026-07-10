@@ -1137,6 +1137,14 @@ def precompile_pptx_template(pptx_bytes: bytes) -> tuple:
                             "font_color": font_color
                         })
                         
+                    from pptx.enum.text import MSO_ANCHOR
+                    anchor = text_frame.vertical_anchor
+                    v_align = "top"
+                    if anchor == MSO_ANCHOR.MIDDLE:
+                        v_align = "middle"
+                    elif anchor == MSO_ANCHOR.BOTTOM:
+                        v_align = "bottom"
+
                     placeholders_metadata.append({
                         "type": "text",
                         "box": {
@@ -1145,6 +1153,7 @@ def precompile_pptx_template(pptx_bytes: bytes) -> tuple:
                             "width": width_pt,
                             "height": height_pt
                         },
+                        "vertical_anchor": v_align,
                         "paragraphs": paragraphs_meta
                     })
                 
@@ -1311,14 +1320,14 @@ def generate_overlay_pdf_bytes(
                 replaced_text = re.sub(r',([a-zA-Z])', r', \1', replaced_text)
                 replaced_text = re.sub(r'\s{2,}', ' ', replaced_text)
                 
-                # Resolve nested <font name="..."> tags in HTML
+                # Resolve nested <font face="..."> tags in HTML and map to correct attribute
                 def replace_font_tag(match):
                     font_attr = match.group(1)
                     is_bold = "bold" in font_attr.lower()
                     resolved = resolve_reportlab_font(font_attr, is_bold)
-                    return f'<font name="{resolved}">'
+                    return f'<font face="{resolved}">'
                 
-                replaced_text = re.sub(r'<font\s+name="([^"]+)">', replace_font_tag, replaced_text)
+                replaced_text = re.sub(r'<font\s+(?:name|face)="([^"]+)">', replace_font_tag, replaced_text)
                 
                 align_map = {"left": TA_LEFT, "center": TA_CENTER, "right": TA_RIGHT, "justify": TA_JUSTIFY}
                 alignment = align_map.get(p_meta.get("align"), TA_CENTER)
@@ -1334,13 +1343,29 @@ def generate_overlay_pdf_bytes(
                     name=f"Style_{uuid.uuid4().hex[:8]}",
                     fontName=font_resolved,
                     fontSize=font_size,
-                    leading=font_size * 1.25,
+                    leading=font_size * 1.15, # Tight leading to match PPTX line height
                     textColor=font_color,
-                    alignment=alignment
+                    alignment=alignment,
+                    spaceBefore=0,
+                    spaceAfter=0
                 )
                 
                 flowables.append(Paragraph(replaced_text, style))
                 
+            # Perform vertical alignment adjustment based on PowerPoint anchor alignment
+            v_align = p.get("vertical_anchor", "middle" if len(flowables) == 1 else "top")
+            total_occupied_height = 0
+            for f in flowables:
+                _, h = f.wrap(width_pt, height_pt)
+                total_occupied_height += h
+                
+            if total_occupied_height < height_pt:
+                if v_align == "middle":
+                    bottom_pt = bottom_pt + (height_pt - total_occupied_height) / 2
+                    height_pt = total_occupied_height
+                elif v_align == "bottom":
+                    height_pt = total_occupied_height
+                    
             frame = Frame(left_pt, bottom_pt, width_pt, height_pt,
                           leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
             
@@ -1926,7 +1951,12 @@ async def get_pdf_bytes_for_certificate(cert_code: str) -> bytes:
             batch_id = intern.get("batch_id") or batch_id
 
     if not batch_id:
-        batch_id = "slot-1"
+        if cert_type == "lor":
+            batch_id = "slot-2"
+        elif cert_type == "experience":
+            batch_id = "slot-3"
+        else:
+            batch_id = "slot-1"
 
     replacements = {
         "<<NAME>>": intern_name or "",
@@ -2155,7 +2185,12 @@ async def get_dynamic_pdf(cert_code: str):
                 batch_id = intern.get("batch_id") or batch_id
 
         if not batch_id:
-            batch_id = "slot-1"
+            if cert_type == "lor":
+                batch_id = "slot-2"
+            elif cert_type == "experience":
+                batch_id = "slot-3"
+            else:
+                batch_id = "slot-1"
 
         # Prepare replacements
         replacements = {
