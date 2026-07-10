@@ -1182,6 +1182,7 @@ async def create_batch(
     issue_date: str = Form(...),
     lor_template: Optional[UploadFile] = File(None),
     experience_template: Optional[UploadFile] = File(None),
+    internship_template: Optional[UploadFile] = File(None)
 ):
     batch_id = batch_id.strip()
     if not supabase:
