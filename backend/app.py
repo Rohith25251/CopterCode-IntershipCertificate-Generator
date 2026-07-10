@@ -101,13 +101,20 @@ async def convert_pptx_to_pdf_bytes_async(pptx_bytes: bytes) -> bytes:
         out_dir = os.path.dirname(os.path.abspath(temp_pptx.name))
         try:
             cmd = ["soffice", "--headless", "--convert-to", "pdf", os.path.abspath(temp_pptx.name), "--outdir", out_dir]
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await proc.communicate()
-            if proc.returncode != 0:
+            use_fallback = False
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await proc.communicate()
+                if proc.returncode != 0:
+                    use_fallback = True
+            except Exception:
+                use_fallback = True
+                
+            if use_fallback:
                 if HAS_WIN32COM:
                     import pythoncom
                     pythoncom.CoInitialize()
@@ -130,7 +137,7 @@ async def convert_pptx_to_pdf_bytes_async(pptx_bytes: bytes) -> bytes:
                         print(f"Async Windows COM fallback failed: {com_err}")
                     finally:
                         pythoncom.CoUninitialize()
-                raise ValueError(f"LibreOffice conversion failed (returncode {proc.returncode}): {stderr.decode() or stdout.decode()}")
+                raise ValueError("LibreOffice conversion failed and Windows COM PowerPoint fallback is not available")
                 
             base_name = os.path.splitext(os.path.basename(temp_pptx.name))[0]
             lo_pdf_path = os.path.join(out_dir, f"{base_name}.pdf")
@@ -1175,13 +1182,30 @@ def precompile_pptx_template(pptx_bytes: bytes) -> tuple:
 
 
 def replace_tokens(template_str: str, replacements: dict) -> str:
+    import html
     replaced = template_str
     for key, val in replacements.items():
-        replaced = replaced.replace(key, val)
-        curly_key = key.replace("<<", "{{").replace(">>", "}}")
-        replaced = replaced.replace(curly_key, val)
-        guill_key = key.replace("<<", "«").replace(">>", "»")
-        replaced = replaced.replace(guill_key, val)
+        # Escape the replacement value so it is safe for ReportLab's HTML parser
+        escaped_val = html.escape(str(val)) if val is not None else ""
+        
+        # Replace the raw key
+        replaced = replaced.replace(key, escaped_val)
+        
+        # Replace the key with only ampersand escaped (matching get_paragraph_html)
+        amp_key = key.replace("&", "&amp;")
+        replaced = replaced.replace(amp_key, escaped_val)
+        
+        # Replace the fully HTML-escaped key
+        escaped_key = html.escape(key)
+        replaced = replaced.replace(escaped_key, escaped_val)
+        
+        # Also replace curly brace and French quote formatting
+        for k in (key, amp_key, escaped_key):
+            curly_key = k.replace("<<", "{{").replace(">>", "}}")
+            replaced = replaced.replace(curly_key, escaped_val)
+            guill_key = k.replace("<<", "«").replace(">>", "»")
+            replaced = replaced.replace(guill_key, escaped_val)
+            
     return replaced
 
 
@@ -1219,6 +1243,18 @@ def generate_overlay_pdf_bytes(
     slide_height = coords.get("slide_height", 540.0)
     placeholders = coords.get("placeholders", [])
     
+    # Extract matching font family and color from template text placeholders to match formatting
+    text_font_name = "Arial"
+    text_font_color = "#000000"
+    for p_item in placeholders:
+        if p_item.get("type") == "text":
+            paragraphs = p_item.get("paragraphs", [])
+            if paragraphs:
+                text_font_name = paragraphs[0].get("font_name", "Arial")
+                text_font_color = paragraphs[0].get("font_color", "#000000")
+                break
+    resolved_scan_font = resolve_reportlab_font(text_font_name, font_bold=False)
+    
     overlay_io = io.BytesIO()
     can = canvas.Canvas(overlay_io, pagesize=(slide_width, slide_height))
     
@@ -1235,7 +1271,35 @@ def generate_overlay_pdf_bytes(
         bottom_pt = slide_height - (top_pt + height_pt)
         
         if p_type == "qr" and qr_reader:
-            can.drawImage(qr_reader, left_pt, bottom_pt, width_pt, height_pt)
+            # Replicate PPTX QR sizing and alignment override logic to prevent stretched/distorted QR codes.
+            # Standard size is 1.15 in = 82.8 pt
+            qr_size = 82.8
+            
+            # Horizontally align:
+            # If the placeholder textbox is abnormally wide (e.g. > 180 pt / 2.5 inches), align the QR image to its left edge.
+            # Otherwise, center it horizontally within the textbox.
+            if width_pt > 180.0:
+                qr_left = left_pt
+            else:
+                qr_left = left_pt + (width_pt - qr_size) / 2
+                
+            # Vertically align:
+            # Center the QR image vertically on the textbox line.
+            qr_bottom = (slide_height - top_pt - height_pt / 2) - qr_size / 2
+            
+            can.drawImage(qr_reader, qr_left, qr_bottom, qr_size, qr_size)
+            
+            # Draw "Scan to Verify" text centered at the bottom of the QR code
+            can.saveState()
+            can.setFont(resolved_scan_font, 7.5) # Elegant matching font size
+            from reportlab.lib.colors import HexColor
+            can.setFillColor(HexColor(text_font_color))
+            # Center of the QR code horizontally:
+            scan_x = qr_left + qr_size / 2
+            # Vertically below the bottom of the QR code:
+            scan_y = qr_bottom - 11.0
+            can.drawCentredString(scan_x, scan_y, "Scan to Verify")
+            can.restoreState()
         elif p_type == "text":
             paragraphs = p.get("paragraphs", [])
             flowables = []

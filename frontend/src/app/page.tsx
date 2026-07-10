@@ -276,14 +276,16 @@ export default function AdminDashboard() {
   const [selectedDomain, setSelectedDomain] = useState("");
   const [selectedCollege, setSelectedCollege] = useState("");
   const [selectedBatch, setSelectedBatch] = useState("");
+  const [selectedProject, setSelectedProject] = useState("");
 
   // Dynamically calculate stats and unique filter values from historyCerts
-  const { batchCounts, totalUniqueInterns, uniqueDepts, uniqueDomains, uniqueColleges, uniqueBatches } = React.useMemo(() => {
+  const { batchCounts, totalUniqueInterns, uniqueDepts, uniqueDomains, uniqueColleges, uniqueBatches, uniqueProjects } = React.useMemo(() => {
     const internMap = new Map<string, { name: string; email: string; batch: string }>();
     const depts = new Set<string>();
     const domains = new Set<string>();
     const colleges = new Set<string>();
     const batches = new Set<string>();
+    const projects = new Set<string>();
 
     historyCerts.forEach((c) => {
       // Collect raw values for unique filters
@@ -298,6 +300,9 @@ export default function AdminDashboard() {
       
       const b = c.month || c.intern?.month;
       if (b) batches.add(b);
+
+      const p = c.project || c.intern?.project;
+      if (p) projects.add(p);
 
       // Collect for unique intern grouping
       const internId = c.intern_id || `${c.name || ''}-${c.intern?.email || ''}`;
@@ -326,6 +331,7 @@ export default function AdminDashboard() {
       uniqueDomains: Array.from(domains).sort(),
       uniqueColleges: Array.from(colleges).sort(),
       uniqueBatches: Array.from(batches).sort(),
+      uniqueProjects: Array.from(projects).sort(),
     };
   }, [historyCerts]);
 
@@ -1720,7 +1726,7 @@ export default function AdminDashboard() {
                 </div>
                 
                 {/* Clear All Filters Button */}
-                {(historyQuery || selectedDept || selectedDomain || selectedCollege || selectedBatch) && (
+                {(historyQuery || selectedDept || selectedDomain || selectedCollege || selectedBatch || selectedProject) && (
                   <button
                     onClick={() => {
                       setHistoryQuery("");
@@ -1728,6 +1734,7 @@ export default function AdminDashboard() {
                       setSelectedDomain("");
                       setSelectedCollege("");
                       setSelectedBatch("");
+                      setSelectedProject("");
                     }}
                     className="flex items-center justify-center gap-1.5 px-4 py-2.5 border border-dashed border-red-200 text-red-650 bg-red-50/30 hover:bg-red-50 hover:border-red-300 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
                   >
@@ -1738,7 +1745,7 @@ export default function AdminDashboard() {
               </div>
 
               {/* Dynamic Dropdowns Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 {/* Batch Filter */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Batch</label>
@@ -1787,6 +1794,24 @@ export default function AdminDashboard() {
                       <option value="">All Domains</option>
                       {uniqueDomains.map((r) => (
                         <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Internship & Live Project Area Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Internship & Live Project Area</label>
+                  <div className="relative">
+                    <select
+                      value={selectedProject}
+                      onChange={(e) => setSelectedProject(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-3 py-2.5 pr-8 appearance-none text-zinc-700 outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all cursor-pointer"
+                    >
+                      <option value="">All Areas</option>
+                      {uniqueProjects.map((p) => (
+                        <option key={p} value={p}>{p}</option>
                       ))}
                     </select>
                     <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
@@ -1846,6 +1871,10 @@ export default function AdminDashboard() {
                   // Domain (Role) filter
                   const r = c.role || c.intern?.role;
                   if (selectedDomain && r !== selectedDomain) return false;
+
+                  // Internship & Live Project Area filter
+                  const proj = c.project || c.intern?.project;
+                  if (selectedProject && proj !== selectedProject) return false;
 
                   // College filter
                   const col = c.college || c.intern?.college;
