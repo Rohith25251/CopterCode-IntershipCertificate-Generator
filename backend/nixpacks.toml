@@ -18,6 +18,7 @@ aptPkgs = [
 ]
 
 [env]
+HOME = "/tmp"
 LD_LIBRARY_PATH = "/nix/profile/lib:/app/.nix-profile/lib:/root/.nix-profile/lib:/usr/lib/x86_64-linux-gnu"
 
 [phases.build]
@@ -25,5 +26,6 @@ cmds = [
   "pip install -r requirements.txt",
   "mkdir -p ~/.local/share/fonts",
   "cp fonts/*.ttf ~/.local/share/fonts/ || true",
-  "fc-cache -f -v"
+  "fc-cache -f -v",
+  "soffice --headless --terminate_after_init --env:UserInstallation=file:///tmp/lo_profile_warmup || true"
 ]
