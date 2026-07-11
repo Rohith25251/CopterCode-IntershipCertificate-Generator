@@ -109,11 +109,20 @@ def export_pptx_to_pdf(pptx_path: str, output_dir: str) -> str:
         "soffice",
         "--headless",
         "--norestore",
+        "--nofirststartwizard",
+        "--nologo",
+        "--nodefault",
+        "--invisible",
         "--convert-to", "pdf",
         "--outdir", output_dir,
         f"--env:UserInstallation=file://{profile_dir}",
         pptx_path,
     ]
+
+    # Explicitly set HOME environment variable to /tmp to prevent LibreOffice
+    # from failing when trying to write to non-writable Nixpacks/Dokploy directories.
+    env = os.environ.copy()
+    env["HOME"] = "/tmp"
 
     try:
         subprocess.run(
@@ -122,6 +131,7 @@ def export_pptx_to_pdf(pptx_path: str, output_dir: str) -> str:
             text=True,
             timeout=60,  # hard timeout — do not let a stuck soffice process hang
             check=True,
+            env=env,
         )
     except subprocess.TimeoutExpired:
         raise RuntimeError(
@@ -129,7 +139,7 @@ def export_pptx_to_pdf(pptx_path: str, output_dir: str) -> str:
         )
     except subprocess.CalledProcessError as e:
         raise RuntimeError(
-            f"LibreOffice conversion failed: {e.stderr}"
+            f"LibreOffice conversion failed with exit code {e.returncode}.\nStdout: {e.stdout}\nStderr: {e.stderr}"
         )
     finally:
         # Always clean up the temp profile directory, even on failure
