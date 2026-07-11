@@ -516,29 +516,35 @@ class LayoutEngine:
                 
                 for p in shape["resolved_paragraphs"]:
                     align = p["align"]
+                    # Check if paragraph is empty (no runs or all runs have empty text)
+                    has_content = any(r.get("resolved_text", "").strip() for r in p.get("resolved_runs", []))
                     html_parts.append(f"      <p style='text-align: {align};'>")
                     
-                    for r in p["resolved_runs"]:
-                        span_style = f"color: {r['color']}; "
-                        if r["font_size"] != shape["font_size"]:
-                            span_style += f"font-size: {r['font_size'] * best_scale}pt; "
-                        if r["font_name"]:
-                            r_font_clean = clean_font_family(r["font_name"])
-                            span_style += f"font-family: '{r_font_clean}', Arial, sans-serif; "
+                    if not has_content:
+                        # Empty paragraph — render non-breaking space so it gets full line-height
+                        html_parts.append(f"        <span>&nbsp;</span>")
+                    else:
+                        for r in p["resolved_runs"]:
+                            span_style = f"color: {r['color']}; "
+                            if r["font_size"] != shape["font_size"]:
+                                span_style += f"font-size: {r['font_size'] * best_scale}pt; "
+                            if r["font_name"]:
+                                r_font_clean = clean_font_family(r["font_name"])
+                                span_style += f"font-family: '{r_font_clean}', Arial, sans-serif; "
+                                
+                            classes = []
+                            if r["bold"]:
+                                classes.append("run-bold")
+                            if r["italic"]:
+                                classes.append("run-italic")
+                            if r.get("underline"):
+                                classes.append("run-underline")
+                                
+                            class_str = f"class='{' '.join(classes)}'" if classes else ""
+                            text_escaped = r["resolved_text"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br/>")
                             
-                        classes = []
-                        if r["bold"]:
-                            classes.append("run-bold")
-                        if r["italic"]:
-                            classes.append("run-italic")
-                        if r.get("underline"):
-                            classes.append("run-underline")
-                            
-                        class_str = f"class='{' '.join(classes)}'" if classes else ""
-                        text_escaped = r["resolved_text"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br/>")
-                        
-                        html_parts.append(f'        <span {class_str} style="{span_style}">{text_escaped}</span>')
-                        
+                            html_parts.append(f'        <span {class_str} style="{span_style}">{text_escaped}</span>')
+                    
                     html_parts.append("      </p>")
                 html_parts.append("    </div>")
                 
