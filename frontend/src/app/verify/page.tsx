@@ -309,7 +309,7 @@ function VerifyContent() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <a 
                 href={resolvedPdfUrl}
                 download
@@ -325,6 +325,27 @@ function VerifyContent() {
               >
                 <ExternalLink className="w-4 h-4" /> Open In Tab
               </a>
+              {(() => {
+                const issueRaw = certificate.issue_date || certificate.created_at || "";
+                const issueDate = issueRaw ? new Date(issueRaw) : null;
+                const issueYear = issueDate && !isNaN(issueDate.getTime()) ? issueDate.getFullYear() : "";
+                const issueMonth = issueDate && !isNaN(issueDate.getTime()) ? issueDate.getMonth() + 1 : "";
+                const certName = encodeURIComponent(displayCert.role || "Internship Certificate");
+                const certUrl = encodeURIComponent(`${typeof window !== "undefined" ? window.location.origin : "https://coptercode.co.in"}/verify?id=${certificate.cert_code}`);
+                const certId = encodeURIComponent(certificate.cert_code);
+                const linkedInUrl = `https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME&name=${certName}&organizationName=CopterCode&issueYear=${issueYear}&issueMonth=${issueMonth}&certUrl=${certUrl}&certId=${certId}`;
+                return (
+                  <a
+                    href={linkedInUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 bg-[#0077B5] hover:bg-[#006097] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all duration-300"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+                    Add Certification
+                  </a>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -457,45 +478,13 @@ function VerifyContent() {
               Document Preview
             </h3>
             
-            <div className="flex-1 w-full bg-zinc-50 rounded-2xl overflow-hidden border border-zinc-200 relative group min-h-[320px] flex items-center justify-center p-6 text-center">
-              {isMobile ? (
-                <div className="flex flex-col items-center justify-center max-w-sm space-y-4">
-                  <div className="h-14 w-14 rounded-2xl bg-violet-50 text-[#5844e9] border border-violet-100 flex items-center justify-center shadow-inner">
-                    <FileDown className="w-7 h-7" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-zinc-800">
-                      Live Preview Not Available on Mobile
-                    </h4>
-                    <p className="text-xs text-zinc-500 mt-2 leading-relaxed">
-                      Mobile browsers do not support inline PDF viewing. Please open the document in a new tab or download the file directly to view it.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
-                    <a
-                      href={resolvedPdfUrl}
-                      download
-                      className="inline-flex items-center gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-750 font-extrabold text-[11px] px-3.5 py-2 rounded-xl border border-zinc-200 transition-colors shadow-sm cursor-pointer"
-                    >
-                      <FileDown className="w-3.5 h-3.5" /> Download PDF
-                    </a>
-                    <a
-                      href={resolvedPdfUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-extrabold text-[11px] px-3.5 py-2 rounded-xl shadow-md transition-all duration-300 cursor-pointer"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" /> Open In Tab
-                    </a>
-                  </div>
-                </div>
-              ) : (
-                <iframe 
-                  src={`${resolvedPdfUrl}#toolbar=0`} 
-                  className="w-full h-full border-0 absolute inset-0"
-                  title="Certificate PDF Viewer"
-                />
-              )}
+            <div className="flex-1 w-full bg-zinc-50 rounded-2xl overflow-hidden border border-zinc-200 relative group min-h-[420px]">
+              <iframe 
+                src={`https://docs.google.com/viewer?url=${encodeURIComponent(resolvedPdfUrl)}&embedded=true`}
+                className="w-full h-full border-0 absolute inset-0"
+                title="Certificate PDF Viewer"
+                allow="fullscreen"
+              />
             </div>
           </div>
 
