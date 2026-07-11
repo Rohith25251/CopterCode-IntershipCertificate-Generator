@@ -140,6 +140,7 @@ def process_template(template_name, pptx_path):
                     "font_size": r.font.size.pt if r.font.size else font_size,
                     "bold": bool(r.font.bold),
                     "italic": bool(r.font.italic),
+                    "underline": bool(r.font.underline),
                     "color": r_color
                 })
             paragraphs_cfg.append({

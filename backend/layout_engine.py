@@ -195,7 +195,7 @@ class LayoutEngine:
             shape_font_name = shape.get("font_name", "Calibri")
             font_path = find_font_file(shape_font_name) or default_font_path
             
-            if not shape.get("is_flow", True):
+            if not shape.get("is_flow", True) or shape["height"] < 0.5:
                 best_scale = 1.0
                 shape["best_scale"] = 1.0
                 shape["required_height"] = shape["height"]
@@ -334,6 +334,9 @@ class LayoutEngine:
             "    .run-italic {",
             "      font-style: italic;",
             "    }",
+            "    .run-underline {",
+            "      text-decoration: underline;",
+            "    }",
             "  </style>",
             "</head>",
             "<body>",
@@ -392,8 +395,11 @@ class LayoutEngine:
                     f"font-size: {default_size}pt; "
                     f"color: {shape['color']}; "
                 )
-                if not shape.get("is_flow", True) and "\n" not in shape.get("original_text", ""):
-                    style_str += "white-space: nowrap; overflow: visible; "
+                if not shape.get("is_flow", True):
+                    # Prevent wrapping and remove vertical padding to avoid overflow clipping at page bottom
+                    style_str += "overflow: visible; padding-top: 0; padding-bottom: 0; "
+                    if "\n" not in shape.get("original_text", ""):
+                        style_str += "white-space: nowrap; "
                 
                 html_parts.append(f"    <div class='text-box' style='{style_str}'>")
                 
@@ -413,6 +419,8 @@ class LayoutEngine:
                             classes.append("run-bold")
                         if r["italic"]:
                             classes.append("run-italic")
+                        if r.get("underline"):
+                            classes.append("run-underline")
                             
                         class_str = f"class='{' '.join(classes)}'" if classes else ""
                         text_escaped = r["resolved_text"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br/>")
