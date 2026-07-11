@@ -117,7 +117,8 @@ def estimate_text_height(text, font_path, font_size_pt, max_width_in):
             
     # Standard PowerPoint line spacing (1.25x font size)
     line_height_in = (font_size_pt * 1.25) / 72
-    return total_lines * line_height_in
+    # Add a safety buffer of 0.8 lines to protect against Pango/WeasyPrint wrapping/kerning differences
+    return (total_lines + 0.8) * line_height_in
 
 def horiz_overlap(s1, s2):
     # Returns True if s1 and s2 overlap horizontally

@@ -440,7 +440,9 @@ def is_body_text_shape(shape):
 async def get_or_create_html_template(batch_id: str, cert_type: str, template_bytes: bytes) -> str:
     # Normalize batch_id to make it safe as a directory name
     safe_batch = re.sub(r'[\\/*?:"<>|\s]', "_", batch_id.strip()).lower()
-    cache_dir = os.path.abspath(f"templates_cache/{safe_batch}/{cert_type}")
+    import hashlib
+    h = hashlib.md5(template_bytes).hexdigest()[:8]
+    cache_dir = os.path.abspath(f"templates_cache/{safe_batch}/{cert_type}_{h}")
     
     layout_json_path = os.path.join(cache_dir, "layout.json")
     bg_png_path = os.path.join(cache_dir, "background.png")
