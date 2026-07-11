@@ -983,7 +983,9 @@ def generate_certificate_from_html_bytes(html_bytes: bytes, replacements: dict, 
     qr_img_tag = f"data:image/png;base64,{qr_base64}"
     
     # Standardize replacements to handle both <<KEY>> and {{KEY}} formats
-    for key, val in list(replacements.items()):
+    # Sort replacements by key length descending to prevent substring collisions (e.g. <<PROJECT>> matching inside <<INTERNSHIP & LIVE PROJECT AREA>>)
+    sorted_replacements = sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)
+    for key, val in sorted_replacements:
         # Replace <<KEY>>
         html_text = html_text.replace(key, val)
         # Also replace curly brace format e.g. {{KEY}}
@@ -1194,10 +1196,11 @@ def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, 
                             pass
                     continue
 
-                # Standard replacements on text runs
                 for paragraph in text_frame.paragraphs:
                     for run in paragraph.runs:
-                        for key, val in replacements.items():
+                        # Sort replacements by key length descending to prevent substring collisions (e.g. <<PROJECT>> matching inside <<INTERNSHIP & LIVE PROJECT AREA>>)
+                        sorted_replacements = sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)
+                        for key, val in sorted_replacements:
                             has_match = False
                             actual_key = None
 
@@ -1624,7 +1627,9 @@ def precompile_pptx_template(pptx_bytes: bytes) -> tuple:
 def replace_tokens(template_str: str, replacements: dict) -> str:
     import html
     replaced = template_str
-    for key, val in replacements.items():
+    # Sort replacements by key length descending to prevent substring collisions (e.g. <<PROJECT>> matching inside <<INTERNSHIP & LIVE PROJECT AREA>>)
+    sorted_replacements = sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)
+    for key, val in sorted_replacements:
         # Escape the replacement value so it is safe for ReportLab's HTML parser
         escaped_val = html.escape(str(val)) if val is not None else ""
         

@@ -231,7 +231,9 @@ class LayoutEngine:
                 for r in p["runs"]:
                     r_text = r["text"]
                     # Replace placeholders
-                    for key, val in replacements.items():
+                    # Sort replacements by key length descending to prevent substring collisions (e.g. <<PROJECT>> matching inside <<INTERNSHIP & LIVE PROJECT AREA>>)
+                    sorted_replacements = sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)
+                    for key, val in sorted_replacements:
                         r_text = r_text.replace(key, str(val))
                         guill_key = key.replace("<<", "«").replace(">>", "»")
                         r_text = r_text.replace(guill_key, str(val))
