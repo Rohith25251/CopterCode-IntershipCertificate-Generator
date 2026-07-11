@@ -1,5 +1,79 @@
 import io
 import os
+import sys
+import ctypes
+
+def locate_and_preload_nix_libraries():
+    # 1. Determine Nix profile directories
+    paths = [
+        "/app/.nix-profile/lib",
+        "/root/.nix-profile/lib",
+        "/nix/profile/lib",
+    ]
+    
+    # 2. Check if a path contains gobject library
+    lib_dir = None
+    for p in paths:
+        if os.path.exists(p):
+            try:
+                files = os.listdir(p)
+                if any("libgobject" in f for f in files):
+                    lib_dir = p
+                    break
+            except Exception:
+                pass
+                
+    if not lib_dir:
+        # Fallback to search inside /nix/store
+        nix_store = "/nix/store"
+        if os.path.exists(nix_store):
+            try:
+                for entry in os.scandir(nix_store):
+                    if entry.is_dir() and "glib-" in entry.name:
+                        test_p = os.path.join(entry.path, "lib")
+                        if os.path.exists(test_p) and any("libgobject" in f for f in os.listdir(test_p)):
+                            lib_dir = test_p
+                            break
+            except Exception:
+                pass
+                
+    if lib_dir:
+        print(f"[env] Found Nix library directory: {lib_dir}")
+        # Update LD_LIBRARY_PATH in-process so ctypes.util.find_library finds it
+        current_ld = os.environ.get("LD_LIBRARY_PATH", "")
+        if current_ld:
+            os.environ["LD_LIBRARY_PATH"] = f"{lib_dir}:{current_ld}"
+        else:
+            os.environ["LD_LIBRARY_PATH"] = lib_dir
+            
+        # Also pre-load libraries globally so child dlopen calls resolve automatically
+        libs_to_load = [
+            "libglib-2.0.so",
+            "libgobject-2.0.so",
+            "libcairo.so.2",
+            "libpango-1.0.so.0",
+            "libpangocairo-1.0.so.0"
+        ]
+        for lib in libs_to_load:
+            lib_path = os.path.join(lib_dir, lib)
+            if not os.path.exists(lib_path):
+                try:
+                    for f in os.listdir(lib_dir):
+                        if f.startswith(lib.split(".so")[0] + ".so"):
+                            lib_path = os.path.join(lib_dir, f)
+                            break
+                except Exception:
+                    pass
+            if os.path.exists(lib_path):
+                try:
+                    ctypes.CDLL(lib_path, mode=ctypes.RTLD_GLOBAL)
+                    print(f"[env] Pre-loaded {lib} successfully from {lib_path}")
+                except Exception as load_err:
+                    print(f"[env] Failed to pre-load {lib} from {lib_path}: {load_err}")
+
+# Execute library preloading before any other imports occur
+locate_and_preload_nix_libraries()
+
 import uuid
 import re
 import urllib.request
