@@ -351,7 +351,8 @@ async def get_or_create_html_template(batch_id: str, cert_type: str, template_by
             for shape in slide.shapes:
                 if not shape.has_text_frame:
                     continue
-                if not is_body_text_shape(shape):
+                text = shape.text_frame.text.strip()
+                if not text:
                     continue
                     
                 left_in = shape.left.inches
@@ -399,6 +400,7 @@ async def get_or_create_html_template(batch_id: str, cert_type: str, template_by
                         "runs": runs_cfg
                     })
                     
+                is_flow = is_body_text_shape(shape)
                 shape_cfg = {
                     "id": shape.shape_id,
                     "name": shape.name,
@@ -413,7 +415,8 @@ async def get_or_create_html_template(batch_id: str, cert_type: str, template_by
                     "italic": italic,
                     "align": align,
                     "original_text": shape.text_frame.text,
-                    "paragraphs": paragraphs_cfg
+                    "paragraphs": paragraphs_cfg,
+                    "is_flow": is_flow
                 }
                 layout_data["shapes"].append(shape_cfg)
                 shapes_to_clear.append(shape)

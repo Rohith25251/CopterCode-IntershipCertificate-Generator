@@ -195,23 +195,28 @@ class LayoutEngine:
             shape_font_name = shape.get("font_name", "Calibri")
             font_path = find_font_file(shape_font_name) or default_font_path
             
-            original_size = shape["font_size"]
-            scale = 1.0
-            best_scale = 0.6
-            
-            while scale >= 0.6:
-                # Estimate text block height at this scaled font size
-                est_h = estimate_text_height(shape["resolved_text"], font_path, original_size * scale, usable_w)
-                total_h = est_h + margin_t + margin_b
-                if total_h <= declared_h:
-                    best_scale = scale
-                    break
-                scale -= 0.05
+            if not shape.get("is_flow", True):
+                best_scale = 1.0
+                shape["best_scale"] = 1.0
+                shape["required_height"] = shape["height"]
+            else:
+                original_size = shape["font_size"]
+                scale = 1.0
+                best_scale = 0.6
                 
-            shape["best_scale"] = best_scale
-            # Required height at the scaled font size (at least 60% readability floor)
-            est_h = estimate_text_height(shape["resolved_text"], font_path, original_size * best_scale, usable_w)
-            shape["required_height"] = est_h + margin_t + margin_b
+                while scale >= 0.6:
+                    # Estimate text block height at this scaled font size
+                    est_h = estimate_text_height(shape["resolved_text"], font_path, original_size * scale, usable_w)
+                    total_h = est_h + margin_t + margin_b
+                    if total_h <= declared_h:
+                        best_scale = scale
+                        break
+                    scale -= 0.05
+                    
+                shape["best_scale"] = best_scale
+                # Required height at the scaled font size (at least 60% readability floor)
+                est_h = estimate_text_height(shape["resolved_text"], font_path, original_size * best_scale, usable_w)
+                shape["required_height"] = est_h + margin_t + margin_b
             
         # 4. Vertical layout shifting & Clearance propagation
         # Sort shapes from top to bottom based on original top coordinates
@@ -219,7 +224,7 @@ class LayoutEngine:
         
         for i in range(len(shapes_sorted)):
             shape = shapes_sorted[i]
-            if shape["is_qr"]:
+            if shape["is_qr"] or not shape.get("is_flow", True):
                 continue
                 
             # If shape is taller than its initial height, it grows
@@ -227,16 +232,16 @@ class LayoutEngine:
                 delta_y = shape["required_height"] - shape["height"]
                 shape["height"] = shape["required_height"]
                 
-                # Shift all overlapping downstream shapes down
+                # Shift all overlapping downstream FLOW shapes down
                 for j in range(i + 1, len(shapes_sorted)):
                     other = shapes_sorted[j]
-                    if horiz_overlap(shape, other):
+                    if other.get("is_flow", True) and horiz_overlap(shape, other):
                         other["top"] = other["top"] + delta_y
                         
-            # Enforce 0.08 inch clearance gaps
+            # Enforce 0.08 inch clearance gaps for FLOW shapes
             for j in range(i + 1, len(shapes_sorted)):
                 other = shapes_sorted[j]
-                if horiz_overlap(shape, other):
+                if other.get("is_flow", True) and horiz_overlap(shape, other):
                     gap = other["top"] - (shape["top"] + shape["height"])
                     if gap < 0.08:
                         extra_shift = 0.08 - gap
@@ -305,7 +310,7 @@ class LayoutEngine:
             "      position: absolute;",
             "      z-index: 10;",
             "      box-sizing: border-box;",
-            "      overflow: hidden;",
+            "      overflow: visible;",
             "      padding: 0.05in 0.1in;",
             "    }",
             "    .text-box p {",
@@ -381,6 +386,8 @@ class LayoutEngine:
                     f"font-size: {default_size}pt; "
                     f"color: {shape['color']}; "
                 )
+                if not shape.get("is_flow", True) and "\n" not in shape.get("original_text", ""):
+                    style_str += "white-space: nowrap; overflow: visible; "
                 
                 html_parts.append(f"    <div class='text-box' style='{style_str}'>")
                 

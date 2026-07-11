@@ -90,8 +90,8 @@ def process_template(template_name, pptx_path):
         if not shape.has_text_frame:
             continue
             
-        text = shape.text_frame.text
-        if not is_body_text_shape(shape):
+        text = shape.text_frame.text.strip()
+        if not text:
             continue
             
         print(f"  Exporting text shape {shape.shape_id} ({shape.name}) with text: {repr(text[:50])}...")
@@ -144,6 +144,7 @@ def process_template(template_name, pptx_path):
                 "runs": runs_cfg
             })
             
+        is_flow = is_body_text_shape(shape)
         shape_cfg = {
             "id": shape.shape_id,
             "name": shape.name,
@@ -158,7 +159,8 @@ def process_template(template_name, pptx_path):
             "italic": italic,
             "align": align,
             "original_text": text,
-            "paragraphs": paragraphs_cfg
+            "paragraphs": paragraphs_cfg,
+            "is_flow": is_flow
         }
         
         layout_data["shapes"].append(shape_cfg)
