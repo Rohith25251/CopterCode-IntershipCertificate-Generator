@@ -21,6 +21,9 @@ def has_placeholder(text):
 def is_body_text_shape(shape):
     if not shape.has_text_frame:
         return False
+    # Exclude elements at the bottom of the page (footer area) from flowing
+    if shape.top.inches > 9.0:
+        return False
     text = shape.text_frame.text.strip()
     if not text:
         return False

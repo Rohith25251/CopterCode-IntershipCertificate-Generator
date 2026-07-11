@@ -295,6 +295,9 @@ def get_color_hex(run):
 def is_body_text_shape(shape):
     if not shape.has_text_frame:
         return False
+    # Exclude elements at the bottom of the page (footer area) from flowing
+    if shape.top.inches > 9.0:
+        return False
     text = shape.text_frame.text.strip()
     if not text:
         return False
@@ -511,6 +514,16 @@ async def convert_pptx_to_pdf_bytes_async(pptx_bytes: bytes) -> bytes:
             pass
 
 
+
+# Clear template cache on startup to force layout json re-generation
+try:
+    import shutil
+    cache_path = os.path.abspath("templates_cache")
+    if os.path.exists(cache_path):
+        shutil.rmtree(cache_path)
+        print("[env] Successfully cleared templates_cache on startup.")
+except Exception as cache_err:
+    print(f"[env] Warning: could not clear templates_cache: {cache_err}")
 
 app = FastAPI(title="Certificate Generator API")
 
