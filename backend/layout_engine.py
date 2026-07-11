@@ -207,6 +207,8 @@ class LayoutEngine:
             
         # 2. Perform replacements and calculate text frame heights & scaling
         for shape in shapes:
+            if shape.get("is_line", False):
+                continue
             # Check if this shape is the QR Code placeholder
             text_str = shape["original_text"]
             if "<<QR>>" in text_str or "«QR»" in text_str:
