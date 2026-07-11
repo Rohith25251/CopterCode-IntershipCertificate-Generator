@@ -12,8 +12,8 @@ nixPkgs = [
   "glib"
 ]
 
-[start]
-cmd = "LD_LIBRARY_PATH=/nix/profile/lib:/app/.nix-profile/lib:/root/.nix-profile/lib uvicorn app:app --host 0.0.0.0 --port 3000"
+[env]
+LD_LIBRARY_PATH = "/nix/profile/lib:/app/.nix-profile/lib:/root/.nix-profile/lib"
 
 [phases.build]
 cmds = [
