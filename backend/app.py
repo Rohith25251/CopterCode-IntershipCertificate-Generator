@@ -873,6 +873,14 @@ async def send_email_notification(
                                                         <td style="font-size: 13px; color: #cbd5e1;">
                                                             <a href="https://www.linkedin.com/company/coptercode/" target="_blank" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">LinkedIn</a>
                                                         </td>
+                                                        <td style="padding-right: 16px; padding-left: 16px; font-size: 13px; color: #334155;">|</td>
+                                                        <td style="padding-right: 16px; font-size: 13px; color: #cbd5e1;">
+                                                            <a href="tel:+918072193600" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">+91 8072 193 600</a>
+                                                        </td>
+                                                        <td style="padding-right: 16px; font-size: 13px; color: #334155;">|</td>
+                                                        <td style="font-size: 13px; color: #cbd5e1;">
+                                                            <a href="tel:04461329380" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">044 6132 9380</a>
+                                                        </td>
                                                     </tr>
                                                 </table>
                                             </td>
