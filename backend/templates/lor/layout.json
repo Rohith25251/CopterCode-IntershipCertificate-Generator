@@ -748,20 +748,20 @@
     {
       "id": 59,
       "name": "TextBox 59",
-      "left": 5.8,
-      "top": 8.3,
-      "width": 1.25,
-      "height": 1.25,
+      "left": 6.0545516185476815,
+      "top": 9.897900262467191,
+      "width": 7.713031496062992,
+      "height": 0.21209645669291338,
       "font_name": "Arial Bold",
       "font_size": 14.36,
       "color": "#000000",
       "bold": true,
       "italic": false,
-      "align": "center",
+      "align": "justify",
       "original_text": "<<QR>>",
       "paragraphs": [
         {
-          "align": "center",
+          "align": "justify",
           "runs": [
             {
               "text": "<<QR>>",
@@ -775,7 +775,7 @@
           ]
         }
       ],
-      "is_flow": false
+      "is_flow": true
     }
   ]
 }

@@ -224,21 +224,21 @@
       "top": 10.114739720034995,
       "width": 1.8830522747156606,
       "height": 0.9951891951006124,
-      "font_name": "Arial",
-      "font_size": 9.09,
+      "font_name": "Calibri",
+      "font_size": 14,
       "color": "#000000",
       "bold": false,
       "italic": false,
       "align": "left",
-      "original_text": "BEST REGARDS,\nKARTHIKEYAN SUNDHARESAN, HR TEAM HEAD,\nCOPTER CODE,",
+      "original_text": "BEST REGARDS,\nKARTHIKEYAN SUNDHARESAN,\nHR TEAM HEAD,\nCOPTER CODE.",
       "paragraphs": [
         {
           "align": "left",
           "runs": [
             {
               "text": "BEST REGARDS,",
-              "font_name": "Arial",
-              "font_size": 9.09,
+              "font_name": "Calibri",
+              "font_size": 14,
               "bold": false,
               "italic": false,
               "underline": false,
@@ -250,9 +250,9 @@
           "align": "left",
           "runs": [
             {
-              "text": "KARTHIKEYAN SUNDHARESAN, HR TEAM HEAD,",
-              "font_name": "Arial",
-              "font_size": 9.09,
+              "text": "KARTHIKEYAN SUNDHARESAN,",
+              "font_name": "Calibri",
+              "font_size": 14,
               "bold": false,
               "italic": false,
               "underline": false,
@@ -264,9 +264,23 @@
           "align": "left",
           "runs": [
             {
-              "text": "COPTER CODE,",
-              "font_name": "Arial",
-              "font_size": 9.09,
+              "text": "HR TEAM HEAD,",
+              "font_name": "Calibri",
+              "font_size": 14,
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "COPTER CODE.",
+              "font_name": "Calibri",
+              "font_size": 14,
               "bold": false,
               "italic": false,
               "underline": false,

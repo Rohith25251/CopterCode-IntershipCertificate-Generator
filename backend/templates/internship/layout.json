@@ -302,10 +302,6 @@
         },
         {
           "align": "justify",
-          "runs": []
-        },
-        {
-          "align": "justify",
           "runs": [
             {
               "text": "This is to notify",
@@ -415,7 +411,7 @@
       "bold": false,
       "italic": false,
       "align": "left",
-      "original_text": "BEST REGARDS,\nKARTHIKEYAN SUNDHARESAN,\nHR TEAM HEAD,\nCOPTER CODE.",
+      "original_text": "BEST REGARDS,\nKARTHIKEYAN SUNDHARESAN, COPTER CODE, hr@coptercode.co.in\n+91 96554 51382 www.Coptercode.co.in",
       "paragraphs": [
         {
           "align": "left",
@@ -435,7 +431,7 @@
           "align": "left",
           "runs": [
             {
-              "text": "KARTHIKEYAN SUNDHARESAN,",
+              "text": "KARTHIKEYAN SUNDHARESAN, COPTER CODE, hr@coptercode.co.in",
               "font_name": "Arial",
               "font_size": 9.09,
               "bold": false,
@@ -449,21 +445,7 @@
           "align": "left",
           "runs": [
             {
-              "text": "HR TEAM HEAD,",
-              "font_name": "Arial",
-              "font_size": 9.09,
-              "bold": false,
-              "italic": false,
-              "underline": false,
-              "color": "#000000"
-            }
-          ]
-        },
-        {
-          "align": "left",
-          "runs": [
-            {
-              "text": "COPTER CODE.",
+              "text": "+91 96554 51382 www.Coptercode.co.in",
               "font_name": "Arial",
               "font_size": 9.09,
               "bold": false,
