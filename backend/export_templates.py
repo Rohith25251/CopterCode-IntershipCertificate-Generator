@@ -63,6 +63,89 @@ def get_color_hex(run):
         pass
     return None
 
+_EMU_PER_INCH = 914400
+
+def get_shape_fill_color(shape):
+    """Extract the dominant fill color from a shape (including groups)."""
+    try:
+        a_ns = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+        for srgb in shape._element.iter(f'{{{a_ns}}}srgbClr'):
+            val = (srgb.get('val') or '').lower()
+            if val and val != 'ffffff':
+                return f'#{val}'
+    except Exception:
+        pass
+    return '#000000'
+
+def extract_group_text_children(group_shape):
+    """Extract text shapes from inside a GROUP shape with absolute slide coords."""
+    try:
+        a_ns = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+        el = group_shape._element
+        grp_sp_pr = next((c for c in el if c.tag.endswith('}grpSpPr')), None)
+        if grp_sp_pr is None: return []
+        xfrm = next((c for c in grp_sp_pr if c.tag.endswith('}xfrm')), None)
+        if xfrm is None: return []
+        ns = f'{{{a_ns}}}'
+        def _i(elem, attr, d=0): return int(elem.get(attr, d))
+        off = xfrm.find(f'{ns}off'); ext = xfrm.find(f'{ns}ext')
+        chOff = xfrm.find(f'{ns}chOff'); chExt = xfrm.find(f'{ns}chExt')
+        if any(x is None for x in [off, ext, chOff, chExt]): return []
+        gx = _i(off,'x'); gy = _i(off,'y'); gcx = _i(ext,'cx'); gcy = _i(ext,'cy')
+        cox = _i(chOff,'x'); coy = _i(chOff,'y')
+        ccx = _i(chExt,'cx',1) or 1; ccy = _i(chExt,'cy',1) or 1
+        sx = gcx/ccx; sy = gcy/ccy
+        try: child_shapes = group_shape.shapes
+        except Exception: return []
+        result = []
+        for child in child_shapes:
+            if not child.has_text_frame: continue
+            text = child.text_frame.text.strip()
+            if not text: continue
+            left_in = (gx + (child.left - cox) * sx) / _EMU_PER_INCH
+            top_in  = (gy + (child.top  - coy) * sy) / _EMU_PER_INCH
+            width_in = max(child.width * sx / _EMU_PER_INCH, 0.5)
+            height_in = max(child.height * sy / _EMU_PER_INCH, 0.2)
+            font_name = "Calibri"; font_size = 14
+            font_color = "#000000"; bold = False; italic = False; align = "left"
+            if child.text_frame.paragraphs:
+                p0 = child.text_frame.paragraphs[0]
+                align = get_alignment_str(p0)
+                if p0.runs:
+                    r0 = p0.runs[0]
+                    if r0.font.name: font_name = r0.font.name
+                    if r0.font.size: font_size = r0.font.size.pt
+                    c = get_color_hex(r0)
+                    if c: font_color = c
+                    bold = bool(r0.font.bold); italic = bool(r0.font.italic)
+            paragraphs_cfg = []
+            for p in child.text_frame.paragraphs:
+                runs_cfg = []
+                for r in p.runs:
+                    r_color = get_color_hex(r) or font_color
+                    runs_cfg.append({
+                        "text": r.text,
+                        "font_name": r.font.name or font_name,
+                        "font_size": r.font.size.pt if r.font.size else font_size,
+                        "bold": bool(r.font.bold), "italic": bool(r.font.italic),
+                        "underline": bool(r.font.underline), "color": r_color
+                    })
+                paragraphs_cfg.append({"align": get_alignment_str(p), "runs": runs_cfg})
+            result.append({
+                "id": child.shape_id if hasattr(child, 'shape_id') else 0,
+                "name": f"{group_shape.name}::{child.name}",
+                "left": left_in, "top": top_in,
+                "width": width_in, "height": height_in,
+                "font_name": font_name, "font_size": font_size,
+                "color": font_color, "bold": bold, "italic": italic,
+                "align": align, "original_text": text,
+                "paragraphs": paragraphs_cfg, "is_flow": (top_in <= 11.0)
+            })
+        return result
+    except Exception as e:
+        print(f"[Warning] extract_group_text_children failed for {group_shape.name}: {e}")
+        return []
+
 def process_template(template_name, pptx_path):
     print(f"\nProcessing template: {template_name} from {pptx_path}...")
     if not os.path.exists(pptx_path):
@@ -96,19 +179,22 @@ def process_template(template_name, pptx_path):
         t_in = shape.top.inches if hasattr(shape, "top") else 0
         if not shape.has_text_frame:
             if h_in < 0.25 and w_in > 1.0 and l_in >= 0:
+                line_color = get_shape_fill_color(shape)
                 shape_cfg = {
                     "id": shape.shape_id if hasattr(shape, "shape_id") else len(layout_data["shapes"]),
                     "name": shape.name,
-                    "left": l_in,
-                    "top": t_in,
-                    "width": w_in,
-                    "height": h_in,
-                    "is_line": True,
-                    "is_qr": False,
-                    "is_flow": t_in <= 11.0
+                    "left": l_in, "top": t_in, "width": w_in, "height": h_in,
+                    "is_line": True, "is_qr": False,
+                    "is_flow": t_in <= 11.0, "line_color": line_color
                 }
                 layout_data["shapes"].append(shape_cfg)
                 shapes_to_clear.append(shape)
+            elif shape.shape_type == 6 and 0.15 <= h_in <= 1.5 and 0.5 <= t_in <= 11.0:
+                group_children = extract_group_text_children(shape)
+                for child_cfg in group_children:
+                    layout_data["shapes"].append(child_cfg)
+                if group_children:
+                    shapes_to_clear.append(shape)
             continue
             
         text = shape.text_frame.text.strip()

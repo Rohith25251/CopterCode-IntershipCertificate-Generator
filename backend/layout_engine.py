@@ -411,7 +411,6 @@ class LayoutEngine:
             "      position: absolute;",
             "      z-index: 8;",
             "      height: 2px;",
-            "      background-color: #72402f;",
             "      box-sizing: border-box;",
             "    }",
             "    .run-bold {",
@@ -445,8 +444,9 @@ class LayoutEngine:
                 
             if shape.get("is_line", False):
                 t_center = t + (h - 0.02) / 2
+                line_color = shape.get("line_color", "#000000")
                 html_parts.append(
-                    f"    <div class='line-shape' style='left: {l:.3f}in; top: {t_center:.3f}in; width: {w:.3f}in;'></div>"
+                    f"    <div class='line-shape' style='left: {l:.3f}in; top: {t_center:.3f}in; width: {w:.3f}in; background-color: {line_color};'></div>"
                 )
                 continue
             
