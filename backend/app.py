@@ -4,49 +4,61 @@ import sys
 import ctypes
 
 def locate_and_preload_nix_libraries():
-    # 1. Determine Nix profile directories
-    paths = [
+    # 1. Determine Nix profile directories and search paths
+    required_keywords = [
+        "glib", "pango", "cairo", "gdk-pixbuf", "libffi", "fontconfig",
+        "freetype", "harfbuzz", "pixman", "fribidi", "graphite", "expat",
+        "libpng", "zlib", "gobject-introspection", "shared-mime-info",
+        "libxml2", "libxslt"
+    ]
+    
+    found_dirs = set()
+    
+    # 2. Check standard profile paths first
+    standard_paths = [
         "/app/.nix-profile/lib",
         "/root/.nix-profile/lib",
         "/nix/profile/lib",
+        "/nix/var/nix/profiles/default/lib",
+        "/nix/var/nix/profiles/per-user/root/profile/lib"
     ]
-    
-    # 2. Check if a path contains gobject library
-    lib_dir = None
-    for p in paths:
+    for p in standard_paths:
         if os.path.exists(p):
-            try:
-                files = os.listdir(p)
-                if any("libgobject" in f for f in files):
-                    lib_dir = p
-                    break
-            except Exception:
-                pass
-                
-    if not lib_dir:
-        # Fallback to search inside /nix/store
-        nix_store = "/nix/store"
-        if os.path.exists(nix_store):
-            try:
-                for entry in os.scandir(nix_store):
-                    if entry.is_dir() and "glib-" in entry.name:
-                        test_p = os.path.join(entry.path, "lib")
-                        if os.path.exists(test_p) and any("libgobject" in f for f in os.listdir(test_p)):
-                            lib_dir = test_p
-                            break
-            except Exception:
-                pass
-                
-    if lib_dir:
-        print(f"[env] Found Nix library directory: {lib_dir}")
-        # Update LD_LIBRARY_PATH in-process so ctypes.util.find_library finds it
+            found_dirs.add(p)
+            
+    # 3. Fallback to scan /nix/store for all package library folders
+    nix_store = "/nix/store"
+    if os.path.exists(nix_store):
+        try:
+            for entry in os.scandir(nix_store):
+                if entry.is_dir():
+                    # Parse package name, format is <hash>-<name>-<version>
+                    name_parts = entry.name.split("-")
+                    if len(name_parts) > 1:
+                        pkg_name = name_parts[1].lower()
+                        if any(kw in pkg_name for kw in required_keywords):
+                            lib_path = os.path.join(entry.path, "lib")
+                            if os.path.exists(lib_path):
+                                found_dirs.add(lib_path)
+        except Exception as scan_err:
+            print(f"[env] Warning scanning /nix/store: {scan_err}")
+            
+    if found_dirs:
+        libs_list = sorted(list(found_dirs))
+        print(f"[env] Found Nix library directories: {libs_list}")
+        
+        # Prepend all found directories to LD_LIBRARY_PATH
         current_ld = os.environ.get("LD_LIBRARY_PATH", "")
         if current_ld:
-            os.environ["LD_LIBRARY_PATH"] = f"{lib_dir}:{current_ld}"
+            existing_paths = [p for p in current_ld.split(":") if p]
+            new_paths = libs_list + [p for p in existing_paths if p not in found_dirs]
+            os.environ["LD_LIBRARY_PATH"] = ":".join(new_paths)
         else:
-            os.environ["LD_LIBRARY_PATH"] = lib_dir
+            os.environ["LD_LIBRARY_PATH"] = ":".join(libs_list)
             
-        # Also pre-load libraries globally so child dlopen calls resolve automatically
+        print(f"[env] Updated LD_LIBRARY_PATH: {os.environ['LD_LIBRARY_PATH']}")
+        
+        # Pre-load libraries globally so child dlopen calls resolve automatically
         libs_to_load = [
             "libglib-2.0.so",
             "libgobject-2.0.so",
@@ -54,22 +66,29 @@ def locate_and_preload_nix_libraries():
             "libpango-1.0.so.0",
             "libpangocairo-1.0.so.0"
         ]
+        
         for lib in libs_to_load:
-            lib_path = os.path.join(lib_dir, lib)
-            if not os.path.exists(lib_path):
-                try:
-                    for f in os.listdir(lib_dir):
-                        if f.startswith(lib.split(".so")[0] + ".so"):
-                            lib_path = os.path.join(lib_dir, f)
-                            break
-                except Exception:
-                    pass
-            if os.path.exists(lib_path):
-                try:
-                    ctypes.CDLL(lib_path, mode=ctypes.RTLD_GLOBAL)
-                    print(f"[env] Pre-loaded {lib} successfully from {lib_path}")
-                except Exception as load_err:
-                    print(f"[env] Failed to pre-load {lib} from {lib_path}: {load_err}")
+            loaded = False
+            for d in libs_list:
+                lib_path = os.path.join(d, lib)
+                if not os.path.exists(lib_path):
+                    try:
+                        for f in os.listdir(d):
+                            if f.startswith(lib.split(".so")[0] + ".so"):
+                                lib_path = os.path.join(d, f)
+                                break
+                    except Exception:
+                        pass
+                if os.path.exists(lib_path):
+                    try:
+                        ctypes.CDLL(lib_path, mode=ctypes.RTLD_GLOBAL)
+                        print(f"[env] Pre-loaded {lib} successfully from {lib_path}")
+                        loaded = True
+                        break
+                    except Exception as load_err:
+                        print(f"[env] Failed to pre-load {lib} from {lib_path}: {load_err}")
+            if not loaded:
+                print(f"[env] Could not find or pre-load {lib} in any Nix directory")
 
 # Execute library preloading before any other imports occur
 locate_and_preload_nix_libraries()
