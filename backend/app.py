@@ -895,20 +895,8 @@ async def send_email_notification(
 
         msg_alternative.attach(MIMEText(html_content, "html"))
 
-        # Generate and attach certificates dynamically in memory
-        for cert in certificates:
-            try:
-                pdf_bytes = await get_pdf_bytes_for_certificate(cert["cert_code"])
-                part = MIMEApplication(pdf_bytes, _subtype="pdf")
-                safe_name = re.sub(r'[\\/*?:"<>|]', "_", str(intern_name)).strip()
-                part.add_header(
-                    "Content-Disposition",
-                    "attachment",
-                    filename=f"{safe_name}_{cert['label']}.pdf"
-                )
-                msg.attach(part)
-            except Exception as attachment_err:
-                print(f"Failed to generate and attach PDF {cert['cert_code']} to email: {attachment_err}")
+        # We do not attach PDF files as attachments as per user requirement.
+        # Certificates are accessible via the Portal download button.
 
         server = smtplib.SMTP(smtp_server, int(smtp_port))
         if int(smtp_port) == 587:

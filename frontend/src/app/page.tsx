@@ -278,6 +278,8 @@ export default function AdminDashboard() {
   const [selectedBatch, setSelectedBatch] = useState("");
   const [selectedProject, setSelectedProject] = useState("");
   const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [isExportingHistoryZip, setIsExportingHistoryZip] = useState(false);
+  const [historyZipProgress, setHistoryZipProgress] = useState({ done: 0, total: 0 });
 
   // Dynamically calculate stats and unique filter values from historyCerts
   const { batchCounts, totalUniqueInterns, uniqueDepts, uniqueDomains, uniqueColleges, uniqueBatches, uniqueProjects } = React.useMemo(() => {
@@ -335,6 +337,37 @@ export default function AdminDashboard() {
       uniqueProjects: Array.from(projects).sort(),
     };
   }, [historyCerts]);
+
+  const filteredCerts = React.useMemo(() => {
+    return historyCerts.filter((c) => {
+      const q = historyQuery.toLowerCase().trim();
+      if (q) {
+        const name = (c.name || "").toLowerCase();
+        const college = (c.college || "").toLowerCase();
+        const code = (c.cert_code || "").toLowerCase();
+        const email = (c.intern?.email || "").toLowerCase();
+        const matchesQuery = name.includes(q) || college.includes(q) || code.includes(q) || email.includes(q);
+        if (!matchesQuery) return false;
+      }
+
+      const dept = c.department || c.intern?.department;
+      if (selectedDept && dept !== selectedDept) return false;
+
+      const r = c.role || c.intern?.role;
+      if (selectedDomain && r !== selectedDomain) return false;
+
+      const proj = c.project || c.intern?.project;
+      if (selectedProject && proj !== selectedProject) return false;
+
+      const col = c.college || c.intern?.college;
+      if (selectedCollege && col !== selectedCollege) return false;
+
+      const batch = c.month || c.intern?.month;
+      if (selectedBatch && batch !== selectedBatch) return false;
+
+      return true;
+    });
+  }, [historyCerts, historyQuery, selectedDept, selectedDomain, selectedProject, selectedCollege, selectedBatch]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -498,6 +531,55 @@ export default function AdminDashboard() {
       console.error("Failed to export excel", err);
     } finally {
       setIsExportingExcel(false);
+    }
+  };
+
+  const handleDownloadHistoryZip = async (certsList: any[]) => {
+    const certsWithPdf = certsList.filter((c) => c.pdf_url && c.status === "active");
+    if (certsWithPdf.length === 0) return;
+    
+    setIsExportingHistoryZip(true);
+    setHistoryZipProgress({ done: 0, total: certsWithPdf.length });
+    
+    try {
+      const zip = new JSZip();
+      let zipTitle = "Certificates_History";
+      
+      const certTypeLabels: Record<string, string> = {
+        lor: "Letter of Recommendation",
+        experience: "Experience Letter",
+        internship: "Internship Certificate"
+      };
+
+      for (let i = 0; i < certsWithPdf.length; i++) {
+        const cert = certsWithPdf[i];
+        if (!cert.pdf_url) continue;
+        const url = getResolvedPdfUrl(cert.pdf_url);
+        try {
+          const res = await fetch(url);
+          const blob = await res.arrayBuffer();
+          
+          const certTitle = certTypeLabels[cert.cert_type] || "Certificate";
+          const safeName = (cert.name || `certificate_${i + 1}`).replace(/[^a-zA-Z0-9_\- ]/g, "_");
+          zip.file(`${safeName}_(${certTitle}).pdf`, blob);
+        } catch (err) {
+          console.error("Failed to fetch PDF for zip", err);
+        }
+        setHistoryZipProgress({ done: i + 1, total: certsWithPdf.length });
+      }
+      
+      const content = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
+      const downloadUrl = URL.createObjectURL(content);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `${zipTitle}.zip`;
+      a.click();
+      URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error("Failed to generate history ZIP", err);
+    } finally {
+      setIsExportingHistoryZip(false);
+      setHistoryZipProgress({ done: 0, total: 0 });
     }
   };
 
@@ -1760,6 +1842,27 @@ export default function AdminDashboard() {
                   </button>
                 )}
 
+                {/* Download Filtered ZIP Button */}
+                {!historyLoading && historyCerts.length > 0 && (
+                  <button
+                    onClick={() => handleDownloadHistoryZip(filteredCerts)}
+                    disabled={isExportingHistoryZip}
+                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-md transition-all duration-300 cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {isExportingHistoryZip ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>{`Zipping ${historyZipProgress.done}/${historyZipProgress.total}...`}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download size={14} />
+                        <span>Download Filtered ZIP</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
                 {/* Clear All Filters Button */}
                 {(historyQuery || selectedDept || selectedDomain || selectedCollege || selectedBatch || selectedProject) && (
                   <button
@@ -1887,40 +1990,7 @@ export default function AdminDashboard() {
               </div>
             ) : (
               (() => {
-                const filtered = historyCerts.filter((c) => {
-                  // Search query filter
-                  const q = historyQuery.toLowerCase().trim();
-                  if (q) {
-                    const name = (c.name || "").toLowerCase();
-                    const college = (c.college || "").toLowerCase();
-                    const code = (c.cert_code || "").toLowerCase();
-                    const email = (c.intern?.email || "").toLowerCase();
-                    const matchesQuery = name.includes(q) || college.includes(q) || code.includes(q) || email.includes(q);
-                    if (!matchesQuery) return false;
-                  }
-
-                  // Department filter
-                  const dept = c.department || c.intern?.department;
-                  if (selectedDept && dept !== selectedDept) return false;
-
-                  // Domain (Role) filter
-                  const r = c.role || c.intern?.role;
-                  if (selectedDomain && r !== selectedDomain) return false;
-
-                  // Internship & Live Project Area filter
-                  const proj = c.project || c.intern?.project;
-                  if (selectedProject && proj !== selectedProject) return false;
-
-                  // College filter
-                  const col = c.college || c.intern?.college;
-                  if (selectedCollege && col !== selectedCollege) return false;
-
-                  // Batch filter
-                  const batch = c.month || c.intern?.month;
-                  if (selectedBatch && batch !== selectedBatch) return false;
-
-                  return true;
-                });
+                const filtered = filteredCerts;
 
                 if (filtered.length === 0) {
                   return (
