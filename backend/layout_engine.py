@@ -11,7 +11,25 @@ MARGIN_TOP_DEFAULT = 0.05
 MARGIN_BOTTOM_DEFAULT = 0.05
 
 def find_font_file(font_name="Calibri"):
-    # Resilient font search (local fonts first, then standard paths)
+    if not font_name:
+        font_name = "Calibri"
+    fn_lower = font_name.lower()
+    
+    # 1. Case-insensitive search in local fonts folders
+    search_dirs = ["backend/fonts", "fonts"]
+    for d in search_dirs:
+        if os.path.exists(d):
+            try:
+                for f in os.listdir(d):
+                    # Strip spaces/hyphens for comparison (e.g. CanvaSans vs Canva Sans)
+                    f_clean = f.lower().replace(" ", "").replace("-", "").replace("_", "")
+                    fn_clean = fn_lower.replace(" ", "").replace("-", "").replace("_", "")
+                    if f_clean == f"{fn_clean}.ttf" or f_clean == f"{fn_clean}regular.ttf":
+                        return os.path.abspath(os.path.join(d, f))
+            except Exception:
+                pass
+                
+    # 2. Resilient fallback check with hardcoded paths
     local_paths = [
         f"backend/fonts/{font_name}.ttf",
         f"fonts/{font_name}.ttf",
@@ -24,6 +42,7 @@ def find_font_file(font_name="Calibri"):
         if os.path.exists(path):
             return os.path.abspath(path)
             
+    # 3. System font check
     system_fonts = [
         "C:\\Windows\\Fonts\\calibri.ttf",
         "C:\\Windows\\Fonts\\arial.ttf",
@@ -37,7 +56,22 @@ def find_font_file(font_name="Calibri"):
         if os.path.exists(expanded):
             return os.path.abspath(expanded)
             
-    # Fallback to any TTF file in workspace
+    # 4. Try matching case-insensitively in system fonts directories
+    sys_dirs = ["/usr/share/fonts/truetype/custom", "~/.local/share/fonts"]
+    for d in sys_dirs:
+        expanded_d = os.path.expanduser(d)
+        if os.path.exists(expanded_d):
+            try:
+                for root, _, files in os.walk(expanded_d):
+                    for f in files:
+                        f_clean = f.lower().replace(" ", "").replace("-", "").replace("_", "")
+                        fn_clean = fn_lower.replace(" ", "").replace("-", "").replace("_", "")
+                        if f_clean == f"{fn_clean}.ttf":
+                            return os.path.abspath(os.path.join(root, f))
+            except Exception:
+                pass
+                
+    # 5. Fallback to any TTF file in workspace
     for root, dirs, files in os.walk("."):
         for file in files:
             if file.endswith(".ttf"):
@@ -98,7 +132,7 @@ class LayoutEngine:
     def render_html(self, replacements, qr_bytes):
         # 1. Prepare shape configurations
         shapes = []
-        font_path = find_font_file()
+        default_font_path = find_font_file()
         
         # Load shapes from layout.json
         for orig_shape in self.layout["shapes"]:
@@ -156,6 +190,10 @@ class LayoutEngine:
             
             usable_w = shape["width"] - (margin_l + margin_r)
             declared_h = shape["height"]
+            
+            # Find the specific font path for this shape's font name
+            shape_font_name = shape.get("font_name", "Calibri")
+            font_path = find_font_file(shape_font_name) or default_font_path
             
             original_size = shape["font_size"]
             scale = 1.0
@@ -300,9 +338,32 @@ class LayoutEngine:
             h = shape["height"]
             
             if shape["is_qr"]:
-                # Centered QR Box element
+                # Force a reasonable square size for the QR code
+                qr_size = 1.1  # inches (good standard size)
+                if 0.5 <= w <= 2.0 and 0.5 <= h <= 2.0:
+                    qr_size = min(w, h)
+                
+                # Determine horizontal alignment within the original text box
+                align = shape.get("align", "left")
+                if shape.get("paragraphs"):
+                    align = shape["paragraphs"][0].get("align", align)
+                    
+                if align == "right":
+                    left_pos = l + w - qr_size
+                elif align == "center":
+                    left_pos = l + (w - qr_size) / 2
+                else:
+                    left_pos = l
+                
+                # Ensure the QR code stays within page bounds
+                page_width = self.layout.get("width_in", 8.27)
+                if left_pos + qr_size > page_width - 0.2:
+                    left_pos = page_width - qr_size - 0.4
+                if left_pos < 0.2:
+                    left_pos = 0.2
+                    
                 html_parts.append(
-                    f"    <div class='qr-box' style='left: {l}in; top: {t}in; width: {w}in; height: {h}in;'>"
+                    f"    <div class='qr-box' style='left: {left_pos:.3f}in; top: {t:.3f}in; width: {qr_size:.3f}in; height: {qr_size:.3f}in;'>"
                 )
                 html_parts.append(f"      <img src='data:image/png;base64,{qr_base64}' />")
                 html_parts.append("    </div>")
