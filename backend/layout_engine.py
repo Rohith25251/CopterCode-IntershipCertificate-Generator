@@ -280,7 +280,8 @@ class LayoutEngine:
                 
                 while scale >= 0.6:
                     # Estimate text block height at this scaled font size
-                    est_h = estimate_text_height(shape["resolved_text"], font_path, original_size * scale, usable_w)
+                    # Use a safety factor (88% of width) to account for bold character expansion, kerning, and WeasyPrint margins
+                    est_h = estimate_text_height(shape["resolved_text"], font_path, original_size * scale, usable_w * 0.88)
                     total_h = est_h + margin_t + margin_b
                     if total_h <= declared_h:
                         best_scale = scale
@@ -289,7 +290,7 @@ class LayoutEngine:
                     
                 shape["best_scale"] = best_scale
                 # Required height at the scaled font size (at least 60% readability floor)
-                est_h = estimate_text_height(shape["resolved_text"], font_path, original_size * best_scale, usable_w)
+                est_h = estimate_text_height(shape["resolved_text"], font_path, original_size * best_scale, usable_w * 0.88)
                 shape["required_height"] = est_h + margin_t + margin_b
             
         # 4. Vertical layout shifting & Clearance propagation
