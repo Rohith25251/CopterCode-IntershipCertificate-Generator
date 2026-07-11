@@ -2240,6 +2240,135 @@ async def generate_certificates(
         "rows": rows_results
     }
 
+@app.get("/api/certificates/export")
+def export_certificates_history(
+    query: Optional[str] = None,
+    dept: Optional[str] = None,
+    domain: Optional[str] = None,
+    project: Optional[str] = None,
+    college: Optional[str] = None,
+    batch: Optional[str] = None
+):
+    """
+    Export filtered database certificates history to an Excel file.
+    """
+    if not supabase:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Supabase client is not configured."
+        )
+
+    try:
+        # Fetch certificates sorted by created_at descending (all records)
+        res = supabase.table("certificates").select("*, intern:interns(*)").execute()
+        if not res.data:
+            data = []
+        else:
+            data = res.data
+
+        # Sort by created_at descending
+        data_sorted = sorted(
+            data,
+            key=lambda x: x.get("created_at") or "",
+            reverse=True
+        )
+
+        # Apply exact same filter rules as frontend
+        filtered_data = []
+        for c in data_sorted:
+            # Query search filter
+            if query:
+                q = query.lower().strip()
+                name = str(c.get("name") or "").lower()
+                col = str(c.get("college") or "").lower()
+                code = str(c.get("cert_code") or "").lower()
+                email = ""
+                if c.get("intern"):
+                    email = str(c["intern"].get("email") or "").lower()
+                if not (q in name or q in col or q in code or q in email):
+                    continue
+
+            # Department filter
+            c_dept = c.get("department")
+            if not c_dept and c.get("intern"):
+                c_dept = c["intern"].get("department")
+            if dept and c_dept != dept:
+                continue
+
+            # Domain / Role filter
+            c_role = c.get("role")
+            if not c_role and c.get("intern"):
+                c_role = c["intern"].get("role")
+            if domain and c_role != domain:
+                continue
+
+            # Project area filter
+            c_proj = c.get("project")
+            if not c_proj and c.get("intern"):
+                c_proj = c["intern"].get("project")
+            if project and c_proj != project:
+                continue
+
+            # College filter
+            c_col = c.get("college")
+            if not c_col and c.get("intern"):
+                c_col = c["intern"].get("college")
+            if college and c_col != college:
+                continue
+
+            # Batch filter
+            c_batch = c.get("month")
+            if not c_batch and c.get("intern"):
+                c_batch = c["intern"].get("month")
+            if batch and c_batch != batch:
+                continue
+
+            filtered_data.append(c)
+
+        # Structure pandas DataFrame
+        rows = []
+        for c in filtered_data:
+            intern = c.get("intern") or {}
+            rows.append({
+                "Certificate ID": c.get("cert_code"),
+                "Intern Name": c.get("name") or intern.get("name") or "",
+                "Email": intern.get("email") or "",
+                "College/Institution": c.get("college") or intern.get("college") or "",
+                "Year/Class": c.get("batch") or intern.get("year") or "",
+                "Department": c.get("department") or intern.get("department") or "",
+                "Role/Domain": c.get("role") or intern.get("role") or "",
+                "Project Area": c.get("project") or intern.get("project") or "",
+                "Batch/Month": c.get("month") or intern.get("month") or "",
+                "Issue Date": c.get("issue_date") or c.get("date") or intern.get("date") or "",
+                "Certificate Type": c.get("cert_type", "").upper(),
+                "Status": c.get("status", "active"),
+                "Verify URL": build_verify_url(c.get("cert_code", "")),
+                "PDF URL": c.get("pdf_url", "")
+            })
+
+        df = pd.DataFrame(rows)
+
+        # Output to buffer as Excel sheet
+        import io
+        buffer = io.BytesIO()
+        df.to_excel(buffer, index=False)
+        buffer.seek(0)
+
+        from fastapi.responses import StreamingResponse
+        headers = {
+            'Content-Disposition': 'attachment; filename="filtered_certificates_history.xlsx"'
+        }
+        return StreamingResponse(
+            buffer,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers=headers
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to export certificates: {str(e)}"
+        )
+
 
 @app.get("/api/certificates/{cert_code}")
 def lookup_certificate(cert_code: str):
@@ -2649,136 +2778,6 @@ def download_excel_file(file_id: str):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename="certificates_processing_result.xlsx"
     )
-
-
-@app.get("/api/certificates/export")
-def export_certificates_history(
-    query: Optional[str] = None,
-    dept: Optional[str] = None,
-    domain: Optional[str] = None,
-    project: Optional[str] = None,
-    college: Optional[str] = None,
-    batch: Optional[str] = None
-):
-    """
-    Export filtered database certificates history to an Excel file.
-    """
-    if not supabase:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Supabase client is not configured."
-        )
-
-    try:
-        # Fetch certificates sorted by created_at descending (all records)
-        res = supabase.table("certificates").select("*, intern:interns(*)").execute()
-        if not res.data:
-            data = []
-        else:
-            data = res.data
-
-        # Sort by created_at descending
-        data_sorted = sorted(
-            data,
-            key=lambda x: x.get("created_at") or "",
-            reverse=True
-        )
-
-        # Apply exact same filter rules as frontend
-        filtered_data = []
-        for c in data_sorted:
-            # Query search filter
-            if query:
-                q = query.lower().strip()
-                name = str(c.get("name") or "").lower()
-                col = str(c.get("college") or "").lower()
-                code = str(c.get("cert_code") or "").lower()
-                email = ""
-                if c.get("intern"):
-                    email = str(c["intern"].get("email") or "").lower()
-                if not (q in name or q in col or q in code or q in email):
-                    continue
-
-            # Department filter
-            c_dept = c.get("department")
-            if not c_dept and c.get("intern"):
-                c_dept = c["intern"].get("department")
-            if dept and c_dept != dept:
-                continue
-
-            # Domain / Role filter
-            c_role = c.get("role")
-            if not c_role and c.get("intern"):
-                c_role = c["intern"].get("role")
-            if domain and c_role != domain:
-                continue
-
-            # Project area filter
-            c_proj = c.get("project")
-            if not c_proj and c.get("intern"):
-                c_proj = c["intern"].get("project")
-            if project and c_proj != project:
-                continue
-
-            # College filter
-            c_col = c.get("college")
-            if not c_col and c.get("intern"):
-                c_col = c["intern"].get("college")
-            if college and c_col != college:
-                continue
-
-            # Batch filter
-            c_batch = c.get("month")
-            if not c_batch and c.get("intern"):
-                c_batch = c["intern"].get("month")
-            if batch and c_batch != batch:
-                continue
-
-            filtered_data.append(c)
-
-        # Structure pandas DataFrame
-        rows = []
-        for c in filtered_data:
-            intern = c.get("intern") or {}
-            rows.append({
-                "Certificate ID": c.get("cert_code"),
-                "Intern Name": c.get("name") or intern.get("name") or "",
-                "Email": intern.get("email") or "",
-                "College/Institution": c.get("college") or intern.get("college") or "",
-                "Year/Class": c.get("batch") or intern.get("year") or "",
-                "Department": c.get("department") or intern.get("department") or "",
-                "Role/Domain": c.get("role") or intern.get("role") or "",
-                "Project Area": c.get("project") or intern.get("project") or "",
-                "Batch/Month": c.get("month") or intern.get("month") or "",
-                "Issue Date": c.get("issue_date") or c.get("date") or intern.get("date") or "",
-                "Certificate Type": c.get("cert_type", "").upper(),
-                "Status": c.get("status", "active"),
-                "Verify URL": build_verify_url(c.get("cert_code", "")),
-                "PDF URL": c.get("pdf_url", "")
-            })
-
-        df = pd.DataFrame(rows)
-
-        # Output to buffer as Excel sheet
-        import io
-        buffer = io.BytesIO()
-        df.to_excel(buffer, index=False)
-        buffer.seek(0)
-
-        from fastapi.responses import StreamingResponse
-        headers = {
-            'Content-Disposition': 'attachment; filename="filtered_certificates_history.xlsx"'
-        }
-        return StreamingResponse(
-            buffer,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers=headers
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to export certificates: {str(e)}"
-        )
 
 
 if __name__ == "__main__":

@@ -40,6 +40,19 @@ function VerifyContent() {
   const [loading, setLoading] = useState<boolean>(true);
   const [certificate, setCertificate] = useState<any | null>(null);
   const [error, setError] = useState<"not_found" | "revoked" | "expired" | "unknown" | null>(null);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(
+        window.innerWidth < 768 ||
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+      );
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   useEffect(() => {
     async function fetchCertificate() {
@@ -444,12 +457,45 @@ function VerifyContent() {
               Document Preview
             </h3>
             
-            <div className="flex-1 w-full bg-zinc-50 rounded-2xl overflow-hidden border border-zinc-200 relative group">
-              <iframe 
-                src={`${resolvedPdfUrl}#toolbar=0`} 
-                className="w-full h-full border-0 absolute inset-0"
-                title="Certificate PDF Viewer"
-              />
+            <div className="flex-1 w-full bg-zinc-50 rounded-2xl overflow-hidden border border-zinc-200 relative group min-h-[320px] flex items-center justify-center p-6 text-center">
+              {isMobile ? (
+                <div className="flex flex-col items-center justify-center max-w-sm space-y-4">
+                  <div className="h-14 w-14 rounded-2xl bg-violet-50 text-[#5844e9] border border-violet-100 flex items-center justify-center shadow-inner">
+                    <FileDown className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-zinc-800">
+                      Live Preview Not Available on Mobile
+                    </h4>
+                    <p className="text-xs text-zinc-500 mt-2 leading-relaxed">
+                      Mobile browsers do not support inline PDF viewing. Please open the document in a new tab or download the file directly to view it.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+                    <a
+                      href={resolvedPdfUrl}
+                      download
+                      className="inline-flex items-center gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-750 font-extrabold text-[11px] px-3.5 py-2 rounded-xl border border-zinc-200 transition-colors shadow-sm cursor-pointer"
+                    >
+                      <FileDown className="w-3.5 h-3.5" /> Download PDF
+                    </a>
+                    <a
+                      href={resolvedPdfUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-extrabold text-[11px] px-3.5 py-2 rounded-xl shadow-md transition-all duration-300 cursor-pointer"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" /> Open In Tab
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <iframe 
+                  src={`${resolvedPdfUrl}#toolbar=0`} 
+                  className="w-full h-full border-0 absolute inset-0"
+                  title="Certificate PDF Viewer"
+                />
+              )}
             </div>
           </div>
 
