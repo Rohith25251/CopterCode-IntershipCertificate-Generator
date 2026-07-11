@@ -1,21 +1,20 @@
 # Use a lightweight official Python image
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 # Install LibreOffice, fonts, and cleaning up cache
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libreoffice-writer \
     libreoffice-impress \
-    libreoffice-common \
-    fonts-dejavu \
-    fonts-dejavu-extra \
+    libreoffice-core \
     fonts-liberation \
-    fonts-open-sans \
-    fonts-noto-core \
-    fonts-urw-base35 \
+    fonts-dejavu \
     fontconfig \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && fc-cache -f
+    && rm -rf /var/lib/apt/lists/*
+
+# Pre-warm LibreOffice's user profile once at build time to avoid
+# first-request slowness in production
+RUN soffice --headless --terminate_after_init \
+    --env:UserInstallation=file:///tmp/lo_profile_warmup || true
 
 # LibreOffice requires HOME to write profile data
 ENV HOME=/tmp

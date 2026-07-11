@@ -10,13 +10,7 @@ import qrcode
 from pptx import Presentation
 from pptx.util import Inches
 
-# Check if win32com is available
-HAS_WIN32COM = False
-try:
-    import win32com.client
-    HAS_WIN32COM = True
-except ImportError:
-    pass
+# win32com has been removed as this tool is adapted for headless Linux
 
 # =====================================================
 # HELPERS
@@ -41,38 +35,74 @@ def generate_qr_code(payload, out_path):
     img = qr.make_image(image_factory=PilImage, fill_color="black", back_color="white")
     img.save(out_path)
 
-def convert_pptx_to_pdf(pptx_path, pdf_path):
-    """Convert PPTX to PDF using win32com COM (high-fidelity) or LibreOffice fallback."""
-    abs_pptx = os.path.abspath(pptx_path)
-    abs_pdf = os.path.abspath(pdf_path)
-    out_dir = os.path.dirname(abs_pdf)
-    
-    if HAS_WIN32COM:
-        print("  --> Converting using PowerPoint COM...")
-        try:
-            powerpoint = win32com.client.DispatchEx("PowerPoint.Application")
-            # Open presentation without opening a GUI window
-            presentation = powerpoint.Presentations.Open(abs_pptx, WithWindow=False)
-            presentation.SaveAs(abs_pdf, 32)  # 32 = PDF format
-            presentation.Close()
-            powerpoint.Quit()
-            return True
-        except Exception as e:
-            print(f"  --> PowerPoint COM conversion failed: {e}")
-            
-    print("  --> Trying LibreOffice headless conversion fallback...")
+def export_pptx_to_pdf(pptx_path: str, output_dir: str) -> str:
+    """
+    Converts PPTX to PDF using headless LibreOffice.
+    Uses an isolated user profile per call to avoid lock-file
+    collisions under concurrent requests.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Isolated profile dir per invocation — prevents concurrent
+    # soffice processes from fighting over the same lock file
+    profile_dir = f"/tmp/lo_profile_{uuid.uuid4().hex}"
+
+    cmd = [
+        "soffice",
+        "--headless",
+        "--norestore",
+        "--convert-to", "pdf",
+        "--outdir", output_dir,
+        f"--env:UserInstallation=file://{profile_dir}",
+        pptx_path,
+    ]
+
     try:
-        cmd = ["soffice", "--headless", "--convert-to", "pdf", abs_pptx, "--outdir", out_dir]
-        subprocess.run(cmd, check=True)
+        subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60,  # hard timeout — do not let a stuck soffice process hang
+            check=True,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(
+            f"LibreOffice conversion timed out for {pptx_path}"
+        )
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(
+            f"LibreOffice conversion failed: {e.stderr}"
+        )
+    finally:
+        # Always clean up the temp profile directory, even on failure
+        shutil.rmtree(profile_dir, ignore_errors=True)
+
+    expected_pdf = os.path.join(
+        output_dir,
+        os.path.splitext(os.path.basename(pptx_path))[0] + ".pdf",
+    )
+
+    if not os.path.exists(expected_pdf):
+        raise RuntimeError(
+            f"Conversion reported success but output PDF not found: "
+            f"{expected_pdf}"
+        )
+
+    return expected_pdf
+
+def convert_pptx_to_pdf(pptx_path, pdf_path):
+    """Convert PPTX to PDF using headless LibreOffice."""
+    try:
+        abs_pptx = os.path.abspath(pptx_path)
+        abs_pdf = os.path.abspath(pdf_path)
+        out_dir = os.path.dirname(abs_pdf)
         
-        # LibreOffice creates a file with same base name but .pdf extension in out_dir
-        base_name = os.path.splitext(os.path.basename(pptx_path))[0]
-        lo_pdf_path = os.path.join(out_dir, f"{base_name}.pdf")
+        expected_pdf = export_pptx_to_pdf(abs_pptx, out_dir)
         
-        if os.path.exists(lo_pdf_path) and os.path.abspath(lo_pdf_path) != abs_pdf:
+        if os.path.abspath(expected_pdf) != abs_pdf:
             if os.path.exists(abs_pdf):
                 os.remove(abs_pdf)
-            os.rename(lo_pdf_path, abs_pdf)
+            os.rename(expected_pdf, abs_pdf)
         return True
     except Exception as e:
         print(f"  --> LibreOffice conversion failed: {e}")

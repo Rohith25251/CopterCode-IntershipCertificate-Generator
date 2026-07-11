@@ -8,7 +8,6 @@ pillow
 supabase
 python-multipart
 python-dotenv
-pywin32; sys_platform == 'win32'
 python-pptx
 xhtml2pdf
 pypdf

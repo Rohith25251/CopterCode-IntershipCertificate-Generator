@@ -15,11 +15,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-try:
-    import win32com.client
-    HAS_WIN32COM = True
-except ImportError: 
-    HAS_WIN32COM = False
+# win32com client has been removed to run reliably on headless Linux
  
 # QR generation library
 import qrcode
@@ -90,83 +86,95 @@ class SimpleTTLCache:
 template_cache = {}  # slot_id (e.g. "slot-1") -> pptx_bytes
 pdf_cache = SimpleTTLCache(maxsize=200, ttl=600)  # cert_code -> pdf_bytes
 
-soffice_lock = asyncio.Semaphore(1)
+import subprocess
+import shutil
+
+# Cap concurrent soffice processes — tune based on container CPU/RAM
+# allocated in Dokploy (start with 2 for a 1-2 vCPU container)
+LIBREOFFICE_SEMAPHORE = asyncio.Semaphore(2)
+
+def export_pptx_to_pdf(pptx_path: str, output_dir: str) -> str:
+    """
+    Converts PPTX to PDF using headless LibreOffice.
+    Uses an isolated user profile per call to avoid lock-file
+    collisions under concurrent requests.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Isolated profile dir per invocation — prevents concurrent
+    # soffice processes from fighting over the same lock file
+    profile_dir = f"/tmp/lo_profile_{uuid.uuid4().hex}"
+
+    cmd = [
+        "soffice",
+        "--headless",
+        "--norestore",
+        "--convert-to", "pdf",
+        "--outdir", output_dir,
+        f"--env:UserInstallation=file://{profile_dir}",
+        pptx_path,
+    ]
+
+    try:
+        subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60,  # hard timeout — do not let a stuck soffice process hang
+            check=True,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(
+            f"LibreOffice conversion timed out for {pptx_path}"
+        )
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(
+            f"LibreOffice conversion failed: {e.stderr}"
+        )
+    finally:
+        # Always clean up the temp profile directory, even on failure
+        shutil.rmtree(profile_dir, ignore_errors=True)
+
+    expected_pdf = os.path.join(
+        output_dir,
+        os.path.splitext(os.path.basename(pptx_path))[0] + ".pdf",
+    )
+
+    if not os.path.exists(expected_pdf):
+        raise RuntimeError(
+            f"Conversion reported success but output PDF not found: "
+            f"{expected_pdf}"
+        )
+
+    return expected_pdf
+
+async def export_pptx_to_pdf_async(pptx_path: str, output_dir: str) -> str:
+    async with LIBREOFFICE_SEMAPHORE:
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None, export_pptx_to_pdf, pptx_path, output_dir
+        )
 
 async def convert_pptx_to_pdf_bytes_async(pptx_bytes: bytes) -> bytes:
-    async with soffice_lock:
-        temp_pptx = tempfile.NamedTemporaryFile(suffix=".pptx", delete=False)
-        temp_pptx.write(pptx_bytes)
-        temp_pptx.close()
-        
-        out_dir = os.path.dirname(os.path.abspath(temp_pptx.name))
-        # Use a dedicated user profile per conversion to avoid file-lock collisions in Docker
-        lo_profile_dir = os.path.join(tempfile.gettempdir(), f"lo_profile_{os.getpid()}")
-        os.makedirs(lo_profile_dir, exist_ok=True)
+    temp_pptx = tempfile.NamedTemporaryFile(suffix=".pptx", delete=False)
+    temp_pptx.write(pptx_bytes)
+    temp_pptx.close()
+    
+    out_dir = os.path.dirname(os.path.abspath(temp_pptx.name))
+    try:
+        pdf_path = await export_pptx_to_pdf_async(os.path.abspath(temp_pptx.name), out_dir)
+        with open(pdf_path, "rb") as f:
+            pdf_bytes = f.read()
         try:
-            cmd = [
-                "soffice",
-                f"-env:UserInstallation=file://{lo_profile_dir}",
-                "--headless",
-                "--norestore",
-                "--convert-to", "pdf",
-                os.path.abspath(temp_pptx.name),
-                "--outdir", out_dir
-            ]
-            use_fallback = False
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
-                )
-                stdout, stderr = await proc.communicate()
-                if proc.returncode != 0:
-                    use_fallback = True
-            except Exception:
-                use_fallback = True
-                
-            if use_fallback:
-                if HAS_WIN32COM:
-                    import pythoncom
-                    pythoncom.CoInitialize()
-                    try:
-                        temp_pdf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
-                        temp_pdf.close()
-                        powerpoint = win32com.client.DispatchEx("PowerPoint.Application")
-                        presentation = powerpoint.Presentations.Open(os.path.abspath(temp_pptx.name), WithWindow=False)
-                        presentation.SaveAs(os.path.abspath(temp_pdf.name), 32)
-                        presentation.Close()
-                        powerpoint.Quit()
-                        with open(temp_pdf.name, "rb") as f:
-                            pdf_bytes = f.read()
-                        try:
-                            os.remove(temp_pdf.name)
-                        except Exception:
-                            pass
-                        return pdf_bytes
-                    except Exception as com_err:
-                        print(f"Async Windows COM fallback failed: {com_err}")
-                    finally:
-                        pythoncom.CoUninitialize()
-                raise ValueError("LibreOffice conversion failed and Windows COM PowerPoint fallback is not available")
-                
-            base_name = os.path.splitext(os.path.basename(temp_pptx.name))[0]
-            lo_pdf_path = os.path.join(out_dir, f"{base_name}.pdf")
-            if os.path.exists(lo_pdf_path):
-                with open(lo_pdf_path, "rb") as f:
-                    pdf_bytes = f.read()
-                try:
-                    os.remove(lo_pdf_path)
-                except Exception:
-                    pass
-                return pdf_bytes
-            else:
-                raise ValueError("Converted PDF not found in output directory")
-        finally:
-            try:
-                os.remove(temp_pptx.name)
-            except Exception:
-                pass
+            os.remove(pdf_path)
+        except Exception:
+            pass
+        return pdf_bytes
+    finally:
+        try:
+            os.remove(temp_pptx.name)
+        except Exception:
+            pass
 
 
 
@@ -500,109 +508,26 @@ def generate_certificate_from_html_bytes(html_bytes: bytes, replacements: dict, 
 
 
 def convert_pptx_to_pdf_bytes(pptx_bytes: bytes) -> bytes:
-    import tempfile
-    import os
-    import subprocess
-    
-    # 1. Try ConvertAPI cloud conversion if secret key is present in environment
-    convertapi_secret = os.getenv("CONVERTAPI_SECRET")
-    if convertapi_secret:
-        print("  --> Converting PPTX to PDF using ConvertAPI cloud service...")
-        import base64
-        import json
-        import urllib.request
-        
-        try:
-            pptx_b64 = base64.b64encode(pptx_bytes).decode("utf-8")
-            payload = {
-                "Parameters": [
-                    {
-                        "Name": "File",
-                        "FileValue": {
-                            "Name": "presentation.pptx",
-                            "Data": pptx_b64
-                        }
-                    }
-                ]
-            }
-            url = f"https://v2.convertapi.com/convert/pptx/to/pdf?Secret={convertapi_secret.strip()}"
-            req = urllib.request.Request(
-                url,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-                method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=30) as response:
-                res_data = json.loads(response.read().decode("utf-8"))
-                pdf_b64 = res_data["Files"][0]["FileData"]
-                return base64.b64decode(pdf_b64)
-        except Exception as api_err:
-            print(f"  --> ConvertAPI cloud conversion failed: {api_err}. Falling back to local tools...")
-
-    # Save the pptx bytes to a temp file
     temp_pptx = tempfile.NamedTemporaryFile(suffix=".pptx", delete=False)
     temp_pptx.write(pptx_bytes)
     temp_pptx.close()
     
-    temp_pdf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
-    temp_pdf.close() # we just need the name
-    
-    # Try PowerPoint COM first if on Windows and pywin32 is installed
-    if HAS_WIN32COM:
-        print("  --> Converting PPTX to PDF using PowerPoint COM...")
-        import pythoncom
-        pythoncom.CoInitialize()
-        try:
-            powerpoint = win32com.client.DispatchEx("PowerPoint.Application")
-            # Open presentation without GUI window
-            presentation = powerpoint.Presentations.Open(os.path.abspath(temp_pptx.name), WithWindow=False)
-            presentation.SaveAs(os.path.abspath(temp_pdf.name), 32)  # 32 = PDF format
-            presentation.Close()
-            powerpoint.Quit()
-            
-            with open(temp_pdf.name, "rb") as f:
-                pdf_bytes = f.read()
-            return pdf_bytes
-        except Exception as e:
-            print(f"  --> PowerPoint COM conversion failed: {e}")
-        finally:
-            pythoncom.CoUninitialize()
-
-    # Fallback to headless LibreOffice
-    print("  --> Converting PPTX to PDF using LibreOffice headless fallback...")
+    out_dir = os.path.dirname(os.path.abspath(temp_pptx.name))
     try:
-        out_dir = os.path.dirname(os.path.abspath(temp_pdf.name))
-        cmd = ["soffice", "--headless", "--convert-to", "pdf", os.path.abspath(temp_pptx.name), "--outdir", out_dir]
-        subprocess.run(cmd, check=True)
-        
-        # LibreOffice creates a file with the same base name but .pdf extension in out_dir
-        base_name = os.path.splitext(os.path.basename(temp_pptx.name))[0]
-        lo_pdf_path = os.path.join(out_dir, f"{base_name}.pdf")
-        
-        if os.path.exists(lo_pdf_path):
-            with open(lo_pdf_path, "rb") as f:
-                pdf_bytes = f.read()
-            try:
-                os.remove(lo_pdf_path)
-            except Exception:
-                pass
-            return pdf_bytes
-        else:
-            raise ValueError(f"LibreOffice conversion output file not found: {lo_pdf_path}")
-    except Exception as e:
-        print(f"  --> LibreOffice conversion failed: {e}")
-        raise ValueError(
-            f"Could not convert PPTX to PDF using PowerPoint COM or LibreOffice fallback. Details: {e}. "
-            "If you are running in a serverless function (like Vercel) where LibreOffice is not installed, "
-            "please set the CONVERTAPI_SECRET environment variable to use ConvertAPI's cloud conversion service."
-        )
-    finally:
-        # Clean up temp files
+        pdf_path = export_pptx_to_pdf(os.path.abspath(temp_pptx.name), out_dir)
+        with open(pdf_path, "rb") as f:
+            pdf_bytes = f.read()
         try:
-            os.remove(temp_pptx.name)
-            os.remove(temp_pdf.name)
+            os.remove(pdf_path)
         except Exception:
             pass
+        return pdf_bytes
+    finally:
+        try:
+            os.remove(temp_pptx.name)
+        except Exception:
+            pass
+
 
 def defragment_paragraph(paragraph, placeholders):
     """
@@ -873,30 +798,6 @@ def generate_and_store_pdf(cert_code: str, cert_type: str, intern_data: dict, ba
     if not supabase:
         raise ValueError("Supabase client is not configured.")
 
-    bg_pdf_path = None
-    coords_json_path = None
-    if batch_id:
-        if cert_type == "lor":
-            bg_pdf_path = f"templates/{batch_id}/lor_background.pdf"
-            coords_json_path = f"templates/{batch_id}/lor_coordinates.json"
-        elif cert_type == "experience":
-            bg_pdf_path = f"templates/{batch_id}/experience_background.pdf"
-            coords_json_path = f"templates/{batch_id}/experience_coordinates.json"
-        else:
-            bg_pdf_path = f"templates/{batch_id}/internship_background.pdf"
-            coords_json_path = f"templates/{batch_id}/internship_coordinates.json"
-
-    bg_pdf_bytes = None
-    coords_json_bytes = None
-    if bg_pdf_path and coords_json_path:
-        try:
-            bg_pdf_bytes = supabase.storage.from_("templates").download(bg_pdf_path)
-            coords_json_bytes = supabase.storage.from_("templates").download(coords_json_path)
-            print(f"Using precompiled overlay generation for {cert_code} (batch {batch_id})")
-        except Exception:
-            bg_pdf_bytes = None
-            coords_json_bytes = None
-
     replacements = {
         "<<NAME>>": intern_data.get("name") or "",
         "<<INSTITUTION>>": intern_data.get("college") or "",
@@ -933,51 +834,65 @@ def generate_and_store_pdf(cert_code: str, cert_type: str, intern_data: dict, ba
         qr_img.save(qr_io)
     qr_bytes = qr_io.getvalue()
 
-    if bg_pdf_bytes and coords_json_bytes:
-        try:
-            pdf_bytes = generate_overlay_pdf_bytes(bg_pdf_bytes, coords_json_bytes, replacements, qr_bytes)
-            public_url = upload_pdf_to_storage(cert_code, pdf_bytes)
-            return public_url
-        except Exception as overlay_err:
-            print(f"Failed precompiled overlay generation, falling back to legacy pipeline: {overlay_err}")
-
-    # Fallback to Legacy Pipeline
+    # Resolve the .pptx template directly — skip the overlay pipeline entirely.
     template_bytes = None
     ext = ".pptx"
 
-    if batch_id:
-        batch_res = supabase.table("batches").select("*").eq("id", batch_id).execute()
-        if batch_res.data:
-            batch = batch_res.data[0]
-            if cert_type == "lor":
-                template_path = batch.get("lor_template_path")
-            elif cert_type == "experience":
-                template_path = batch.get("experience_template_path")
-            else:
-                template_path = batch.get("internship_template_path")
+    # Priority 1: named file e.g. templates/BATCH_TEST1/internship.pptx
+    if batch_id and not batch_id.startswith("slot-"):
+        import re as _re
+        batch_id_stripped = batch_id.strip()
+        batch_id_normalized = _re.sub(r'\s+', '_', batch_id_stripped.lower())
+        cert_type_file = f"{cert_type}.pptx"
 
-    if template_path:
-        ext = os.path.splitext(template_path)[1].lower()
+        for folder in [batch_id_stripped, batch_id_normalized]:
+            if not folder:
+                continue
+            try:
+                candidate = f"templates/{folder}/{cert_type_file}"
+                template_bytes = supabase.storage.from_("templates").download(candidate)
+                print(f"[pdf] Using named PPTX: {candidate}")
+                break
+            except Exception:
+                pass
+
+    # Priority 2: slot-based path e.g. templates/slot-1.pptx
+    if not template_bytes:
+        slot_path = f"templates/{batch_id}.pptx"
         try:
-            template_bytes = supabase.storage.from_("templates").download(template_path)
+            template_bytes = supabase.storage.from_("templates").download(slot_path)
+            print(f"[pdf] Using slot PPTX: {slot_path}")
+        except Exception:
+            pass
+
+    # Priority 3: batches table lookup
+    if not template_bytes:
+        try:
+            batch_res = supabase.table("batches").select("*").eq("id", batch_id).execute()
+            if batch_res.data:
+                batch = batch_res.data[0]
+                if cert_type == "lor":
+                    template_path = batch.get("lor_template_path")
+                elif cert_type == "experience":
+                    template_path = batch.get("experience_template_path")
+                else:
+                    template_path = batch.get("internship_template_path")
+                if template_path:
+                    ext = os.path.splitext(template_path)[1].lower() or ".pptx"
+                    template_bytes = supabase.storage.from_("templates").download(template_path)
+                    print(f"[pdf] Using batches-table path: {template_path}")
         except Exception:
             pass
 
     if not template_bytes:
-        try:
-            template_bytes = supabase.storage.from_("templates").download(f"{batch_id}/template.pptx")
-            ext = ".pptx"
-        except Exception:
-            try:
-                template_bytes = supabase.storage.from_("templates").download(f"{batch_id}/template.html")
-                ext = ".html"
-            except Exception as dl_err:
-                raise ValueError(f"Failed to retrieve template file from Storage bucket: {dl_err}")
+        raise ValueError(f"Template PPTX not found for batch '{batch_id}' / cert_type '{cert_type}'. "
+                         f"Upload templates/{{batch_id}}/{{cert_type}}.pptx to storage.")
 
     if ext == ".pptx":
-        pdf_bytes, cert_title = generate_certificate_from_pptx_bytes(template_bytes, replacements, qr_bytes)
+        modified_pptx_bytes, _ = generate_certificate_from_pptx_bytes(template_bytes, replacements, qr_bytes)
+        pdf_bytes = convert_pptx_to_pdf_bytes(modified_pptx_bytes)
     else:
-        pdf_bytes, cert_title = generate_certificate_from_html_bytes(template_bytes, replacements, qr_bytes)
+        pdf_bytes, _ = generate_certificate_from_html_bytes(template_bytes, replacements, qr_bytes)
 
     public_url = upload_pdf_to_storage(cert_code, pdf_bytes)
     return public_url
