@@ -5,21 +5,18 @@ nixPkgs = [
   "libreoffice",
   "jre",
   "fontconfig",
+  "pango",
+  "cairo",
+  "gdk-pixbuf",
+  "shared-mime-info",
   "gobject-introspection",
   "libffi",
   "glib"
 ]
-aptPkgs = [
-  "libpango-1.0-0",
-  "libpangocairo-1.0-0",
-  "libcairo2",
-  "libgdk-pixbuf2.0-0",
-  "shared-mime-info"
-]
 
 [env]
 HOME = "/tmp"
-LD_LIBRARY_PATH = "/nix/profile/lib:/app/.nix-profile/lib:/root/.nix-profile/lib:/usr/lib/x86_64-linux-gnu"
+LD_LIBRARY_PATH = "/nix/profile/lib:/app/.nix-profile/lib:/root/.nix-profile/lib"
 
 [phases.build]
 cmds = [
@@ -27,5 +24,7 @@ cmds = [
   "mkdir -p ~/.local/share/fonts",
   "cp fonts/*.ttf ~/.local/share/fonts/ || true",
   "fc-cache -f -v",
-  "soffice --headless --terminate_after_init --env:UserInstallation=file:///tmp/lo_profile_warmup || true"
+  "soffice --headless --terminate_after_init --env:UserInstallation=file:///tmp/lo_profile_warmup || true",
+  "ln -s /nix/profile/lib/libpango-1.0.so /nix/profile/lib/libpango-1.0-0 || true",
+  "ln -s /nix/profile/lib/libpangocairo-1.0.so /nix/profile/lib/libpangocairo-1.0-0 || true"
 ]
