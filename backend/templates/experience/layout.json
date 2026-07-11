@@ -4,6 +4,18 @@
   "height_in": 11.694444444444445,
   "shapes": [
     {
+      "id": 43,
+      "name": "Group 42::Freeform 43",
+      "left": -0.001169333099398344,
+      "top": -0.20008602262045602,
+      "width": 2.647500393973097,
+      "height": 0.04250060234987315,
+      "is_line": true,
+      "is_qr": false,
+      "is_flow": true,
+      "line_color": "#000000"
+    },
+    {
       "id": 46,
       "name": "TextBox 46",
       "left": 0.3506944444444444,

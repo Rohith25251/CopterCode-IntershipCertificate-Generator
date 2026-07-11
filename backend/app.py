@@ -306,10 +306,10 @@ def get_shape_fill_color(shape):
         pass
     return '#000000'
 
-def extract_group_text_children(group_shape):
+def extract_group_children(group_shape):
     """
-    Extract text shapes from inside a GROUP shape, computing absolute
-    slide coordinates via group coordinate transform.
+    Extract text shapes and horizontal line shapes from inside a GROUP shape,
+    computing absolute slide coordinates via group coordinate transform.
     Returns list of shape_cfg dicts ready to add to layout_data['shapes'].
     """
     try:
@@ -339,15 +339,41 @@ def extract_group_text_children(group_shape):
             return []
         result = []
         for child in child_shapes:
-            if not child.has_text_frame:
-                continue
-            text = child.text_frame.text.strip()
-            if not text:
-                continue
             left_in = (gx + (child.left - cox) * sx) / _EMU_PER_INCH
             top_in  = (gy + (child.top  - coy) * sy) / _EMU_PER_INCH
-            width_in = max(child.width  * sx / _EMU_PER_INCH, 0.5)
-            height_in = max(child.height * sy / _EMU_PER_INCH, 0.2)
+            width_in = max(child.width  * sx / _EMU_PER_INCH, 0.05)
+            height_in = max(child.height * sy / _EMU_PER_INCH, 0.01)
+            
+            # Determine if shape is a line shape by checking if text is empty
+            has_tf = False
+            try:
+                has_tf = child.has_text_frame
+            except Exception:
+                pass
+            
+            text = ""
+            if has_tf:
+                try:
+                    text = child.text_frame.text.strip()
+                except Exception:
+                    pass
+            
+            if not text:
+                if height_in < 0.25 and width_in > 1.0:
+                    line_color = get_shape_fill_color(child)
+                    result.append({
+                        "id": child.shape_id if hasattr(child, 'shape_id') else 0,
+                        "name": f"{group_shape.name}::{child.name}",
+                        "left": left_in,
+                        "top": top_in,
+                        "width": width_in,
+                        "height": height_in,
+                        "is_line": True,
+                        "is_qr": False,
+                        "is_flow": (top_in <= 11.0),
+                        "line_color": line_color
+                    })
+                continue
             font_name = "Calibri"; font_size = 14
             font_color = "#000000"; bold = False; italic = False; align = "left"
             if child.text_frame.paragraphs:
@@ -386,7 +412,7 @@ def extract_group_text_children(group_shape):
             })
         return result
     except Exception as e:
-        print(f"[Warning] extract_group_text_children failed for {group_shape.name}: {e}")
+        print(f"[Warning] extract_group_children failed for {group_shape.name}: {e}")
         return []
 
 def is_body_text_shape(shape):
@@ -471,8 +497,8 @@ async def get_or_create_html_template(batch_id: str, cert_type: str, template_by
                         layout_data["shapes"].append(shape_cfg)
                         shapes_to_clear.append(shape)
                     elif shape.shape_type == 6 and 0.5 <= t_in <= 11.0:
-                        # GROUP shape with potential nested text children (like headings)
-                        group_children = extract_group_text_children(shape)
+                        # GROUP shape with potential nested text/line children (like headings with lines)
+                        group_children = extract_group_children(shape)
                         for child_cfg in group_children:
                             layout_data["shapes"].append(child_cfg)
                         if group_children:

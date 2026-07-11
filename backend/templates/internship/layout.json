@@ -4,6 +4,42 @@
   "height_in": 11.694444444444445,
   "shapes": [
     {
+      "id": 12,
+      "name": "Group 11::Freeform 12",
+      "left": 2.5808016185476816,
+      "top": 2.1884372265966756,
+      "width": 2.9709744094886714,
+      "height": 0.010412292213473315,
+      "is_line": true,
+      "is_qr": false,
+      "is_flow": true,
+      "line_color": "#000000"
+    },
+    {
+      "id": 16,
+      "name": "Group 15::Freeform 16",
+      "left": 0.498322124034227,
+      "top": 9.667985564304463,
+      "width": 2.6466628381936737,
+      "height": 0.041666666666666664,
+      "is_line": true,
+      "is_qr": false,
+      "is_flow": true,
+      "line_color": "#6a3c2c"
+    },
+    {
+      "id": 17,
+      "name": "Group 15::Freeform 17",
+      "left": 0.4981832356905799,
+      "top": 9.66937445319335,
+      "width": 2.6456906197881436,
+      "height": 0.041666666666666664,
+      "is_line": true,
+      "is_qr": false,
+      "is_flow": true,
+      "line_color": "#000000"
+    },
+    {
       "id": 20,
       "name": "TextBox 20",
       "left": 0.36357720909886265,
