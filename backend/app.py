@@ -454,7 +454,7 @@ async def get_or_create_html_template(batch_id: str, cert_type: str, template_by
                 l_in = shape.left.inches if hasattr(shape, "left") else 0
                 t_in = shape.top.inches if hasattr(shape, "top") else 0
                 if not shape.has_text_frame:
-                    if h_in < 0.25 and w_in > 1.0 and l_in >= 0:
+                    if shape.shape_type != 6 and h_in < 0.25 and w_in > 1.0 and l_in >= 0:
                         line_color = get_shape_fill_color(shape)
                         shape_cfg = {
                             "id": shape.shape_id if hasattr(shape, "shape_id") else len(layout_data["shapes"]),
@@ -470,7 +470,7 @@ async def get_or_create_html_template(batch_id: str, cert_type: str, template_by
                         }
                         layout_data["shapes"].append(shape_cfg)
                         shapes_to_clear.append(shape)
-                    elif shape.shape_type == 6 and 0.15 <= h_in <= 1.5 and 0.5 <= t_in <= 11.0:
+                    elif shape.shape_type == 6 and 0.5 <= t_in <= 11.0:
                         # GROUP shape with potential nested text children (like headings)
                         group_children = extract_group_text_children(shape)
                         for child_cfg in group_children:

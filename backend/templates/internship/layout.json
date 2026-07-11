@@ -4,6 +4,102 @@
   "height_in": 11.694444444444445,
   "shapes": [
     {
+      "id": 20,
+      "name": "TextBox 20",
+      "left": 0.36357720909886265,
+      "top": 11.41579615048119,
+      "width": 1.36497375328084,
+      "height": 0.21944663167104111,
+      "font_name": "Arial Bold",
+      "font_size": 10.99,
+      "color": "#ffffff",
+      "bold": true,
+      "italic": false,
+      "align": "left",
+      "original_text": "+91 8072193600",
+      "paragraphs": [
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "+91 8072193600",
+              "font_name": "Arial Bold",
+              "font_size": 10.99,
+              "bold": true,
+              "italic": false,
+              "underline": false,
+              "color": "#ffffff"
+            }
+          ]
+        }
+      ],
+      "is_flow": false
+    },
+    {
+      "id": 21,
+      "name": "TextBox 21",
+      "left": 3.090246062992126,
+      "top": 11.434285870516186,
+      "width": 1.9520833333333334,
+      "height": 0.21944663167104111,
+      "font_name": "Arial Bold",
+      "font_size": 10.99,
+      "color": "#ffffff",
+      "bold": true,
+      "italic": false,
+      "align": "left",
+      "original_text": "www.Coptercode.co.in",
+      "paragraphs": [
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "www.Coptercode.co.in",
+              "font_name": "Arial Bold",
+              "font_size": 10.99,
+              "bold": true,
+              "italic": false,
+              "underline": false,
+              "color": "#ffffff"
+            }
+          ]
+        }
+      ],
+      "is_flow": false
+    },
+    {
+      "id": 22,
+      "name": "TextBox 22",
+      "left": 6.0545516185476815,
+      "top": 11.434285870516186,
+      "width": 1.8141929133858268,
+      "height": 0.21944663167104111,
+      "font_name": "Arial Bold",
+      "font_size": 10.99,
+      "color": "#ffffff",
+      "bold": true,
+      "italic": false,
+      "align": "left",
+      "original_text": "hr@coptercode.co.in",
+      "paragraphs": [
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "hr@coptercode.co.in",
+              "font_name": "Arial Bold",
+              "font_size": 10.99,
+              "bold": true,
+              "italic": false,
+              "underline": false,
+              "color": "#ffffff"
+            }
+          ]
+        }
+      ],
+      "is_flow": false
+    },
+    {
       "id": 23,
       "name": "TextBox 23",
       "left": 6.323406605424322,
@@ -27,17 +123,83 @@
               "font_size": 9.0,
               "bold": true,
               "italic": false,
+              "underline": false,
               "color": "#000000"
             }
           ]
         }
-      ]
+      ],
+      "is_flow": true
+    },
+    {
+      "id": 24,
+      "name": "TextBox 24",
+      "left": 2.667729658792651,
+      "top": 2.344145888013998,
+      "width": 2.7424475065616796,
+      "height": 0.27392279090113736,
+      "font_name": "Arial Bold",
+      "font_size": 13.88,
+      "color": "#000000",
+      "bold": true,
+      "italic": false,
+      "align": "left",
+      "original_text": "TO WHOM IT MAY CONCERN",
+      "paragraphs": [
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": " TO WHOM IT MAY CONCERN",
+              "font_name": "Arial Bold",
+              "font_size": 13.88,
+              "bold": true,
+              "italic": false,
+              "underline": false,
+              "color": "#000000"
+            }
+          ]
+        }
+      ],
+      "is_flow": false
+    },
+    {
+      "id": 25,
+      "name": "TextBox 25",
+      "left": 2.5808016185476816,
+      "top": 1.922166447944007,
+      "width": 3.0197911198600176,
+      "height": 0.2815682414698163,
+      "font_name": "Arial Bold",
+      "font_size": 14.88,
+      "color": "#000000",
+      "bold": true,
+      "italic": false,
+      "align": "left",
+      "original_text": "CERTIFICATE OF INTERNSHIP",
+      "paragraphs": [
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "CERTIFICATE OF INTERNSHIP",
+              "font_name": "Arial Bold",
+              "font_size": 14.88,
+              "bold": true,
+              "italic": false,
+              "underline": false,
+              "color": "#000000"
+            }
+          ]
+        }
+      ],
+      "is_flow": false
     },
     {
       "id": 26,
       "name": "TextBox 26",
       "left": 0.27734251968503937,
-      "top": 3.8142672790901138,
+      "top": 3.7596817585301836,
       "width": 7.713031496062992,
       "height": 2.7829549431321086,
       "font_name": "Arial",
@@ -57,6 +219,7 @@
               "font_size": 14.36,
               "bold": false,
               "italic": false,
+              "underline": false,
               "color": "#000000"
             },
             {
@@ -65,6 +228,7 @@
               "font_size": 14.36,
               "bold": true,
               "italic": false,
+              "underline": false,
               "color": "#000000"
             }
           ]
@@ -82,6 +246,7 @@
               "font_size": 14.36,
               "bold": false,
               "italic": false,
+              "underline": false,
               "color": "#000000"
             },
             {
@@ -90,6 +255,7 @@
               "font_size": 14.36,
               "bold": true,
               "italic": false,
+              "underline": false,
               "color": "#000000"
             }
           ]
@@ -107,6 +273,7 @@
               "font_size": 14.36,
               "bold": false,
               "italic": false,
+              "underline": false,
               "color": "#000000"
             },
             {
@@ -115,6 +282,7 @@
               "font_size": 14.36,
               "bold": true,
               "italic": false,
+              "underline": false,
               "color": "#000000"
             },
             {
@@ -123,6 +291,7 @@
               "font_size": 14.36,
               "bold": false,
               "italic": false,
+              "underline": false,
               "color": "#000000"
             },
             {
@@ -131,6 +300,7 @@
               "font_size": 14.36,
               "bold": true,
               "italic": false,
+              "underline": false,
               "color": "#000000"
             }
           ]
@@ -148,6 +318,7 @@
               "font_size": 14.36,
               "bold": true,
               "italic": false,
+              "underline": false,
               "color": "#000000"
             }
           ]
@@ -165,6 +336,7 @@
               "font_size": 14.36,
               "bold": false,
               "italic": false,
+              "underline": false,
               "color": "#000000"
             },
             {
@@ -173,35 +345,82 @@
               "font_size": 14.36,
               "bold": true,
               "italic": false,
+              "underline": false,
               "color": "#000000"
             },
             {
-              "text": "(regular) at ",
+              "text": "(regular) at Coptercode.",
               "font_name": "Arial",
               "font_size": 14.36,
               "bold": false,
               "italic": false,
-              "color": "#000000"
-            },
-            {
-              "text": "Coptercode",
-              "font_name": "Arial",
-              "font_size": 14.36,
-              "bold": false,
-              "italic": false,
-              "color": "#000000"
-            },
-            {
-              "text": ".",
-              "font_name": "Arial",
-              "font_size": 14.36,
-              "bold": false,
-              "italic": false,
+              "underline": false,
               "color": "#000000"
             }
           ]
         }
-      ]
+      ],
+      "is_flow": true
+    },
+    {
+      "id": 27,
+      "name": "TextBox 27",
+      "left": 0.4983748906386702,
+      "top": 9.790020778652668,
+      "width": 1.8830522747156606,
+      "height": 1.1931058617672792,
+      "font_name": "Arial",
+      "font_size": 9.09,
+      "color": "#000000",
+      "bold": false,
+      "italic": false,
+      "align": "left",
+      "original_text": "BEST REGARDS,\nKARTHIKEYAN SUNDHARESAN, COPTER CODE, hr@coptercode.co.in\n+91 96554 51382 www.Coptercode.co.in",
+      "paragraphs": [
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "BEST REGARDS,",
+              "font_name": "Arial",
+              "font_size": 9.09,
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "KARTHIKEYAN SUNDHARESAN, COPTER CODE, hr@coptercode.co.in",
+              "font_name": "Arial",
+              "font_size": 9.09,
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "+91 96554 51382 www.Coptercode.co.in",
+              "font_name": "Arial",
+              "font_size": 9.09,
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "color": "#000000"
+            }
+          ]
+        }
+      ],
+      "is_flow": false
     },
     {
       "id": 28,
@@ -227,11 +446,13 @@
               "font_size": 14.36,
               "bold": true,
               "italic": false,
+              "underline": false,
               "color": "#000000"
             }
           ]
         }
-      ]
+      ],
+      "is_flow": true
     }
   ]
 }
