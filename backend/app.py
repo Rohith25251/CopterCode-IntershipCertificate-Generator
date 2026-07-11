@@ -36,6 +36,9 @@ def locate_and_preload_nix_libraries():
                     name_parts = entry.name.split("-")
                     if len(name_parts) > 1:
                         pkg_name = name_parts[1].lower()
+                        # Avoid adding glibc, gcc, and other incompatible C++ bindings to LD_LIBRARY_PATH
+                        if "glibc" in pkg_name or "gcc" in pkg_name or "glibmm" in pkg_name or "taglib" in pkg_name:
+                            continue
                         if any(kw in pkg_name for kw in required_keywords):
                             lib_path = os.path.join(entry.path, "lib")
                             if os.path.exists(lib_path):
