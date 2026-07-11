@@ -123,9 +123,20 @@ def horiz_overlap(s1, s2):
     # Returns True if s1 and s2 overlap horizontally
     return s1["left"] < s2["left"] + s2["width"] and s1["left"] + s1["width"] > s2["left"]
 
+def clean_font_family(font_name):
+    if not font_name:
+        return "Arial"
+    name = font_name
+    # Remove common style/weight suffixes
+    for word in ["-Bold", " Bold", "Bold", "-Regular", " Regular", "Regular", "-Italic", " Italic", "Italic", "bd", "bd ", " bd"]:
+        name = name.replace(word, "")
+    # Add spaces back if missing between lowercase and uppercase (e.g. CanvaSans -> Canva Sans)
+    name = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', name)
+    name = name.replace("-", " ").replace("_", " ").strip()
+    return name
+
 def generate_font_face_rules():
     rules = []
-    # Find absolute path of backend/fonts or fonts folder
     fonts_dir = None
     for d in ["backend/fonts", "fonts"]:
         if os.path.exists(d):
@@ -140,24 +151,17 @@ def generate_font_face_rules():
                 file_uri = Path(font_path).as_uri()
                 
                 font_name = f[:-4]
-                family = font_name
+                family_clean = clean_font_family(font_name)
                 weight = "normal"
                 style = "normal"
                 
-                # Check for Bold/Italic hints in the name
                 name_lower = font_name.lower()
                 if "bold" in name_lower or ",bold" in name_lower:
                     weight = "bold"
-                    family = font_name.replace(",Bold", "").replace("-Bold", "").replace("Bold", "").replace("bd", "")
                 if "italic" in name_lower:
                     style = "italic"
-                    family = font_name.replace("-Italic", "").replace("Italic", "").replace("it", "")
-                if "regular" in name_lower:
-                    family = font_name.replace("-Regular", "").replace("Regular", "")
                 
-                # Strip spaces for comparison normalization
-                family_clean = family.replace("-", " ").replace("_", " ").strip()
-                
+                # Register clean normalized family name
                 rules.append(
                     f"@font-face {{\n"
                     f"  font-family: '{family_clean}';\n"
@@ -475,15 +479,18 @@ class LayoutEngine:
                 if left_pos < 0.2:
                     left_pos = 0.2
                     
+                # Remove fixed height constraint so box can expand to contain both image and label
                 html_parts.append(
-                    f"    <div class='qr-box' style='left: {left_pos:.3f}in; top: {t:.3f}in; width: {qr_size:.3f}in; height: {qr_size:.3f}in;'>"
+                    f"    <div class='qr-box' style='left: {left_pos:.3f}in; top: {t:.3f}in; width: {qr_size:.3f}in; text-align: center;'>"
                 )
-                html_parts.append(f"      <img src='data:image/png;base64,{qr_base64}' />")
+                html_parts.append(f"      <img src='data:image/png;base64,{qr_base64}' style='width: 100%; height: auto; display: block; margin-bottom: 2px;' />")
+                html_parts.append("      <span style='font-family: Arial, sans-serif; font-size: 7.5pt; color: #444444; font-weight: bold; display: block; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.5px;'>scan to verify</span>")
                 html_parts.append("    </div>")
             else:
                 best_scale = shape["best_scale"]
                 default_size = shape["font_size"] * best_scale
                 shape_font_name = shape.get("font_name", "Arial")
+                clean_family = clean_font_family(shape_font_name)
                 
                 # Apply custom fonts and text sizing styles
                 style_str = (
@@ -491,7 +498,7 @@ class LayoutEngine:
                     f"top: {t}in; "
                     f"width: {w}in; "
                     f"height: {h}in; "
-                    f"font-family: '{shape_font_name}', Arial, Calibri, sans-serif; "
+                    f"font-family: '{clean_family}', Arial, Calibri, sans-serif; "
                     f"font-size: {default_size}pt; "
                     f"color: {shape['color']}; "
                 )
@@ -512,7 +519,8 @@ class LayoutEngine:
                         if r["font_size"] != shape["font_size"]:
                             span_style += f"font-size: {r['font_size'] * best_scale}pt; "
                         if r["font_name"]:
-                            span_style += f"font-family: '{r['font_name']}', Arial, sans-serif; "
+                            r_font_clean = clean_font_family(r["font_name"])
+                            span_style += f"font-family: '{r_font_clean}', Arial, sans-serif; "
                             
                         classes = []
                         if r["bold"]:
