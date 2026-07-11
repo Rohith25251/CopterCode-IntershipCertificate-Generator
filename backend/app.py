@@ -1440,23 +1440,6 @@ async def create_batch(
                 file=lor_bytes,
                 file_options={"content-type": content_type, "upsert": "true"}
             )
-            if ext == ".pptx":
-                try:
-                    blanked_pptx, coordinates_json = precompile_pptx_template(lor_bytes)
-                    background_pdf = convert_pptx_to_pdf_bytes(blanked_pptx)
-                    supabase.storage.from_("templates").upload(
-                        path=f"templates/{batch_id}/lor_background.pdf",
-                        file=background_pdf,
-                        file_options={"content-type": "application/pdf", "upsert": "true"}
-                    )
-                    supabase.storage.from_("templates").upload(
-                        path=f"templates/{batch_id}/lor_coordinates.json",
-                        file=coordinates_json,
-                        file_options={"content-type": "application/json", "upsert": "true"}
-                    )
-                    print(f"Pre-compiled LOR PPTX template for batch {batch_id} successfully.")
-                except Exception as pre_err:
-                    print(f"Failed to pre-compile LOR template for batch {batch_id}: {pre_err}")
         
         if experience_template:
             exp_bytes = await experience_template.read()
@@ -1468,23 +1451,6 @@ async def create_batch(
                 file=exp_bytes,
                 file_options={"content-type": content_type, "upsert": "true"}
             )
-            if ext == ".pptx":
-                try:
-                    blanked_pptx, coordinates_json = precompile_pptx_template(exp_bytes)
-                    background_pdf = convert_pptx_to_pdf_bytes(blanked_pptx)
-                    supabase.storage.from_("templates").upload(
-                        path=f"templates/{batch_id}/experience_background.pdf",
-                        file=background_pdf,
-                        file_options={"content-type": "application/pdf", "upsert": "true"}
-                    )
-                    supabase.storage.from_("templates").upload(
-                        path=f"templates/{batch_id}/experience_coordinates.json",
-                        file=coordinates_json,
-                        file_options={"content-type": "application/json", "upsert": "true"}
-                    )
-                    print(f"Pre-compiled Experience PPTX template for batch {batch_id} successfully.")
-                except Exception as pre_err:
-                    print(f"Failed to pre-compile Experience template for batch {batch_id}: {pre_err}")
 
         if internship_template:
             int_bytes = await internship_template.read()
@@ -1496,23 +1462,6 @@ async def create_batch(
                 file=int_bytes,
                 file_options={"content-type": content_type, "upsert": "true"}
             )
-            if ext == ".pptx":
-                try:
-                    blanked_pptx, coordinates_json = precompile_pptx_template(int_bytes)
-                    background_pdf = convert_pptx_to_pdf_bytes(blanked_pptx)
-                    supabase.storage.from_("templates").upload(
-                        path=f"templates/{batch_id}/internship_background.pdf",
-                        file=background_pdf,
-                        file_options={"content-type": "application/pdf", "upsert": "true"}
-                    )
-                    supabase.storage.from_("templates").upload(
-                        path=f"templates/{batch_id}/internship_coordinates.json",
-                        file=coordinates_json,
-                        file_options={"content-type": "application/json", "upsert": "true"}
-                    )
-                    print(f"Pre-compiled Internship PPTX template for batch {batch_id} successfully.")
-                except Exception as pre_err:
-                    print(f"Failed to pre-compile Internship template for batch {batch_id}: {pre_err}")
 
         batch_record = {
             "id": batch_id,
