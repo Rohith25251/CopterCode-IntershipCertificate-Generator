@@ -495,8 +495,8 @@ class LayoutEngine:
                     f"font-size: {default_size}pt; "
                     f"color: {shape['color']}; "
                 )
-                if not shape.get("is_flow", True):
-                    # Prevent wrapping and remove vertical padding to avoid overflow clipping at page bottom
+                # Prevent wrapping for short headings/labels and off-flow text boxes
+                if not shape.get("is_flow", True) or (len(shape.get("original_text", "")) < 50 and "\n" not in shape.get("original_text", "")):
                     style_str += "overflow: visible; padding-top: 0; padding-bottom: 0; "
                     if "\n" not in shape.get("original_text", ""):
                         style_str += "white-space: nowrap; "
