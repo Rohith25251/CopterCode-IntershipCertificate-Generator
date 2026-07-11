@@ -306,6 +306,15 @@ class LayoutEngine:
             f"      height: {self.layout['height_in']}in;",
             "      z-index: 1;",
             "    }",
+            "    .footer-bar {",
+            "      position: absolute;",
+            "      bottom: 0;",
+            "      left: 0;",
+            f"      width: {self.layout['width_in']}in;",
+            "      height: 0.34in;",
+            "      background-color: #72402f;",
+            "      z-index: 5;",
+            "    }",
             "    .text-box {",
             "      position: absolute;",
             "      z-index: 10;",
@@ -341,7 +350,8 @@ class LayoutEngine:
             "</head>",
             "<body>",
             "  <div class='page'>",
-            f"    <img class='bg-img' src='data:image/png;base64,{bg_base64}' />"
+            f"    <img class='bg-img' src='data:image/png;base64,{bg_base64}' />",
+            "    <div class='footer-bar'></div>"
         ]
         
         # Build absolutely-positioned shape divs
