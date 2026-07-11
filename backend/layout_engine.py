@@ -351,6 +351,11 @@ class LayoutEngine:
             w = shape["width"]
             h = shape["height"]
             
+            # If shape is near the bottom edge (footer area), shift it up slightly
+            # to prevent it from being clipped by the A4 page boundary in WeasyPrint
+            if t > 11.0:
+                t = max(11.0, t - 0.08)
+            
             if shape["is_qr"]:
                 # Force a reasonable square size for the QR code
                 qr_size = 1.1  # inches (good standard size)
