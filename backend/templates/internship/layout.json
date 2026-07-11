@@ -302,6 +302,10 @@
         },
         {
           "align": "justify",
+          "runs": []
+        },
+        {
+          "align": "justify",
           "runs": [
             {
               "text": "This is to notify",
