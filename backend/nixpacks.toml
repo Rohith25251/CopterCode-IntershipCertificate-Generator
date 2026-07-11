@@ -12,6 +12,9 @@ nixPkgs = [
   "glib"
 ]
 
+[variables]
+LD_LIBRARY_PATH = "/root/.nix-profile/lib"
+
 [phases.build]
 cmds = [
   "pip install -r requirements.txt",
