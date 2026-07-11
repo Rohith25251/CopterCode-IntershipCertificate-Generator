@@ -394,7 +394,7 @@ class LayoutEngine:
             "      z-index: 10;",
             "      box-sizing: border-box;",
             "      overflow: visible;",
-            "      padding: 0.05in 0.1in;",
+            "      padding: 0;",
             "    }",
             "    .text-box p {",
             "      margin: 0;",
@@ -503,9 +503,11 @@ class LayoutEngine:
                     f"color: {shape['color']}; "
                 )
                 # Prevent wrapping for short headings/labels and off-flow text boxes
-                if not shape.get("is_flow", True) or (len(shape.get("original_text", "")) < 50 and "\n" not in shape.get("original_text", "")):
+                # Use resolved_text length so we don't nowrap long replaced placeholder values
+                resolved_txt = shape.get("resolved_text", "")
+                if not shape.get("is_flow", True) or (len(resolved_txt) < 50 and "\n" not in resolved_txt):
                     style_str += "overflow: visible; padding-top: 0; padding-bottom: 0; "
-                    if "\n" not in shape.get("original_text", ""):
+                    if "\n" not in resolved_txt:
                         style_str += "white-space: nowrap; "
                 
                 html_parts.append(f'    <div class="text-box" style="{style_str}">')
