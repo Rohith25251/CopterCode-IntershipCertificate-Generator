@@ -1,0 +1,237 @@
+{
+  "template": "internship",
+  "width_in": 8.26388888888889,
+  "height_in": 11.694444444444445,
+  "shapes": [
+    {
+      "id": 23,
+      "name": "TextBox 23",
+      "left": 6.323406605424322,
+      "top": 1.9859580052493437,
+      "width": 1.2239588801399826,
+      "height": 0.17290682414698164,
+      "font_name": "Arial Bold",
+      "font_size": 9.0,
+      "color": "#000000",
+      "bold": true,
+      "italic": false,
+      "align": "left",
+      "original_text": "DATE: <<DATE>>",
+      "paragraphs": [
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "DATE: <<DATE>>",
+              "font_name": "Arial Bold",
+              "font_size": 9.0,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "name": "TextBox 26",
+      "left": 0.27734251968503937,
+      "top": 3.8142672790901138,
+      "width": 7.713031496062992,
+      "height": 2.7829549431321086,
+      "font_name": "Arial",
+      "font_size": 14.36,
+      "color": "#000000",
+      "bold": false,
+      "italic": false,
+      "align": "justify",
+      "original_text": "Candidate Name: <<NAME>>\n\nInstitute Name: <<INSTITUTION>>\n\nThis is to notify <<NAME>>, <<YEAR>>,<<DEPARTMENT>>,                                              has successfully completed an Internship and Live Project under the Research & Development area \"<<DOMAIN>>\" in COPTERCODE\n\nINTERNSHIP & LIVE PROJECT AREA: <<INTERNSHIP & LIVE PROJECT AREA>>\n\nat COPTERCODE. The INTERNSHIP happened for <<BATCH >> (regular) at Coptercode.",
+      "paragraphs": [
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "Candidate Name:",
+              "font_name": "Arial",
+              "font_size": 14.36,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": " <<NAME>>",
+              "font_name": "Arial Bold",
+              "font_size": 14.36,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "justify",
+          "runs": []
+        },
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "Institute Name:",
+              "font_name": "Arial",
+              "font_size": 14.36,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": " <<INSTITUTION>>",
+              "font_name": "Arial Bold",
+              "font_size": 14.36,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "justify",
+          "runs": []
+        },
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "This is to notify",
+              "font_name": "Arial",
+              "font_size": 14.36,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": " <<NAME>>, <<YEAR>>,<<DEPARTMENT>>,",
+              "font_name": "Arial Bold",
+              "font_size": 14.36,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": "                                              has successfully completed an Internship and Live Project under the Research & Development area ",
+              "font_name": "Arial",
+              "font_size": 14.36,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": "\"<<DOMAIN>>\" in COPTERCODE",
+              "font_name": "Arial Bold",
+              "font_size": 14.36,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "justify",
+          "runs": []
+        },
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "INTERNSHIP & LIVE PROJECT AREA: <<INTERNSHIP & LIVE PROJECT AREA>>",
+              "font_name": "Arial Bold",
+              "font_size": 14.36,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "justify",
+          "runs": []
+        },
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "at COPTERCODE. The INTERNSHIP happened for ",
+              "font_name": "Arial",
+              "font_size": 14.36,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": "<<BATCH >> ",
+              "font_name": "Arial Bold",
+              "font_size": 14.36,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": "(regular) at ",
+              "font_name": "Arial",
+              "font_size": 14.36,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": "Coptercode",
+              "font_name": "Arial",
+              "font_size": 14.36,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": ".",
+              "font_name": "Arial",
+              "font_size": 14.36,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "name": "TextBox 28",
+      "left": 6.0545516185476815,
+      "top": 9.59386811023622,
+      "width": 7.713031496062992,
+      "height": 0.21209645669291338,
+      "font_name": "Arial Bold",
+      "font_size": 14.36,
+      "color": "#000000",
+      "bold": true,
+      "italic": false,
+      "align": "justify",
+      "original_text": "<<QR>>",
+      "paragraphs": [
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "<<QR>>",
+              "font_name": "Arial Bold",
+              "font_size": 14.36,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

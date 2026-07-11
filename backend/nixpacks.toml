@@ -1,5 +1,16 @@
 [phases.setup]
-nixPkgs = ["python3", "gcc", "libreoffice", "jre", "fontconfig"]
+nixPkgs = [
+  "python3",
+  "gcc",
+  "libreoffice",
+  "jre",
+  "fontconfig",
+  "pango",
+  "cairo",
+  "gobject-introspection",
+  "libffi",
+  "glib"
+]
 
 [phases.build]
 cmds = [

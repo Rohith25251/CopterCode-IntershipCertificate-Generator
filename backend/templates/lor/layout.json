@@ -1,0 +1,382 @@
+{
+  "template": "lor",
+  "width_in": 8.26388888888889,
+  "height_in": 11.694444444444445,
+  "shapes": [
+    {
+      "id": 54,
+      "name": "TextBox 54",
+      "left": 0.4067399387576553,
+      "top": 2.963666885389326,
+      "width": 7.606551837270342,
+      "height": 2.10418416447944,
+      "font_name": "Arial",
+      "font_size": 11.88,
+      "color": "#000000",
+      "bold": false,
+      "italic": false,
+      "align": "justify",
+      "original_text": "We are pleased to recommend <<NAME>> , from the Department of <<DEPARTMENT>>, <<INSTITUTION>>, has successfully completed a one-month internship and live project program at CopterCode, <<BATCH >> in the field of <<DOMAIN>>.\n\nDuring the internship, <<NAME>> worked under the guidance of our engineering and R&D teams and was actively involved in both the hardware and software aspects of our projects. As a representative of the HR department, I had the opportunity to observe consistent dedication and the positive feedback received from mentors and team members.\n\nSome noteworthy contributions include:",
+      "paragraphs": [
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "We are pleased to recommend ",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": "<<NAME>>",
+              "font_name": "Arial Bold",
+              "font_size": 11.88,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": " ",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": ", from the Department of <<DEPARTMENT>>, <<INSTITUTION>>, has successfully completed a one-month internship and live project program at ",
+              "font_name": "Arial Bold",
+              "font_size": 11.88,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": "CopterCode",
+              "font_name": "Arial Bold",
+              "font_size": 11.88,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": ", <<BATCH >>",
+              "font_name": "Arial Bold",
+              "font_size": 11.88,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": " in the field of ",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": "<<DOMAIN>>.",
+              "font_name": "Arial Bold",
+              "font_size": 11.88,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "justify",
+          "runs": []
+        },
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "During the internship,",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": " <<NAME>> ",
+              "font_name": "Arial Bold",
+              "font_size": 11.88,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": "worked under the guidance of our engineering and R&D teams and was actively involved in both the hardware and software aspects of our projects. As a representative of the HR department, I had the opportunity to observe consistent dedication and the positive feedback received from mentors and team members.",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "justify",
+          "runs": []
+        },
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "Some noteworthy contributions include:",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 55,
+      "name": "TextBox 55",
+      "left": 0.6874475065616797,
+      "top": 5.25619750656168,
+      "width": 7.320135608048994,
+      "height": 1.2708508311461066,
+      "font_name": "Arial",
+      "font_size": 11.88,
+      "color": "#000000",
+      "bold": false,
+      "italic": false,
+      "align": "left",
+      "original_text": "Designing and implementing user interfaces and backend services for web applications. Working with frontend and backend frameworks to develop scalable, efficient, and maintainable code.\nCollaborating on database design, API integrations, and deployment processes.\nDebugging, testing, and optimizing software components to ensure high performance and reliability.\nDemonstrating problem-solving skills, adaptability, and effective collaboration in a team environment.",
+      "paragraphs": [
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "Designing and implementing user interfaces and backend services for web applications. Working with frontend and backend frameworks to develop scalable, efficient, and maintainable code.",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "Collaborating on database design, API integrations, and deployment processes.",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "Debugging, testing, and optimizing software components to ensure high performance and reliability.",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "Demonstrating problem-solving skills, adaptability, and effective collaboration in a team environment.",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 56,
+      "name": "TextBox 56",
+      "left": 0.4067399387576553,
+      "top": 7.131906167979003,
+      "width": 7.606458880139982,
+      "height": 2.10418416447944,
+      "font_name": "Arial Bold",
+      "font_size": 11.88,
+      "color": "#000000",
+      "bold": true,
+      "italic": false,
+      "align": "justify",
+      "original_text": "<<NAME>> stood out as a diligent and motivated intern, eager to learn and contribute to real- world projects. The technical skills and collaborative attitude displayed made a valuable impact on the team during the internship period.\n\nWe are confident that <<NAME>> will continue to excel in future academic and professional pursuits. We at CopterCode wholeheartedly recommend consideration for any opportunity that aligns with these skills and interests.\nFor verification or further information, please feel free to contact us.\n \nSincerely,",
+      "paragraphs": [
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "<<NAME>> ",
+              "font_name": "Arial Bold",
+              "font_size": 11.88,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": "stood out as a diligent and motivated intern, eager to learn and contribute to real- world projects. The technical skills and collaborative attitude displayed made a valuable impact on the team during the internship period.",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "justify",
+          "runs": []
+        },
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "We are confident that",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": " <<NAME>> ",
+              "font_name": "Arial Bold",
+              "font_size": 11.88,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": "will continue to excel in future academic and professional pursuits. We at CopterCode wholeheartedly recommend consideration for any opportunity that aligns with these skills and interests.",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "For verification or further information, please feel free to contact us.",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": " ",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "Sincerely,",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 58,
+      "name": "TextBox 58",
+      "left": 6.601917104111986,
+      "top": 1.8674584426946632,
+      "width": 1.2239588801399826,
+      "height": 0.17290682414698164,
+      "font_name": "Arial Bold",
+      "font_size": 9.0,
+      "color": "#000000",
+      "bold": true,
+      "italic": false,
+      "align": "left",
+      "original_text": "DATE: <<DATE>>",
+      "paragraphs": [
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "DATE: <<DATE>>",
+              "font_name": "Arial Bold",
+              "font_size": 9.0,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 59,
+      "name": "TextBox 59",
+      "left": 6.0545516185476815,
+      "top": 9.897900262467191,
+      "width": 7.713031496062992,
+      "height": 0.21209645669291338,
+      "font_name": "Arial Bold",
+      "font_size": 14.36,
+      "color": "#000000",
+      "bold": true,
+      "italic": false,
+      "align": "justify",
+      "original_text": "<<QR>>",
+      "paragraphs": [
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "<<QR>>",
+              "font_name": "Arial Bold",
+              "font_size": 14.36,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

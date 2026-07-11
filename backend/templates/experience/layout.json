@@ -1,0 +1,371 @@
+{
+  "template": "experience",
+  "width_in": 8.26388888888889,
+  "height_in": 11.694444444444445,
+  "shapes": [
+    {
+      "id": 53,
+      "name": "TextBox 53",
+      "left": 0.4067399387576553,
+      "top": 4.560885826771654,
+      "width": 7.606437007874016,
+      "height": 0.8541841644794401,
+      "font_name": "Arial",
+      "font_size": 11.88,
+      "color": "#000000",
+      "bold": false,
+      "italic": false,
+      "align": "left",
+      "original_text": "During the internship, <<NAME>> worked with our engineering and R&D teams as a Software Developer Intern as well as a <<DOMAIN>>.\n\nKey responsibilities and contributions included:",
+      "paragraphs": [
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "During the internship, ",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": "<<NAME>> ",
+              "font_name": "Arial Bold",
+              "font_size": 11.88,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": "worked with our engineering and R&D teams as a Software Developer Intern as well as a <<DOMAIN>>.",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "left",
+          "runs": []
+        },
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "Key responsibilities and contributions included:",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 54,
+      "name": "TextBox 54",
+      "left": 0.6874475065616797,
+      "top": 5.394541776027997,
+      "width": 7.320197944006999,
+      "height": 1.2708508311461066,
+      "font_name": "Arial",
+      "font_size": 11.88,
+      "color": "#000000",
+      "bold": false,
+      "italic": false,
+      "align": "left",
+      "original_text": "Developing frontend and backend components of web applications using appropriate technologies and frameworks.\nDesigning user-friendly interfaces and implementing scalable backend services.\nIntegrating databases, APIs, and third-party services.\nDebugging, testing, and optimizing code to ensure performance and reliability. Collaborating effectively with team members to deliver project milestones on time.",
+      "paragraphs": [
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "Developing frontend and backend components of web applications using appropriate technologies and frameworks.",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "Designing user-friendly interfaces and implementing scalable backend services.",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "Integrating databases, APIs, and third-party services.",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "Debugging, testing, and optimizing code to ensure performance and reliability. Collaborating effectively with team members to deliver project milestones on time.",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 55,
+      "name": "TextBox 55",
+      "left": 0.4067399387576553,
+      "top": 6.853416447944007,
+      "width": 7.606437007874016,
+      "height": 1.4791841644794401,
+      "font_name": "Arial",
+      "font_size": 11.88,
+      "color": "#000000",
+      "bold": false,
+      "italic": false,
+      "align": "justify",
+      "original_text": "Throughout the internship, <<NAME>> demonstrated strong technical aptitude, eagerness to learn, and a professional attitude. The contributions to the assigned projects were valuable and appreciated.\n\nWe thank <<NAME>>for the efforts during the tenure at CopterCode and wish continued success in all future endeavours.\n\nFor verification of this certificate, please contact our HR department at hr@coptercode.co.in",
+      "paragraphs": [
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "Throughout the internship, ",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": "<<NAME>> ",
+              "font_name": "Arial Bold",
+              "font_size": 11.88,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": "demonstrated strong technical aptitude, eagerness to learn, and a professional attitude. The contributions to the assigned projects were valuable and appreciated.",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "justify",
+          "runs": []
+        },
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "We thank",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": " <<NAME>>",
+              "font_name": "Arial Bold",
+              "font_size": 11.88,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": "for the efforts during the tenure at CopterCode and wish continued success in all future endeavours.",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "align": "justify",
+          "runs": []
+        },
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "For verification of this certificate, please contact our HR department at hr@coptercode.co.in",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 56,
+      "name": "TextBox 56",
+      "left": 0.4067399387576553,
+      "top": 2.647477034120735,
+      "width": 7.606385608048994,
+      "height": 0.6458508311461068,
+      "font_name": "Arial",
+      "font_size": 11.88,
+      "color": "#000000",
+      "bold": false,
+      "italic": false,
+      "align": "justify",
+      "original_text": "This is to certify that <<NAME>>, from the Department of <<DEPARTMENT>>, <<INSTITUTION>>, has successfully completed a internship and live project program at CopterCode, <<BATCH >> in the field of <<DOMAIN>>.",
+      "paragraphs": [
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "This is to certify that ",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": "<<NAME>>, from the Department of <<DEPARTMENT>>, <<INSTITUTION>>, has successfully completed a internship and live project program at CopterCode, <<BATCH >> ",
+              "font_name": "Arial Bold",
+              "font_size": 11.88,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            },
+            {
+              "text": "in the field of <<DOMAIN>>.",
+              "font_name": "Arial",
+              "font_size": 11.88,
+              "bold": false,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 57,
+      "name": "TextBox 57",
+      "left": 0.7532600612423447,
+      "top": 3.7099945319335084,
+      "width": 7.078604549431321,
+      "height": 0.27392279090113736,
+      "font_name": "Arial Bold",
+      "font_size": 13.88,
+      "color": "#000000",
+      "bold": true,
+      "italic": false,
+      "align": "center",
+      "original_text": "INTERN \u2013 <<INTERNSHIP & LIVE PROJECT AREA>>",
+      "paragraphs": [
+        {
+          "align": "center",
+          "runs": [
+            {
+              "text": "INTERN \u2013 <<INTERNSHIP & LIVE PROJECT AREA>>",
+              "font_name": "Arial Bold",
+              "font_size": 13.88,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 58,
+      "name": "TextBox 58",
+      "left": 6.156874453193351,
+      "top": 1.910094050743657,
+      "width": 1.2239588801399826,
+      "height": 0.17290682414698164,
+      "font_name": "Arial Bold",
+      "font_size": 9.0,
+      "color": "#000000",
+      "bold": true,
+      "italic": false,
+      "align": "left",
+      "original_text": "DATE: <<DATE>>",
+      "paragraphs": [
+        {
+          "align": "left",
+          "runs": [
+            {
+              "text": "DATE: <<DATE>>",
+              "font_name": "Arial Bold",
+              "font_size": 9.0,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 61,
+      "name": "TextBox 61",
+      "left": 6.0545516185476815,
+      "top": 9.919150262467191,
+      "width": 7.713031496062992,
+      "height": 0.21209645669291338,
+      "font_name": "Arial Bold",
+      "font_size": 14.36,
+      "color": "#000000",
+      "bold": true,
+      "italic": false,
+      "align": "justify",
+      "original_text": "<<QR>>",
+      "paragraphs": [
+        {
+          "align": "justify",
+          "runs": [
+            {
+              "text": "<<QR>>",
+              "font_name": "Arial Bold",
+              "font_size": 14.36,
+              "bold": true,
+              "italic": false,
+              "color": "#000000"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

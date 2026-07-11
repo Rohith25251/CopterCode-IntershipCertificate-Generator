@@ -12,3 +12,7 @@ python-pptx
 xhtml2pdf
 pypdf
 numpy==1.26.4
+weasyprint
+pymupdf
+
+

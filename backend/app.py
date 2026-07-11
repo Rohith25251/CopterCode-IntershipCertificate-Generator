@@ -16,7 +16,15 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 # win32com client has been removed to run reliably on headless Linux
- 
+import fitz
+from pptx import Presentation
+import asyncio
+import json
+try:
+    from layout_engine import LayoutEngine
+except ImportError:
+    from backend.layout_engine import LayoutEngine
+
 # QR generation library
 import qrcode
 
@@ -164,6 +172,223 @@ async def export_pptx_to_pdf_async(pptx_path: str, output_dir: str) -> str:
         return await loop.run_in_executor(
             None, export_pptx_to_pdf, pptx_path, output_dir
         )
+
+TEMPLATE_EXPORT_LOCK = asyncio.Lock()
+
+def get_alignment_str(paragraph):
+    from pptx.enum.text import PP_ALIGN
+    align = paragraph.alignment
+    if align == PP_ALIGN.CENTER:
+        return "center"
+    elif align == PP_ALIGN.RIGHT:
+        return "right"
+    elif align == PP_ALIGN.JUSTIFY:
+        return "justify"
+    return "left"
+
+def get_color_hex(run):
+    try:
+        color = run.font.color
+        if color and color.type == 1:  # RGBColor
+            rgb = color.rgb
+            return f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
+    except:
+        pass
+    return None
+
+def is_body_text_shape(shape):
+    if not shape.has_text_frame:
+        return False
+    text = shape.text_frame.text.strip()
+    if not text:
+        return False
+    # Always include if it contains a placeholder
+    if any(p in text for p in ["<<", ">>", "«", "»"]):
+        return True
+    # Bounding check for vertical column shapes (wide text blocks in the middle of A4)
+    left_in = shape.left.inches
+    top_in = shape.top.inches
+    width_in = shape.width.inches
+    
+    is_wide_and_centered = (left_in < 1.0) and (width_in > 6.5)
+    is_in_middle_band = (top_in > 2.2) and (top_in < 9.0)
+    
+    return is_wide_and_centered and is_in_middle_band
+
+async def get_or_create_html_template(batch_id: str, cert_type: str, template_bytes: bytes) -> str:
+    # Normalize batch_id to make it safe as a directory name
+    safe_batch = re.sub(r'[\\/*?:"<>|\s]', "_", batch_id.strip()).lower()
+    cache_dir = os.path.abspath(f"templates_cache/{safe_batch}/{cert_type}")
+    
+    layout_json_path = os.path.join(cache_dir, "layout.json")
+    bg_png_path = os.path.join(cache_dir, "background.png")
+    
+    if os.path.exists(layout_json_path) and os.path.exists(bg_png_path):
+        return cache_dir
+        
+    async with TEMPLATE_EXPORT_LOCK:
+        # Double check inside the lock
+        if os.path.exists(layout_json_path) and os.path.exists(bg_png_path):
+            return cache_dir
+            
+        os.makedirs(cache_dir, exist_ok=True)
+        print(f"[pdf] On-the-fly exporting template layout & background for {batch_id}/{cert_type}...")
+        
+        # 1. Save original pptx
+        temp_pptx_path = os.path.join(cache_dir, "temp_original.pptx")
+        with open(temp_pptx_path, "wb") as f:
+            f.write(template_bytes)
+            
+        try:
+            # 2. Parse shapes layout
+            prs = Presentation(temp_pptx_path)
+            slide = prs.slides[0]
+            
+            layout_data = {
+                "template": cert_type,
+                "width_in": prs.slide_width.inches,
+                "height_in": prs.slide_height.inches,
+                "shapes": []
+            }
+            
+            shapes_to_clear = []
+            for shape in slide.shapes:
+                if not shape.has_text_frame:
+                    continue
+                if not is_body_text_shape(shape):
+                    continue
+                    
+                left_in = shape.left.inches
+                top_in = shape.top.inches
+                width_in = shape.width.inches
+                height_in = shape.height.inches
+                
+                font_name = "Calibri"
+                font_size = 14
+                font_color = "#000000"
+                bold = False
+                italic = False
+                align = "left"
+                
+                if shape.text_frame.paragraphs:
+                    p = shape.text_frame.paragraphs[0]
+                    align = get_alignment_str(p)
+                    if p.runs:
+                        r = p.runs[0]
+                        if r.font.name:
+                            font_name = r.font.name
+                        if r.font.size:
+                            font_size = r.font.size.pt
+                        c = get_color_hex(r)
+                        if c:
+                            font_color = c
+                        bold = bool(r.font.bold)
+                        italic = bool(r.font.italic)
+                        
+                paragraphs_cfg = []
+                for p in shape.text_frame.paragraphs:
+                    runs_cfg = []
+                    for r in p.runs:
+                        r_color = get_color_hex(r) or font_color
+                        runs_cfg.append({
+                            "text": r.text,
+                            "font_name": r.font.name or font_name,
+                            "font_size": r.font.size.pt if r.font.size else font_size,
+                            "bold": bool(r.font.bold),
+                            "italic": bool(r.font.italic),
+                            "color": r_color
+                        })
+                    paragraphs_cfg.append({
+                        "align": get_alignment_str(p),
+                        "runs": runs_cfg
+                    })
+                    
+                shape_cfg = {
+                    "id": shape.shape_id,
+                    "name": shape.name,
+                    "left": left_in,
+                    "top": top_in,
+                    "width": width_in,
+                    "height": height_in,
+                    "font_name": font_name,
+                    "font_size": font_size,
+                    "color": font_color,
+                    "bold": bold,
+                    "italic": italic,
+                    "align": align,
+                    "original_text": shape.text_frame.text,
+                    "paragraphs": paragraphs_cfg
+                }
+                layout_data["shapes"].append(shape_cfg)
+                shapes_to_clear.append(shape)
+                
+            with open(layout_json_path, "w", encoding="utf-8") as f:
+                json.dump(layout_data, f, indent=2)
+                
+            # 3. Clear text runs for background export
+            for shape in shapes_to_clear:
+                for p in shape.text_frame.paragraphs:
+                    for r in p.runs:
+                        r.text = ""
+                        
+            temp_cleared_pptx = os.path.join(cache_dir, "temp_cleared.pptx")
+            prs.save(temp_cleared_pptx)
+            
+            # 4. Export background PNG (Windows COM or Linux LibreOffice)
+            exported_bg = False
+            try:
+                import sys
+                if sys.platform == "win32":
+                    import win32com.client
+                    print(f"  [Windows] Exporting background slide via PowerPoint COM...")
+                    powerpoint = win32com.client.DispatchEx("PowerPoint.Application")
+                    presentation = powerpoint.Presentations.Open(os.path.abspath(temp_cleared_pptx), WithWindow=False)
+                    presentation.Slides(1).Export(os.path.abspath(bg_png_path), "PNG")
+                    presentation.Close()
+                    powerpoint.Quit()
+                    exported_bg = True
+            except Exception as win_err:
+                print(f"  [Windows] COM export failed/not available: {win_err}")
+                
+            if not exported_bg:
+                # Fallback to LibreOffice + PyMuPDF
+                pdf_path = await export_pptx_to_pdf_async(temp_cleared_pptx, cache_dir)
+                doc = fitz.open(pdf_path)
+                page = doc[0]
+                matrix = fitz.Matrix(300 / 72, 300 / 72)
+                pix = page.get_pixmap(matrix=matrix)
+                pix.save(bg_png_path)
+                doc.close()
+                if os.path.exists(pdf_path):
+                    os.remove(pdf_path)
+                    
+            # Cleanup temp cleared pptx
+            if os.path.exists(temp_cleared_pptx):
+                os.remove(temp_cleared_pptx)
+                
+            print(f"[pdf] On-the-fly export completed for {batch_id}/{cert_type}!")
+        finally:
+            if os.path.exists(temp_pptx_path):
+                os.remove(temp_pptx_path)
+                
+        return cache_dir
+
+def compile_weasyprint_pdf(html_content: str) -> bytes:
+    from weasyprint import HTML
+    return HTML(string=html_content).write_pdf()
+
+async def generate_pdf_bytes_with_weasyprint_async(batch_id: str, cert_type: str, template_bytes: bytes, replacements: dict, qr_bytes: bytes) -> bytes:
+    # 1. Get or create cache dir
+    cache_dir = await get_or_create_html_template(batch_id, cert_type, template_bytes)
+    
+    # 2. Render layout HTML
+    engine = LayoutEngine(cache_dir)
+    html_content = engine.render_html(replacements, qr_bytes)
+    
+    # 3. Compile to PDF bytes asynchronously
+    loop = asyncio.get_event_loop()
+    pdf_bytes = await loop.run_in_executor(None, compile_weasyprint_pdf, html_content)
+    return pdf_bytes
 
 async def convert_pptx_to_pdf_bytes_async(pptx_bytes: bytes) -> bytes:
     temp_pptx = tempfile.NamedTemporaryFile(suffix=".pptx", delete=False)
@@ -1937,12 +2162,11 @@ async def get_pdf_bytes_for_certificate(cert_code: str) -> bytes:
         raise ValueError(f"Template PPTX not found for batch '{batch_id}' / cert_type '{cert_type}'. "
                          f"Upload templates/{{batch_id}}/{{cert_type}}.pptx to storage.")
 
-    # 4. In-place placeholder replacement inside the PPTX (Technique 1).
-    #    This preserves every font, colour, image, line, footer — EVERYTHING
-    #    from the original designer template. Only <<PLACEHOLDER>> text changes.
+    # 4. Use HTML/CSS WeasyPrint layout engine conversion (Technique 1).
+    #    This preserves every font, color, image, line, footer — EVERYTHING
+    #    from the original designer template while providing absolute reflow/wrapping.
     if ext == ".pptx":
-        modified_pptx_bytes, _ = generate_certificate_from_pptx_bytes(template_bytes, replacements, qr_bytes)
-        pdf_bytes = await convert_pptx_to_pdf_bytes_async(modified_pptx_bytes)
+        pdf_bytes = await generate_pdf_bytes_with_weasyprint_async(batch_id, cert_type, template_bytes, replacements, qr_bytes)
     else:
         pdf_bytes, _ = generate_certificate_from_html_bytes(template_bytes, replacements, qr_bytes)
 
