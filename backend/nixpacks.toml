@@ -5,15 +5,20 @@ nixPkgs = [
   "libreoffice",
   "jre",
   "fontconfig",
-  "pango",
-  "cairo",
   "gobject-introspection",
   "libffi",
   "glib"
 ]
+aptPkgs = [
+  "libpango-1.0-0",
+  "libpangocairo-1.0-0",
+  "libcairo2",
+  "libgdk-pixbuf2.0-0",
+  "shared-mime-info"
+]
 
 [env]
-LD_LIBRARY_PATH = "/nix/profile/lib:/app/.nix-profile/lib:/root/.nix-profile/lib"
+LD_LIBRARY_PATH = "/nix/profile/lib:/app/.nix-profile/lib:/root/.nix-profile/lib:/usr/lib/x86_64-linux-gnu"
 
 [phases.build]
 cmds = [
