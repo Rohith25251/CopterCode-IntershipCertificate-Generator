@@ -295,8 +295,8 @@ def get_color_hex(run):
 def is_body_text_shape(shape):
     if not shape.has_text_frame:
         return False
-    # Exclude elements at the bottom of the page (footer area) from flowing
-    if shape.top.inches > 9.0:
+    # Exclude elements at the very bottom edge (footer area, T > 11.0) from flowing
+    if shape.top.inches > 11.0:
         return False
     text = shape.text_frame.text.strip()
     if not text:
@@ -352,7 +352,25 @@ async def get_or_create_html_template(batch_id: str, cert_type: str, template_by
             
             shapes_to_clear = []
             for shape in slide.shapes:
+                h_in = shape.height.inches if hasattr(shape, "height") else 0
+                w_in = shape.width.inches if hasattr(shape, "width") else 0
+                l_in = shape.left.inches if hasattr(shape, "left") else 0
+                t_in = shape.top.inches if hasattr(shape, "top") else 0
                 if not shape.has_text_frame:
+                    if h_in < 0.25 and w_in > 1.0 and l_in >= 0:
+                        shape_cfg = {
+                            "id": shape.shape_id if hasattr(shape, "shape_id") else len(layout_data["shapes"]),
+                            "name": shape.name,
+                            "left": l_in,
+                            "top": t_in,
+                            "width": w_in,
+                            "height": h_in,
+                            "is_line": True,
+                            "is_qr": False,
+                            "is_flow": t_in <= 11.0
+                        }
+                        layout_data["shapes"].append(shape_cfg)
+                        shapes_to_clear.append(shape)
                     continue
                 text = shape.text_frame.text.strip()
                 if not text:
@@ -428,11 +446,18 @@ async def get_or_create_html_template(batch_id: str, cert_type: str, template_by
             with open(layout_json_path, "w", encoding="utf-8") as f:
                 json.dump(layout_data, f, indent=2)
                 
-            # 3. Clear text runs for background export
+            # 3. Clear text runs or move shapes off-slide for background export
+            from pptx.util import Inches
             for shape in shapes_to_clear:
-                for p in shape.text_frame.paragraphs:
-                    for r in p.runs:
-                        r.text = ""
+                if shape.has_text_frame:
+                    for p in shape.text_frame.paragraphs:
+                        for r in p.runs:
+                            r.text = ""
+                else:
+                    try:
+                        shape.left = Inches(-20)
+                    except Exception:
+                        pass
                         
             temp_cleared_pptx = os.path.join(cache_dir, "temp_cleared.pptx")
             prs.save(temp_cleared_pptx)

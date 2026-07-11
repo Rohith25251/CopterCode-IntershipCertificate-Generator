@@ -123,6 +123,72 @@ def horiz_overlap(s1, s2):
     # Returns True if s1 and s2 overlap horizontally
     return s1["left"] < s2["left"] + s2["width"] and s1["left"] + s1["width"] > s2["left"]
 
+def generate_font_face_rules():
+    rules = []
+    # Find absolute path of backend/fonts or fonts folder
+    fonts_dir = None
+    for d in ["backend/fonts", "fonts"]:
+        if os.path.exists(d):
+            fonts_dir = os.path.abspath(d)
+            break
+            
+    if fonts_dir:
+        from pathlib import Path
+        for f in os.listdir(fonts_dir):
+            if f.endswith(".ttf") or f.endswith(".otf"):
+                font_path = os.path.join(fonts_dir, f)
+                file_uri = Path(font_path).as_uri()
+                
+                font_name = f[:-4]
+                family = font_name
+                weight = "normal"
+                style = "normal"
+                
+                # Check for Bold/Italic hints in the name
+                name_lower = font_name.lower()
+                if "bold" in name_lower or ",bold" in name_lower:
+                    weight = "bold"
+                    family = font_name.replace(",Bold", "").replace("-Bold", "").replace("Bold", "").replace("bd", "")
+                if "italic" in name_lower:
+                    style = "italic"
+                    family = font_name.replace("-Italic", "").replace("Italic", "").replace("it", "")
+                if "regular" in name_lower:
+                    family = font_name.replace("-Regular", "").replace("Regular", "")
+                
+                # Strip spaces for comparison normalization
+                family_clean = family.replace("-", " ").replace("_", " ").strip()
+                
+                rules.append(
+                    f"@font-face {{\n"
+                    f"  font-family: '{family_clean}';\n"
+                    f"  src: url('{file_uri}') format('truetype');\n"
+                    f"  font-weight: {weight};\n"
+                    f"  font-style: {style};\n"
+                    f"}}\n"
+                )
+                
+                # Register raw filename family (e.g. 'CanvaSans-Regular')
+                rules.append(
+                    f"@font-face {{\n"
+                    f"  font-family: '{font_name}';\n"
+                    f"  src: url('{file_uri}') format('truetype');\n"
+                    f"  font-weight: normal;\n"
+                    f"  font-style: normal;\n"
+                    f"}}\n"
+                )
+                
+                # Register clean fallback name with spaces
+                friendly_name = font_name.replace("-", " ").replace("_", " ").strip()
+                rules.append(
+                    f"@font-face {{\n"
+                    f"  font-family: '{friendly_name}';\n"
+                    f"  src: url('{file_uri}') format('truetype');\n"
+                    f"  font-weight: {weight};\n"
+                    f"  font-style: {style};\n"
+                    f"}}\n"
+                )
+    return "\n".join(rules)
+
 class LayoutEngine:
     def __init__(self, template_dir):
         self.template_dir = template_dir
@@ -275,12 +341,14 @@ class LayoutEngine:
         qr_base64 = base64.b64encode(qr_bytes).decode("utf-8")
         
         # Build A4 stylesheet
+        font_face_rules = generate_font_face_rules()
         html_parts = [
             "<!DOCTYPE html>",
             "<html>",
             "<head>",
             "  <meta charset='utf-8'>",
             "  <style>",
+            font_face_rules,
             "    @page {",
             f"      size: {self.layout['width_in']}in {self.layout['height_in']}in;",
             "      margin: 0;",
@@ -337,6 +405,13 @@ class LayoutEngine:
             "      height: 100%;",
             "      object-fit: contain;",
             "    }",
+            "    .line-shape {",
+            "      position: absolute;",
+            "      z-index: 8;",
+            "      height: 2px;",
+            "      background-color: #72402f;",
+            "      box-sizing: border-box;",
+            "    }",
             "    .run-bold {",
             "      font-weight: bold;",
             "    }",
@@ -365,6 +440,13 @@ class LayoutEngine:
             # to prevent it from being clipped by the A4 page boundary in WeasyPrint
             if t > 11.0:
                 t = max(11.0, t - 0.08)
+                
+            if shape.get("is_line", False):
+                t_center = t + (h - 0.02) / 2
+                html_parts.append(
+                    f"    <div class='line-shape' style='left: {l:.3f}in; top: {t_center:.3f}in; width: {w:.3f}in;'></div>"
+                )
+                continue
             
             if shape["is_qr"]:
                 # Force a reasonable square size for the QR code
@@ -399,6 +481,7 @@ class LayoutEngine:
             else:
                 best_scale = shape["best_scale"]
                 default_size = shape["font_size"] * best_scale
+                shape_font_name = shape.get("font_name", "Arial")
                 
                 # Apply custom fonts and text sizing styles
                 style_str = (
@@ -406,7 +489,7 @@ class LayoutEngine:
                     f"top: {t}in; "
                     f"width: {w}in; "
                     f"height: {h}in; "
-                    f"font-family: Arial, Calibri, sans-serif; "
+                    f"font-family: '{shape_font_name}', Arial, Calibri, sans-serif; "
                     f"font-size: {default_size}pt; "
                     f"color: {shape['color']}; "
                 )
@@ -416,7 +499,7 @@ class LayoutEngine:
                     if "\n" not in shape.get("original_text", ""):
                         style_str += "white-space: nowrap; "
                 
-                html_parts.append(f"    <div class='text-box' style='{style_str}'>")
+                html_parts.append(f'    <div class="text-box" style="{style_str}">')
                 
                 for p in shape["resolved_paragraphs"]:
                     align = p["align"]
@@ -427,7 +510,7 @@ class LayoutEngine:
                         if r["font_size"] != shape["font_size"]:
                             span_style += f"font-size: {r['font_size'] * best_scale}pt; "
                         if r["font_name"]:
-                            span_style += f"font-family: {r['font_name']}, Arial, sans-serif; "
+                            span_style += f"font-family: '{r['font_name']}', Arial, sans-serif; "
                             
                         classes = []
                         if r["bold"]:
@@ -440,7 +523,7 @@ class LayoutEngine:
                         class_str = f"class='{' '.join(classes)}'" if classes else ""
                         text_escaped = r["resolved_text"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br/>")
                         
-                        html_parts.append(f"        <span {class_str} style='{span_style}'>{text_escaped}</span>")
+                        html_parts.append(f'        <span {class_str} style="{span_style}">{text_escaped}</span>')
                         
                     html_parts.append("      </p>")
                 html_parts.append("    </div>")
