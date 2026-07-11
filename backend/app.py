@@ -115,7 +115,7 @@ def export_pptx_to_pdf(pptx_path: str, output_dir: str) -> str:
         "--invisible",
         "--convert-to", "pdf",
         "--outdir", output_dir,
-        f"--env:UserInstallation=file://{profile_dir}",
+        f"-env:UserInstallation=file://{profile_dir}",
         pptx_path,
     ]
 
