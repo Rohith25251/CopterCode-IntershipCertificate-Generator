@@ -292,7 +292,7 @@ class LayoutEngine:
         
         for i in range(len(shapes_sorted)):
             shape = shapes_sorted[i]
-            if shape["is_qr"] or not shape.get("is_flow", True):
+            if shape.get("is_line", False) or shape.get("is_qr") or not shape.get("is_flow", True):
                 continue
                 
             # If shape is taller than its initial height, it grows
@@ -303,13 +303,13 @@ class LayoutEngine:
                 # Shift all overlapping downstream FLOW shapes down
                 for j in range(i + 1, len(shapes_sorted)):
                     other = shapes_sorted[j]
-                    if other.get("is_flow", True) and horiz_overlap(shape, other):
+                    if not other.get("is_line", False) and other.get("is_flow", True) and horiz_overlap(shape, other):
                         other["top"] = other["top"] + delta_y
                         
             # Enforce 0.08 inch clearance gaps for FLOW shapes
             for j in range(i + 1, len(shapes_sorted)):
                 other = shapes_sorted[j]
-                if other.get("is_flow", True) and horiz_overlap(shape, other):
+                if not other.get("is_line", False) and other.get("is_flow", True) and horiz_overlap(shape, other):
                     gap = other["top"] - (shape["top"] + shape["height"])
                     if gap < 0.08:
                         extra_shift = 0.08 - gap
@@ -319,11 +319,11 @@ class LayoutEngine:
         overlaps = []
         for i in range(len(shapes_sorted)):
             s1 = shapes_sorted[i]
-            if s1["is_qr"] or not s1.get("resolved_text", "").strip():
+            if s1.get("is_line", False) or s1.get("is_qr") or not s1.get("resolved_text", "").strip():
                 continue
             for j in range(i + 1, len(shapes_sorted)):
                 s2 = shapes_sorted[j]
-                if s2["is_qr"] or not s2.get("resolved_text", "").strip():
+                if s2.get("is_line", False) or s2.get("is_qr") or not s2.get("resolved_text", "").strip():
                     continue
                 if horiz_overlap(s1, s2):
                     # Check vertical overlap
