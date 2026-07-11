@@ -277,6 +277,7 @@ export default function AdminDashboard() {
   const [selectedCollege, setSelectedCollege] = useState("");
   const [selectedBatch, setSelectedBatch] = useState("");
   const [selectedProject, setSelectedProject] = useState("");
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
 
   // Dynamically calculate stats and unique filter values from historyCerts
   const { batchCounts, totalUniqueInterns, uniqueDepts, uniqueDomains, uniqueColleges, uniqueBatches, uniqueProjects } = React.useMemo(() => {
@@ -475,6 +476,28 @@ export default function AdminDashboard() {
       setHistoryCerts((prev) =>
         prev.map((c) => (c.intern_id === internId ? { ...c, intern: { ...c.intern, email_status: "failed" } } : c))
       );
+    }
+  };
+
+  const handleDownloadFilteredExcel = async () => {
+    setIsExportingExcel(true);
+    try {
+      const params = new URLSearchParams();
+      if (historyQuery.trim()) params.append("query", historyQuery.trim());
+      if (selectedDept) params.append("dept", selectedDept);
+      if (selectedDomain) params.append("domain", selectedDomain);
+      if (selectedProject) params.append("project", selectedProject);
+      if (selectedCollege) params.append("college", selectedCollege);
+      if (selectedBatch) params.append("batch", selectedBatch);
+
+      const base = backendUrl.replace(/\/+$/, "");
+      const downloadUrl = `${base}/api/certificates/export?${params.toString()}`;
+      
+      window.open(downloadUrl, "_blank");
+    } catch (err) {
+      console.error("Failed to export excel", err);
+    } finally {
+      setIsExportingExcel(false);
     }
   };
 
@@ -1725,6 +1748,18 @@ export default function AdminDashboard() {
                   )}
                 </div>
                 
+                {/* Download Filtered Excel Button */}
+                {!historyLoading && historyCerts.length > 0 && (
+                  <button
+                    onClick={handleDownloadFilteredExcel}
+                    disabled={isExportingExcel}
+                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold shadow-md transition-all duration-300 cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <Download size={14} />
+                    {isExportingExcel ? "Exporting..." : "Download Filtered Excel"}
+                  </button>
+                )}
+
                 {/* Clear All Filters Button */}
                 {(historyQuery || selectedDept || selectedDomain || selectedCollege || selectedBatch || selectedProject) && (
                   <button
