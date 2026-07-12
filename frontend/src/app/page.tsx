@@ -292,26 +292,26 @@ export default function AdminDashboard() {
 
     historyCerts.forEach((c) => {
       // Collect raw values for unique filters
-      const d = c.department || c.intern?.department;
+      const d = c.intern?.department || c.department;
       if (d) depts.add(d);
       
-      const r = c.role || c.intern?.role;
+      const r = c.intern?.role || c.role;
       if (r) domains.add(r);
       
-      const col = c.college || c.intern?.college;
+      const col = c.intern?.college || c.college;
       if (col) colleges.add(col);
       
-      const b = c.month || c.intern?.month;
+      const b = c.intern?.month || c.month;
       if (b) batches.add(b);
 
-      const p = c.project || c.intern?.project;
+      const p = c.intern?.project || c.project;
       if (p) projects.add(p);
 
       // Collect for unique intern grouping
-      const internId = c.intern_id || `${c.name || ''}-${c.intern?.email || ''}`;
+      const internId = c.intern_id || `${c.intern?.name || c.name || ''}-${c.intern?.email || ''}`;
       if (!internMap.has(internId)) {
         internMap.set(internId, {
-          name: c.name || c.intern?.name || "Unknown",
+          name: c.intern?.name || c.name || "Unknown",
           email: c.intern?.email || "",
           batch: b || "Unknown Batch",
         });
@@ -342,27 +342,27 @@ export default function AdminDashboard() {
     return historyCerts.filter((c) => {
       const q = historyQuery.toLowerCase().trim();
       if (q) {
-        const name = (c.name || "").toLowerCase();
-        const college = (c.college || "").toLowerCase();
+        const name = (c.intern?.name || c.name || "").toLowerCase();
+        const college = (c.intern?.college || c.college || "").toLowerCase();
         const code = (c.cert_code || "").toLowerCase();
         const email = (c.intern?.email || "").toLowerCase();
         const matchesQuery = name.includes(q) || college.includes(q) || code.includes(q) || email.includes(q);
         if (!matchesQuery) return false;
       }
 
-      const dept = c.department || c.intern?.department;
+      const dept = c.intern?.department || c.department;
       if (selectedDept && dept !== selectedDept) return false;
 
-      const r = c.role || c.intern?.role;
+      const r = c.intern?.role || c.role;
       if (selectedDomain && r !== selectedDomain) return false;
 
-      const proj = c.project || c.intern?.project;
+      const proj = c.intern?.project || c.project;
       if (selectedProject && proj !== selectedProject) return false;
 
-      const col = c.college || c.intern?.college;
+      const col = c.intern?.college || c.college;
       if (selectedCollege && col !== selectedCollege) return false;
 
-      const batch = c.month || c.intern?.month;
+      const batch = c.intern?.month || c.month;
       if (selectedBatch && batch !== selectedBatch) return false;
 
       return true;
@@ -480,9 +480,41 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    if (session && activeTab === "history") {
-      fetchHistoryCerts();
-    }
+    if (!session || activeTab !== "history") return;
+
+    // Fetch initial data
+    fetchHistoryCerts();
+
+    // Subscribe to realtime database changes for certificates
+    const certificatesChannel = anonSupabase
+      .channel("history-certificates-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "certificates" },
+        (payload) => {
+          console.log("Realtime change in certificates:", payload);
+          fetchHistoryCerts();
+        }
+      )
+      .subscribe();
+
+    // Subscribe to realtime database changes for interns
+    const internsChannel = anonSupabase
+      .channel("history-interns-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "interns" },
+        (payload) => {
+          console.log("Realtime change in interns:", payload);
+          fetchHistoryCerts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      anonSupabase.removeChannel(certificatesChannel);
+      anonSupabase.removeChannel(internsChannel);
+    };
   }, [session, activeTab, fetchHistoryCerts]);
 
   const handleSendHistoryEmail = async (internId: string) => {
@@ -560,7 +592,7 @@ export default function AdminDashboard() {
           const blob = await res.arrayBuffer();
           
           const certTitle = certTypeLabels[cert.cert_type] || "Certificate";
-          const safeName = (cert.name || `certificate_${i + 1}`).replace(/[^a-zA-Z0-9_\- ]/g, "_");
+          const safeName = (cert.intern?.name || cert.name || `certificate_${i + 1}`).replace(/[^a-zA-Z0-9_\- ]/g, "_");
           zip.file(`${safeName}_(${certTitle}).pdf`, blob);
         } catch (err) {
           console.error("Failed to fetch PDF for zip", err);
@@ -2023,15 +2055,17 @@ export default function AdminDashboard() {
                           const internRowCount = cert.intern_id
                             ? filtered.filter((c) => c.intern_id === cert.intern_id).length
                             : 1;
-                          const dateStr = cert.issue_date || (cert.created_at ? new Date(cert.created_at).toLocaleDateString() : "—");
+                          const dateStr = cert.intern?.date || cert.issue_date || (cert.created_at ? new Date(cert.created_at).toLocaleDateString() : "—");
                           const emailVal = cert.intern?.email || "—";
                           const emailStatus = cert.intern?.email_status || "pending";
+                          const nameVal = cert.intern?.name || cert.name;
+                          const collegeVal = cert.intern?.college || cert.college;
                           
                           return (
                             <tr key={cert.id} className="hover:bg-zinc-50/50 transition-colors">
                               <td className="p-4">
-                                <div className="font-bold text-zinc-800">{cert.name}</div>
-                                <div className="text-[10px] text-zinc-500 mt-0.5">{cert.college}</div>
+                                <div className="font-bold text-zinc-800">{nameVal}</div>
+                                <div className="text-[10px] text-zinc-500 mt-0.5">{collegeVal}</div>
                                 <div className="text-[10px] text-zinc-400 mt-0.5">{emailVal}</div>
                               </td>
                               <td className="p-4 font-mono text-zinc-700 text-xs">
@@ -2135,7 +2169,7 @@ export default function AdminDashboard() {
                                           const url = URL.createObjectURL(blob);
                                           const a = document.createElement("a");
                                           a.href = url;
-                                          const safeName = (cert.name || "certificate").replace(/[^a-zA-Z0-9_\- ]/g, "_");
+                                          const safeName = (cert.intern?.name || cert.name || "certificate").replace(/[^a-zA-Z0-9_\- ]/g, "_");
                                           a.download = `${safeName}.pdf`;
                                           a.click();
                                           URL.revokeObjectURL(url);
