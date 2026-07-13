@@ -285,6 +285,21 @@ export default function AdminDashboard() {
   const [selectedCertIds, setSelectedCertIds] = useState<Set<string>>(new Set());
   const [isSendingHistoryEmails, setIsSendingHistoryEmails] = useState(false);
   const [historyEmailProgress, setHistoryEmailProgress] = useState({ done: 0, total: 0 });
+  
+  // Edit Intern modal states
+  const [editingCert, setEditingCert] = useState<any | null>(null);
+  const [editInternId, setEditInternId] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editCollege, setEditCollege] = useState("");
+  const [editDept, setEditDept] = useState("");
+  const [editRole, setEditRole] = useState("");
+  const [editProject, setEditProject] = useState("");
+  const [editMonth, setEditMonth] = useState("");
+  const [editYear, setEditYear] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editError, setEditError] = useState("");
 
   // Dynamically calculate stats and unique filter values from historyCerts
   const { batchCounts, totalUniqueInterns, uniqueDepts, uniqueDomains, uniqueColleges, uniqueBatches, uniqueProjects } = React.useMemo(() => {
@@ -605,6 +620,78 @@ export default function AdminDashboard() {
     setIsSendingHistoryEmails(false);
     setHistoryEmailProgress({ done: 0, total: 0 });
     alert("Batch email process complete!");
+  };
+
+  const handleStartEdit = (cert: any) => {
+    if (!cert.intern) {
+      alert("This certificate does not have an associated intern record to edit.");
+      return;
+    }
+    const intern = cert.intern;
+    setEditingCert(cert);
+    setEditInternId(intern.id);
+    setEditName(intern.name || "");
+    setEditEmail(intern.email || "");
+    setEditCollege(intern.college || "");
+    setEditDept(intern.department || "");
+    setEditRole(intern.role || "");
+    setEditProject(intern.project || "");
+    setEditMonth(intern.month || "");
+    setEditYear(intern.year || "");
+    setEditDate(intern.date || "");
+    setEditError("");
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingEdit(true);
+    setEditError("");
+
+    try {
+      // 1. Update the intern record
+      const { error: internError } = await anonSupabase
+        .from("interns")
+        .update({
+          name: editName.trim(),
+          email: editEmail.trim(),
+          college: editCollege.trim(),
+          department: editDept.trim(),
+          role: editRole.trim(),
+          project: editProject.trim(),
+          month: editMonth.trim(),
+          date: editDate.trim(),
+          year: editYear.trim(),
+        })
+        .eq("id", editInternId);
+
+      if (internError) throw internError;
+
+      // 2. Update duplicate fields in certificates table
+      const { error: certError } = await anonSupabase
+        .from("certificates")
+        .update({
+          name: editName.trim(),
+          college: editCollege.trim(),
+          department: editDept.trim(),
+          role: editRole.trim(),
+          project: editProject.trim(),
+          month: editMonth.trim(),
+          batch: editYear.trim(), // 'batch' in certificates stores year_val
+          issue_date: editDate.trim(),
+        })
+        .eq("intern_id", editInternId);
+
+      if (certError) throw certError;
+
+      setEditingCert(null);
+      fetchHistoryCerts();
+      alert("Intern and certificate records updated successfully!");
+    } catch (err: any) {
+      console.error(err);
+      setEditError(err.message || "Failed to save edits.");
+    } finally {
+      setIsSavingEdit(false);
+    }
   };
 
   const handleDownloadFilteredExcel = async () => {
@@ -2212,7 +2299,16 @@ export default function AdminDashboard() {
                                 />
                               </td>
                               <td className="p-4">
-                                <div className="font-bold text-zinc-800">{nameVal}</div>
+                                <div className="flex items-center gap-1.5 group/name">
+                                  <span className="font-bold text-zinc-800">{nameVal}</span>
+                                  <button
+                                    onClick={() => handleStartEdit(cert)}
+                                    title="Edit Intern Details"
+                                    className="opacity-0 group-hover/name:opacity-100 p-0.5 text-zinc-400 hover:text-indigo-650 hover:bg-zinc-100 rounded transition-all cursor-pointer shrink-0"
+                                  >
+                                    <Edit2 className="w-3 h-3" />
+                                  </button>
+                                </div>
                                 <div className="text-[10px] text-zinc-500 mt-0.5">{collegeVal}</div>
                                 <div className="text-[10px] text-zinc-400 mt-0.5">{emailVal}</div>
                               </td>
@@ -2343,6 +2439,182 @@ export default function AdminDashboard() {
                 );
               })()
             )}
+          </div>
+        )}
+
+        {/* Edit Intern Modal */}
+        {editingCert && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-[32px] border border-black/5 p-8 max-w-2xl w-full shadow-2xl overflow-y-auto max-h-[90vh] animate-[fadeIn_0.2s_ease-out]">
+              <div className="flex justify-between items-center mb-6 pb-4 border-b border-zinc-100">
+                <div>
+                  <h3 className="text-lg font-bold text-zinc-800">Edit Intern & Certificates</h3>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Updating this record will automatically sync changes across all certificates for this intern.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setEditingCert(null)}
+                  className="p-2 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-full transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {editError && (
+                <div className="mb-4 bg-red-50 border border-red-200 p-3.5 rounded-xl text-xs text-red-650 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-650" />
+                  <span>{editError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveEdit} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-750 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
+                      Email Address
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-750 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
+                    College / Institution
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editCollege}
+                    onChange={(e) => setEditCollege(e.target.value)}
+                    className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-750 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
+                      Department
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editDept}
+                      onChange={(e) => setEditDept(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-750 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
+                      Year / Class (e.g. 4th Year)
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editYear}
+                      onChange={(e) => setEditYear(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-750 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
+                      Domain / Role
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editRole}
+                      onChange={(e) => setEditRole(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-750 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
+                      Internship & Live Project Area
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editProject}
+                      onChange={(e) => setEditProject(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-750 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
+                      Batch / Month (e.g. JUNE-JULY)
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editMonth}
+                      onChange={(e) => setEditMonth(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-750 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
+                      Issue Date
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editDate}
+                      onChange={(e) => setEditDate(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-750 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 flex justify-end gap-3 border-t border-zinc-100">
+                  <button
+                    type="button"
+                    onClick={() => setEditingCert(null)}
+                    className="px-5 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingEdit}
+                    className="px-5 py-2.5 bg-[#5844e9] hover:bg-[#4834d9] text-white font-bold rounded-xl text-xs shadow-md transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5"
+                  >
+                    {isSavingEdit ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save Changes"
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
 
