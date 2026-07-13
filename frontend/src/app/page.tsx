@@ -282,6 +282,9 @@ export default function AdminDashboard() {
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [isExportingHistoryZip, setIsExportingHistoryZip] = useState(false);
   const [historyZipProgress, setHistoryZipProgress] = useState({ done: 0, total: 0 });
+  const [selectedCertIds, setSelectedCertIds] = useState<Set<string>>(new Set());
+  const [isSendingHistoryEmails, setIsSendingHistoryEmails] = useState(false);
+  const [historyEmailProgress, setHistoryEmailProgress] = useState({ done: 0, total: 0 });
 
   // Dynamically calculate stats and unique filter values from historyCerts
   const { batchCounts, totalUniqueInterns, uniqueDepts, uniqueDomains, uniqueColleges, uniqueBatches, uniqueProjects } = React.useMemo(() => {
@@ -466,6 +469,7 @@ export default function AdminDashboard() {
   const fetchHistoryCerts = useCallback(async () => {
     setHistoryLoading(true);
     setHistoryError("");
+    setSelectedCertIds(new Set());
     try {
       const { data, error } = await anonSupabase
         .from("certificates")
@@ -546,16 +550,77 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleSendFilteredEmails = async () => {
+    const targetCerts = selectedCertIds.size > 0
+      ? historyCerts.filter((c) => selectedCertIds.has(c.id))
+      : filteredCerts;
+
+    // Filter active certificates that have a valid intern_id
+    const activeCerts = targetCerts.filter((c) => c.status === "active" && c.intern_id);
+    // Find unique intern IDs
+    const uniqueInternIds = Array.from(new Set(activeCerts.map((c) => c.intern_id).filter(Boolean))) as string[];
+
+    if (uniqueInternIds.length === 0) {
+      alert("No active interns with valid certificates selected/found to email.");
+      return;
+    }
+
+    const actionText = selectedCertIds.size > 0 ? "selected" : "filtered";
+    if (!confirm(`Are you sure you want to send emails to all ${uniqueInternIds.length} ${actionText} intern(s)?`)) {
+      return;
+    }
+
+    setIsSendingHistoryEmails(true);
+    setHistoryEmailProgress({ done: 0, total: uniqueInternIds.length });
+
+    for (let i = 0; i < uniqueInternIds.length; i++) {
+      const internId = uniqueInternIds[i];
+      
+      // Update local state to sending
+      setHistoryCerts((prev) =>
+        prev.map((c) => (c.intern_id === internId ? { ...c, intern: { ...c.intern, email_status: "sending" } } : c))
+      );
+
+      try {
+        const base = backendUrl.replace(/\/+$/, "");
+        const res = await fetch(`${base}/api/interns/${internId}/send-email`, {
+          method: "POST"
+        });
+        const data = await res.json();
+        
+        const nextStatus = res.ok && data.status === "success" ? "sent" : "failed";
+        setHistoryCerts((prev) =>
+          prev.map((c) => (c.intern_id === internId ? { ...c, intern: { ...c.intern, email_status: nextStatus } } : c))
+        );
+      } catch (err) {
+        console.error(`Failed to send email to intern ${internId}`, err);
+        setHistoryCerts((prev) =>
+          prev.map((c) => (c.intern_id === internId ? { ...c, intern: { ...c.intern, email_status: "failed" } } : c))
+        );
+      }
+      
+      setHistoryEmailProgress((prev) => ({ ...prev, done: i + 1 }));
+    }
+
+    setIsSendingHistoryEmails(false);
+    setHistoryEmailProgress({ done: 0, total: 0 });
+    alert("Batch email process complete!");
+  };
+
   const handleDownloadFilteredExcel = async () => {
     setIsExportingExcel(true);
     try {
       const params = new URLSearchParams();
-      if (historyQuery.trim()) params.append("query", historyQuery.trim());
-      if (selectedDept) params.append("dept", selectedDept);
-      if (selectedDomain) params.append("domain", selectedDomain);
-      if (selectedProject) params.append("project", selectedProject);
-      if (selectedCollege) params.append("college", selectedCollege);
-      if (selectedBatch) params.append("batch", selectedBatch);
+      if (selectedCertIds.size > 0) {
+        params.append("ids", Array.from(selectedCertIds).join(","));
+      } else {
+        if (historyQuery.trim()) params.append("query", historyQuery.trim());
+        if (selectedDept) params.append("dept", selectedDept);
+        if (selectedDomain) params.append("domain", selectedDomain);
+        if (selectedProject) params.append("project", selectedProject);
+        if (selectedCollege) params.append("college", selectedCollege);
+        if (selectedBatch) params.append("batch", selectedBatch);
+      }
 
       const base = backendUrl.replace(/\/+$/, "");
       const downloadUrl = `${base}/api/certificates/export?${params.toString()}`;
@@ -1882,14 +1947,23 @@ export default function AdminDashboard() {
                     className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold shadow-md transition-all duration-300 cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <Download size={14} />
-                    {isExportingExcel ? "Exporting..." : "Download Filtered Excel"}
+                    {isExportingExcel
+                      ? "Exporting..."
+                      : selectedCertIds.size > 0
+                      ? "Download Selected Excel"
+                      : "Download Filtered Excel"}
                   </button>
                 )}
 
                 {/* Download Filtered ZIP Button */}
                 {!historyLoading && historyCerts.length > 0 && (
                   <button
-                    onClick={() => handleDownloadHistoryZip(filteredCerts)}
+                    onClick={() => {
+                      const targetCerts = selectedCertIds.size > 0
+                        ? historyCerts.filter((c) => selectedCertIds.has(c.id))
+                        : filteredCerts;
+                      handleDownloadHistoryZip(targetCerts);
+                    }}
                     disabled={isExportingHistoryZip}
                     className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-md transition-all duration-300 cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
@@ -1901,7 +1975,36 @@ export default function AdminDashboard() {
                     ) : (
                       <>
                         <Download size={14} />
-                        <span>Download Filtered ZIP</span>
+                        <span>
+                          {selectedCertIds.size > 0
+                            ? "Download Selected ZIP"
+                            : "Download Filtered ZIP"}
+                        </span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {/* Send Filtered/Selected Emails Button */}
+                {!historyLoading && historyCerts.length > 0 && (
+                  <button
+                    onClick={handleSendFilteredEmails}
+                    disabled={isSendingHistoryEmails}
+                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white rounded-xl text-xs font-bold shadow-md transition-all duration-300 cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {isSendingHistoryEmails ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>{`Sending ${historyEmailProgress.done}/${historyEmailProgress.total}...`}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mail size={14} />
+                        <span>
+                          {selectedCertIds.size > 0
+                            ? "Send Selected Emails"
+                            : "Send Email to all"}
+                        </span>
                       </>
                     )}
                   </button>
@@ -2050,6 +2153,22 @@ export default function AdminDashboard() {
                     <table className="w-full text-left border-collapse text-sm">
                       <thead>
                         <tr className="border-b border-zinc-150 bg-zinc-50/50 text-zinc-550 text-xs font-bold font-mono">
+                          <th className="p-4 w-10 text-center select-none">
+                            <input
+                              type="checkbox"
+                              checked={filtered.length > 0 && filtered.every((c) => selectedCertIds.has(c.id))}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedCertIds(new Set([...selectedCertIds, ...filtered.map((c) => c.id)]));
+                                } else {
+                                  const next = new Set(selectedCertIds);
+                                  filtered.forEach((c) => next.delete(c.id));
+                                  setSelectedCertIds(next);
+                                }
+                              }}
+                              className="w-4 h-4 rounded border-zinc-300 text-indigo-650 bg-white focus:ring-indigo-500 focus:ring-2 focus:ring-offset-2 transition-all cursor-pointer"
+                            />
+                          </th>
                           <th className="p-4">Intern Details</th>
                           <th className="p-4">Credential Code</th>
                           <th className="p-4">Type</th>
@@ -2072,9 +2191,26 @@ export default function AdminDashboard() {
                           const emailStatus = cert.intern?.email_status || "pending";
                           const nameVal = cert.intern?.name || cert.name;
                           const collegeVal = cert.intern?.college || cert.college;
+                          const isSelected = selectedCertIds.has(cert.id);
                           
                           return (
-                            <tr key={cert.id} className="hover:bg-zinc-50/50 transition-colors">
+                            <tr key={cert.id} className={`transition-colors hover:bg-zinc-50/50 ${isSelected ? "bg-violet-50/20" : ""}`}>
+                              <td className="p-4 w-10 text-center select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    const next = new Set(selectedCertIds);
+                                    if (e.target.checked) {
+                                      next.add(cert.id);
+                                    } else {
+                                      next.delete(cert.id);
+                                    }
+                                    setSelectedCertIds(next);
+                                  }}
+                                  className="w-4 h-4 rounded border-zinc-300 text-indigo-650 bg-white focus:ring-indigo-500 focus:ring-2 focus:ring-offset-2 transition-all cursor-pointer"
+                                />
+                              </td>
                               <td className="p-4">
                                 <div className="font-bold text-zinc-800">{nameVal}</div>
                                 <div className="text-[10px] text-zinc-500 mt-0.5">{collegeVal}</div>

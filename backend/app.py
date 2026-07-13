@@ -2262,7 +2262,8 @@ def export_certificates_history(
     domain: Optional[str] = None,
     project: Optional[str] = None,
     college: Optional[str] = None,
-    batch: Optional[str] = None
+    batch: Optional[str] = None,
+    ids: Optional[str] = None
 ):
     """
     Export filtered database certificates history to an Excel file.
@@ -2290,7 +2291,17 @@ def export_certificates_history(
 
         # Apply exact same filter rules as frontend
         filtered_data = []
+        target_ids = None
+        if ids:
+            target_ids = {i.strip() for i in ids.split(",") if i.strip()}
+
         for c in data_sorted:
+            if target_ids is not None:
+                c_id = str(c.get("id") or "")
+                c_code = str(c.get("cert_code") or "")
+                if c_id not in target_ids and c_code not in target_ids:
+                    continue
+
             # Query search filter
             if query:
                 q = query.lower().strip()
