@@ -17,6 +17,36 @@ import {
   Briefcase
 } from "lucide-react";
 
+const parseCustomDate = (dateStr?: string): Date | null => {
+  if (!dateStr) return null;
+  
+  // Check for DD.MM.YYYY format (e.g. 11.07.2026)
+  const dotMatch = dateStr.trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (dotMatch) {
+    const day = parseInt(dotMatch[1], 10);
+    const month = parseInt(dotMatch[2], 10);
+    const year = parseInt(dotMatch[3], 10);
+    const d = new Date(year, month - 1, day);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Check for DD/MM/YYYY format
+  const slashMatch = dateStr.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashMatch) {
+    const day = parseInt(slashMatch[1], 10);
+    const month = parseInt(slashMatch[2], 10);
+    const year = parseInt(slashMatch[3], 10);
+    const d = new Date(year, month - 1, day);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Fallback to standard parsing
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) return d;
+
+  return null;
+};
+
 interface Certificate {
   cert_code: string;
   name: string;
@@ -95,8 +125,8 @@ function VerifyContent() {
 
         // Check if certificate is expired (if expiry_date is set in DB)
         if (cert.expiry_date) {
-          const expiry = new Date(cert.expiry_date);
-          if (expiry < new Date()) {
+          const expiry = parseCustomDate(cert.expiry_date);
+          if (expiry && expiry < new Date()) {
             setError("expired");
             setCertificate(cert);
             return;
@@ -130,9 +160,9 @@ function VerifyContent() {
   // Helper to format date strings
   const formatStrDate = (dateStr?: string) => {
     if (!dateStr) return "";
+    const d = parseCustomDate(dateStr);
+    if (!d) return dateStr;
     try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return dateStr;
       return d.toLocaleDateString("en-US", {
         year: "numeric",
         month: "long",
@@ -241,7 +271,7 @@ function VerifyContent() {
         </div>
         <h2 className="text-xl font-black text-amber-700">Credential Expired</h2>
         <p className="text-xs text-zinc-600 mt-2 leading-relaxed">
-          This certificate (code: <span className="font-mono text-zinc-800 font-bold">{certificate.cert_code}</span>) has passed its valid lifetime duration of <span className="font-bold text-amber-700">{new Date(certificate.expiry_date!).toLocaleDateString()}</span>.
+          This certificate (code: <span className="font-mono text-zinc-800 font-bold">{certificate.cert_code}</span>) has passed its valid lifetime duration of <span className="font-bold text-amber-700">{parseCustomDate(certificate.expiry_date!)?.toLocaleDateString() || certificate.expiry_date}</span>.
         </p>
 
         {/* Metadata display */}
@@ -327,9 +357,9 @@ function VerifyContent() {
               </a>
               {(() => {
                 const issueRaw = certificate.issue_date || certificate.created_at || "";
-                const issueDate = issueRaw ? new Date(issueRaw) : null;
-                const issueYear = issueDate && !isNaN(issueDate.getTime()) ? issueDate.getFullYear() : "";
-                const issueMonth = issueDate && !isNaN(issueDate.getTime()) ? issueDate.getMonth() + 1 : "";
+                const issueDate = parseCustomDate(issueRaw);
+                const issueYear = issueDate ? issueDate.getFullYear() : "";
+                const issueMonth = issueDate ? issueDate.getMonth() + 1 : "";
                 const certName = encodeURIComponent(displayCert.role || "Internship Certificate");
                 const certUrl = encodeURIComponent(`${typeof window !== "undefined" ? window.location.origin : "https://coptercode.co.in"}/verify?id=${certificate.cert_code}`);
                 const certId = encodeURIComponent(certificate.cert_code);
@@ -502,14 +532,14 @@ export default function VerifyPage() {
     <div className="relative min-h-screen bg-[#faf9f6] text-zinc-800 font-sans pt-28 pb-16 px-6">
       {/* Cohesive Header */}
       <header className="absolute top-0 left-0 right-0 z-50 border-b border-black/5 bg-white/70 backdrop-blur-2xl">
-        <div className="mx-auto max-w-7xl flex items-center justify-between gap-6 px-6 py-4">
+        <div className="mx-auto max-w-7xl flex items-center justify-between gap-6 px-6 py-3 md:py-4">
           <div className="flex items-center gap-3.5">
-            <div className="relative h-14 w-14 rounded-2xl bg-black shadow-sm flex items-center justify-center">
-              <div className="relative h-12 w-12">
+            <div className="relative h-12 w-12 md:h-14 md:w-14 rounded-2xl bg-black shadow-sm flex items-center justify-center">
+              <div className="relative h-10 w-10 md:h-12 md:w-12">
                 <Image src="/coptercode-logo-bw.svg" alt="CopterCode logo" fill className="object-contain" priority />
               </div>
             </div>
-            <span className="font-sans text-2xl font-bold tracking-tight text-[#0f172a]">
+            <span className="font-sans text-xl md:text-2xl font-bold tracking-tight text-[#0f172a]">
               CopterCode
             </span>
           </div>

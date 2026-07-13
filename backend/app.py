@@ -858,33 +858,19 @@ async def send_email_notification(
                                             <!-- Left Signature details -->
                                             <td valign="top" align="left">
                                                 <!-- Horizontal links row -->
-                                                <table cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse;">
-                                                    <tr>
-                                                        <td style="padding-right: 16px; font-size: 13px; color: #cbd5e1;">
-                                                            <a href="mailto:hr@coptercode.co.in" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">hr@coptercode.co.in</a>
-                                                        </td>
-                                                        <td style="padding-right: 16px; font-size: 13px; color: #334155;">|</td>
-                                                        <td style="padding-right: 16px; font-size: 13px; color: #cbd5e1;">
-                                                            <a href="https://www.coptercode.co.in/" target="_blank" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">https://www.coptercode.co.in/</a>
-                                                        </td>
-                                                        <td style="padding-right: 16px; font-size: 13px; color: #334155;">|</td>
-                                                        <td style="padding-right: 16px; font-size: 13px; color: #cbd5e1;">
-                                                            <a href="https://www.instagram.com/coptercode/" target="_blank" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">Instagram</a>
-                                                        </td>
-                                                        <td style="padding-right: 16px; font-size: 13px; color: #334155;">|</td>
-                                                        <td style="font-size: 13px; color: #cbd5e1;">
-                                                            <a href="https://www.linkedin.com/company/coptercode/" target="_blank" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">LinkedIn</a>
-                                                        </td>
-                                                        <td style="padding-right: 16px; padding-left: 16px; font-size: 13px; color: #334155;">|</td>
-                                                        <td style="padding-right: 16px; font-size: 13px; color: #cbd5e1;">
-                                                            <a href="tel:+918072193600" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">+91 8072 193 600</a>
-                                                        </td>
-                                                        <td style="padding-right: 16px; font-size: 13px; color: #334155;">|</td>
-                                                        <td style="font-size: 13px; color: #cbd5e1;">
-                                                            <a href="tel:04461329380" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500;">044 6132 9380</a>
-                                                        </td>
-                                                    </tr>
-                                                </table>
+                                                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; line-height: 2.0; color: #cbd5e1;">
+                                                    <a href="mailto:hr@coptercode.co.in" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500; white-space: nowrap;">hr@coptercode.co.in</a>
+                                                    <span style="padding: 0 10px; color: #334155;">|</span>
+                                                    <a href="https://www.coptercode.co.in/" target="_blank" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500; white-space: nowrap;">https://www.coptercode.co.in/</a>
+                                                    <span style="padding: 0 10px; color: #334155;">|</span>
+                                                    <a href="https://www.instagram.com/coptercode/" target="_blank" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500; white-space: nowrap;">Instagram</a>
+                                                    <span style="padding: 0 10px; color: #334155;">|</span>
+                                                    <a href="https://www.linkedin.com/company/coptercode/" target="_blank" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500; white-space: nowrap;">LinkedIn</a>
+                                                    <span style="padding: 0 10px; color: #334155;">|</span>
+                                                    <a href="tel:+918072193600" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500; white-space: nowrap;">+91&nbsp;8072&nbsp;193&nbsp;600</a>
+                                                    <span style="padding: 0 10px; color: #334155;">|</span>
+                                                    <a href="tel:04461329380" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500; white-space: nowrap;">044&nbsp;6132&nbsp;9380</a>
+                                                </div>
                                             </td>
                                         </tr>
                                         <tr>
@@ -2091,6 +2077,23 @@ async def generate_certificates(
     # Process row by row
     rows_results = []
 
+    # Fetch batch details to get fallback issue_date from the batches table
+    batch_issue_date_str = ""
+    if target_batch_id:
+        try:
+            batch_res = supabase.table("batches").select("issue_date").eq("id", target_batch_id).execute()
+            if batch_res.data:
+                db_date = batch_res.data[0].get("issue_date") # e.g. "2026-11-25"
+                if db_date:
+                    # Format to DD.MM.YYYY
+                    try:
+                        dt = pd.to_datetime(db_date)
+                        batch_issue_date_str = dt.strftime("%d.%m.%Y")
+                    except Exception:
+                        batch_issue_date_str = str(db_date)
+        except Exception as e:
+            print(f"Failed to fetch batch issue_date: {e}")
+
     for index, row in df.iterrows():
         try:
             def _cell_str(r, key):
@@ -2124,20 +2127,22 @@ async def generate_certificates(
             if not name_val or name_val.lower() == "nan" or not email_val:
                 continue
 
-            # Parse Issue Date
-            issue_date_val = None
+            # Parse and format final date string (DD.MM.YYYY)
+            final_date_val = ""
             if date_val:
                 try:
                     clean_dt = date_val.strip()
                     parsed_dt = pd.to_datetime(clean_dt, dayfirst=True, errors='raise')
-                    issue_date_val = parsed_dt.date().isoformat()
+                    final_date_val = parsed_dt.strftime("%d.%m.%Y")
                 except Exception:
                     try:
-                        from dateutil import parser
-                        parsed_dt = parser.parse(clean_dt, dayfirst=True)
-                        issue_date_val = parsed_dt.date().isoformat()
+                        from dateutil import parser as date_parser
+                        parsed_dt = date_parser.parse(clean_dt, dayfirst=True)
+                        final_date_val = parsed_dt.strftime("%d.%m.%Y")
                     except Exception:
-                        issue_date_val = None
+                        final_date_val = date_val
+            else:
+                final_date_val = batch_issue_date_str
 
             # 1. Insert/Save Intern details
             intern_data = {
@@ -2149,7 +2154,7 @@ async def generate_certificates(
                 "role": role_val,
                 "project": project_val,
                 "month": month_val,
-                "date": date_val,
+                "date": final_date_val,
                 "batch_id": target_batch_id
             }
 
@@ -2188,7 +2193,7 @@ async def generate_certificates(
                     "role": role_val,
                     "project": project_val,
                     "month": month_val,
-                    "issue_date": date_val
+                    "issue_date": final_date_val
                 }
 
                 supabase.table("certificates").insert(cert_record).execute()

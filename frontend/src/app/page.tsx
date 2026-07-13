@@ -28,7 +28,8 @@ import {
   Activity,
   Edit2,
   Users,
-  X
+  X,
+  Menu
 } from "lucide-react";
 import JSZip from "jszip";
 import { supabase, anonSupabase } from "@/lib/supabase";
@@ -266,6 +267,7 @@ export default function AdminDashboard() {
 
   // Tab State: "generator" | "history" | "profile"
   const [activeTab, setActiveTab] = useState<"generator" | "history" | "profile">("generator");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // History state
   const [historyCerts, setHistoryCerts] = useState<any[]>([]);
@@ -1076,19 +1078,20 @@ export default function AdminDashboard() {
 
       <header className="sticky top-0 z-50 border-b border-black/5 bg-white/70 backdrop-blur-2xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-4">
+          {/* Logo & branding */}
           <div className="flex items-center gap-3.5">
-            <div className="relative h-14 w-14 rounded-2xl bg-black shadow-sm flex items-center justify-center">
-              <div className="relative h-12 w-12">
+            <div className="relative h-12 w-12 md:h-14 md:w-14 rounded-2xl bg-black shadow-sm flex items-center justify-center">
+              <div className="relative h-10 w-10 md:h-12 md:w-12">
                 <Image src="/coptercode-logo-bw.svg" alt="CopterCode logo" fill className="object-contain" priority />
               </div>
             </div>
-            <span className="font-sans text-2xl font-bold tracking-tight text-[#0f172a]">
+            <span className="font-sans text-xl md:text-2xl font-bold tracking-tight text-[#0f172a]">
               CopterCode
             </span>
           </div>
 
-          {/* Navigation Workspace Switcher Tabs */}
-          <div className="flex items-center gap-1 bg-zinc-100 rounded-xl p-1 border border-zinc-200 shadow-sm">
+          {/* Navigation Workspace Switcher Tabs (Desktop only) */}
+          <div className="hidden md:flex items-center gap-1 bg-zinc-100 rounded-xl p-1 border border-zinc-200 shadow-sm">
             <button
               onClick={() => setActiveTab("generator")}
               className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
@@ -1115,11 +1118,11 @@ export default function AdminDashboard() {
             </button>
           </div>
 
+          {/* Desktop User Panel / Mobile Menu Button */}
           <div className="flex items-center gap-4">
-
-            {/* Admin user greeting and logout */}
-            <div className="flex items-center gap-3 border-l border-zinc-200 pl-4">
-              <div className="text-right hidden sm:block">
+            {/* Desktop user greeting and logout */}
+            <div className="hidden md:flex items-center gap-3 border-l border-zinc-200 pl-4">
+              <div className="text-right">
                 <span className="block text-[9px] font-bold text-zinc-400 uppercase leading-none">Logged in as</span>
                 <span className="block text-xs font-bold text-zinc-750 mt-1">{session.user.user_metadata?.full_name || "Admin"}</span>
               </div>
@@ -1131,6 +1134,15 @@ export default function AdminDashboard() {
                 <LogOut size={14} />
               </button>
             </div>
+
+            {/* Mobile Hamburger Button */}
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              title="Open Menu"
+              className="flex md:hidden p-2 border border-zinc-200 rounded-xl bg-white hover:bg-zinc-50 text-zinc-600 transition-all cursor-pointer shadow-sm"
+            >
+              <Menu size={20} />
+            </button>
           </div>
         </div>
       </header>
@@ -1380,7 +1392,7 @@ export default function AdminDashboard() {
                     5. Batch Release Details
                   </h3>
                   
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
                         Batch ID
@@ -2391,6 +2403,103 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* Mobile Drawer (Side Menu) */}
+      <div className={`fixed inset-0 z-[9999] transition-all duration-300 ${isMobileMenuOpen ? "visible opacity-100" : "invisible opacity-0 pointer-events-none"}`}>
+        {/* Backdrop overlay */}
+        <div 
+          className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+        
+        {/* Drawer content container */}
+        <div className={`absolute top-0 right-0 h-full w-[280px] sm:w-[320px] bg-white shadow-2xl p-6 flex flex-col justify-between transition-transform duration-300 ease-out transform ${
+          isMobileMenuOpen ? "translate-x-0" : "translate-x-full"
+        }`}>
+          <div>
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between pb-6 border-b border-zinc-100 mb-6">
+              <div className="flex items-center gap-2.5">
+                <div className="relative h-10 w-10 rounded-xl bg-black flex items-center justify-center">
+                  <div className="relative h-8 w-8">
+                    <Image src="/coptercode-logo-bw.svg" alt="CopterCode logo" fill className="object-contain" />
+                  </div>
+                </div>
+                <span className="font-sans text-lg font-bold tracking-tight text-[#0f172a]">
+                  CopterCode
+                </span>
+              </div>
+              <button 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Vertical Switcher Tabs */}
+            <nav className="space-y-2">
+              <button
+                onClick={() => {
+                  setActiveTab("generator");
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-xl transition-all cursor-pointer ${
+                  activeTab === "generator"
+                    ? "bg-[#5844e9]/8 text-[#5844e9] border border-[#5844e9]/10 shadow-[inset_0_1px_2px_rgba(88,68,233,0.05)]"
+                    : "text-stone-600 hover:text-stone-900 hover:bg-zinc-50 border border-transparent"
+                }`}
+              >
+                <LayoutDashboard size={16} /> Generator
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab("history");
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-xl transition-all cursor-pointer ${
+                  activeTab === "history"
+                    ? "bg-[#5844e9]/8 text-[#5844e9] border border-[#5844e9]/10 shadow-[inset_0_1px_2px_rgba(88,68,233,0.05)]"
+                    : "text-stone-600 hover:text-stone-900 hover:bg-zinc-50 border border-transparent"
+                }`}
+              >
+                <Database size={16} /> Database History
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab("profile");
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-xl transition-all cursor-pointer ${
+                  activeTab === "profile"
+                    ? "bg-[#5844e9]/8 text-[#5844e9] border border-[#5844e9]/10 shadow-[inset_0_1px_2px_rgba(88,68,233,0.05)]"
+                    : "text-stone-600 hover:text-stone-900 hover:bg-zinc-50 border border-transparent"
+                }`}
+              >
+                <User size={16} /> Profile
+              </button>
+            </nav>
+          </div>
+
+          {/* Drawer Footer / Account details */}
+          <div className="pt-6 border-t border-zinc-100">
+            <div className="mb-4">
+              <span className="block text-[9px] font-bold text-zinc-400 uppercase leading-none">Logged in as</span>
+              <span className="block text-xs font-bold text-zinc-750 mt-1 truncate">{session.user.user_metadata?.full_name || "Admin"}</span>
+              <span className="block text-[10px] text-zinc-400 mt-0.5 truncate">{session.user.email}</span>
+            </div>
+            <button
+              onClick={() => {
+                handleLogout();
+                setIsMobileMenuOpen(false);
+              }}
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 border border-zinc-200 hover:border-red-200 hover:bg-red-50 hover:text-red-650 text-zinc-500 rounded-xl transition-all cursor-pointer text-xs font-bold shadow-sm"
+            >
+              <LogOut size={14} /> Log Out
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
