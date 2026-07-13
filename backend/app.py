@@ -2806,6 +2806,65 @@ def download_excel_file(file_id: str):
     )
 
 
+class InternUpdatePayload(BaseModel):
+    name: str
+    email: str
+    college: str
+    department: str
+    role: str
+    project: str
+    month: str
+    date: str
+    year: str
+
+
+@app.put("/api/interns/{intern_id}")
+async def update_intern(intern_id: str, payload: InternUpdatePayload):
+    """
+    Updates details for a specific intern and propagates changes to their certificates.
+    Uses the service role client to bypass client RLS rules.
+    """
+    if not supabase:
+        raise HTTPException(
+            status_code=500,
+            detail="Supabase client is not configured."
+        )
+
+    try:
+        # 1. Update the intern record
+        supabase.table("interns").update({
+            "name": payload.name,
+            "email": payload.email,
+            "college": payload.college,
+            "department": payload.department,
+            "role": payload.role,
+            "project": payload.project,
+            "month": payload.month,
+            "date": payload.date,
+            "year": payload.year
+        }).eq("id", intern_id).execute()
+
+        # 2. Update duplicate fields in certificates table
+        supabase.table("certificates").update({
+            "name": payload.name,
+            "college": payload.college,
+            "department": payload.department,
+            "role": payload.role,
+            "project": payload.project,
+            "month": payload.month,
+            "batch": payload.year, # 'batch' in certificates stores year_val
+            "issue_date": payload.date
+        }).eq("intern_id", intern_id).execute()
+
+        return {"status": "success", "message": "Intern and certificate records updated successfully."}
+    except Exception as e:
+        print(f"Failed to update intern {intern_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+
+
 if __name__ == "__main__":
     import uvicorn
 

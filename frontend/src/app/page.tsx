@@ -648,10 +648,13 @@ export default function AdminDashboard() {
     setEditError("");
 
     try {
-      // 1. Update the intern record
-      const { error: internError } = await anonSupabase
-        .from("interns")
-        .update({
+      const base = backendUrl.replace(/\/+$/, "");
+      const res = await fetch(`${base}/api/interns/${editInternId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
           name: editName.trim(),
           email: editEmail.trim(),
           college: editCollege.trim(),
@@ -662,26 +665,12 @@ export default function AdminDashboard() {
           date: editDate.trim(),
           year: editYear.trim(),
         })
-        .eq("id", editInternId);
+      });
 
-      if (internError) throw internError;
-
-      // 2. Update duplicate fields in certificates table
-      const { error: certError } = await anonSupabase
-        .from("certificates")
-        .update({
-          name: editName.trim(),
-          college: editCollege.trim(),
-          department: editDept.trim(),
-          role: editRole.trim(),
-          project: editProject.trim(),
-          month: editMonth.trim(),
-          batch: editYear.trim(), // 'batch' in certificates stores year_val
-          issue_date: editDate.trim(),
-        })
-        .eq("intern_id", editInternId);
-
-      if (certError) throw certError;
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.detail || "Failed to update record.");
+      }
 
       setEditingCert(null);
       fetchHistoryCerts();
