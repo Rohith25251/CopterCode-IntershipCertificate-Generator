@@ -2276,22 +2276,28 @@ export default function AdminDashboard() {
                           
                           return (
                             <tr key={cert.id} className={`transition-colors hover:bg-zinc-50/50 ${isSelected ? "bg-violet-50/20" : ""}`}>
-                              <td className="p-4 w-10 text-center select-none">
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={(e) => {
-                                    const next = new Set(selectedCertIds);
-                                    if (e.target.checked) {
-                                      next.add(cert.id);
-                                    } else {
-                                      next.delete(cert.id);
-                                    }
-                                    setSelectedCertIds(next);
-                                  }}
-                                  className="w-4 h-4 rounded border-zinc-300 text-indigo-650 bg-white focus:ring-indigo-500 focus:ring-2 focus:ring-offset-2 transition-all cursor-pointer"
-                                />
-                              </td>
+                              {isFirstRowForIntern && (
+                                <td 
+                                  className="p-4 w-10 text-center select-none align-middle border-l border-zinc-100 bg-zinc-50/10" 
+                                  rowSpan={internRowCount}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={filtered.filter((c) => c.intern_id === cert.intern_id).every((c) => selectedCertIds.has(c.id))}
+                                    onChange={(e) => {
+                                      const next = new Set(selectedCertIds);
+                                      const internCerts = filtered.filter((c) => c.intern_id === cert.intern_id);
+                                      if (e.target.checked) {
+                                        internCerts.forEach((c) => next.add(c.id));
+                                      } else {
+                                        internCerts.forEach((c) => next.delete(c.id));
+                                      }
+                                      setSelectedCertIds(next);
+                                    }}
+                                    className="w-4 h-4 rounded border-zinc-300 text-indigo-650 bg-white focus:ring-indigo-500 focus:ring-2 focus:ring-offset-2 transition-all cursor-pointer"
+                                  />
+                                </td>
+                              )}
                               <td className="p-4">
                                 <div className="flex items-center gap-1.5 group/name">
                                   <span className="font-bold text-zinc-800">{nameVal}</span>
