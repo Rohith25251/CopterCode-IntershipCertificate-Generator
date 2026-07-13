@@ -566,22 +566,31 @@ export default function AdminDashboard() {
   };
 
   const handleSendFilteredEmails = async () => {
-    const targetCerts = selectedCertIds.size > 0
-      ? historyCerts.filter((c) => selectedCertIds.has(c.id))
-      : filteredCerts;
-
+    const isSelectedFlow = selectedCertIds.size > 0;
+    
     // Filter active certificates that have a valid intern_id
-    const activeCerts = targetCerts.filter((c) => c.status === "active" && c.intern_id);
+    // If nothing selected: filter out already sent ones (i.e. keep those whose email_status !== 'sent')
+    const activeCerts = isSelectedFlow
+      ? historyCerts.filter((c) => selectedCertIds.has(c.id) && c.status === "active" && c.intern_id)
+      : filteredCerts.filter((c) => c.status === "active" && c.intern_id && c.intern?.email_status !== "sent");
+
     // Find unique intern IDs
     const uniqueInternIds = Array.from(new Set(activeCerts.map((c) => c.intern_id).filter(Boolean))) as string[];
 
     if (uniqueInternIds.length === 0) {
-      alert("No active interns with valid certificates selected/found to email.");
+      if (isSelectedFlow) {
+        alert("No active interns with valid certificates selected to email.");
+      } else {
+        alert("All matching interns have already received their emails (or no active certificates match the filters).");
+      }
       return;
     }
 
-    const actionText = selectedCertIds.size > 0 ? "selected" : "filtered";
-    if (!confirm(`Are you sure you want to send emails to all ${uniqueInternIds.length} ${actionText} intern(s)?`)) {
+    const confirmMsg = isSelectedFlow
+      ? `Are you sure you want to send emails to the ${uniqueInternIds.length} selected intern(s)?`
+      : `Are you sure you want to send emails to the ${uniqueInternIds.length} pending/un-sent intern(s)?`;
+
+    if (!confirm(confirmMsg)) {
       return;
     }
 
@@ -2076,11 +2085,7 @@ export default function AdminDashboard() {
                     ) : (
                       <>
                         <Mail size={14} />
-                        <span>
-                          {selectedCertIds.size > 0
-                            ? "Send Selected Emails"
-                            : "Send Email to all"}
-                        </span>
+                        <span>Send Email</span>
                       </>
                     )}
                   </button>
