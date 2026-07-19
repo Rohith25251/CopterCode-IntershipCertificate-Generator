@@ -264,6 +264,16 @@ export default function AdminDashboard() {
   const [profileSuccess, setProfileSuccess] = useState("");
   const [profileSubmitting, setProfileSubmitting] = useState(false);
 
+  // Email template settings (profile tab)
+  const [emailLogoUrl, setEmailLogoUrl] = useState("");
+  const [emailHeroImageUrl, setEmailHeroImageUrl] = useState("");
+  const [useCustomLogo, setUseCustomLogo] = useState(false);
+  const [useCustomHero, setUseCustomHero] = useState(false);
+  const [emailSettingsLoading, setEmailSettingsLoading] = useState(false);
+  const [emailSettingsSuccess, setEmailSettingsSuccess] = useState("");
+  const [emailSettingsError, setEmailSettingsError] = useState("");
+  const [emailSettingsSaving, setEmailSettingsSaving] = useState(false);
+
   // Tab State: "generator" | "history" | "registration" | "profile"
   const [activeTab, setActiveTab] = useState<"generator" | "history" | "registration" | "profile">("generator");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -558,6 +568,60 @@ export default function AdminDashboard() {
       setProfileError(err.message || "Failed to update profile.");
     } finally {
       setProfileSubmitting(false);
+    }
+  };
+
+  // Load email template settings when profile tab is active
+  useEffect(() => {
+    if (!session || activeTab !== "profile") return;
+    const loadEmailSettings = async () => {
+      setEmailSettingsLoading(true);
+      try {
+        const base = backendUrl.replace(/\/+$/, "");
+        const res = await fetch(`${base}/api/email-template-settings`);
+        const data = await res.json();
+        if (res.ok && data.status === "success") {
+          // A non-null/non-empty DB value means custom override is active
+          const hasCustomLogo = !!data.logo_url;
+          const hasCustomHero = !!data.hero_image_url;
+          setUseCustomLogo(hasCustomLogo);
+          setUseCustomHero(hasCustomHero);
+          setEmailLogoUrl(data.logo_url || "");
+          setEmailHeroImageUrl(data.hero_image_url || "");
+        }
+      } catch (err) {
+        console.error("Failed to load email template settings", err);
+      } finally {
+        setEmailSettingsLoading(false);
+      }
+    };
+    loadEmailSettings();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, activeTab]);
+
+  const handleSaveEmailSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEmailSettingsError("");
+    setEmailSettingsSuccess("");
+    setEmailSettingsSaving(true);
+    try {
+      const base = backendUrl.replace(/\/+$/, "");
+      const res = await fetch(`${base}/api/email-template-settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          // Send null when toggle is OFF → backend falls back to .env default
+          logo_url: useCustomLogo ? (emailLogoUrl.trim() || null) : null,
+          hero_image_url: useCustomHero ? (emailHeroImageUrl.trim() || null) : null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to save.");
+      setEmailSettingsSuccess("Email template settings saved successfully!");
+    } catch (err: any) {
+      setEmailSettingsError(err.message || "Failed to save email template settings.");
+    } finally {
+      setEmailSettingsSaving(false);
     }
   };
 
@@ -3359,115 +3423,295 @@ export default function AdminDashboard() {
 
         {/* Tab 3: Profile Settings */}
         {activeTab === "profile" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-[fadeIn_0.3s_ease-out]">
-            {/* Update Info Card */}
-            <div className="rounded-[32px] border border-black/5 bg-white p-8 shadow-[0_18px_60px_rgba(0,0,0,0.05)]">
-              <h2 className="font-sans text-xl font-bold text-stone-900 mb-2 flex items-center gap-2">
-                <User className="text-[#5844e9]" /> Admin Information
-              </h2>
-              <p className="text-xs text-zinc-500 mb-6">
-                Update your display name. This name is used to greet you in the panel interface.
-              </p>
+          <div className="flex flex-col gap-8 animate-[fadeIn_0.3s_ease-out]">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Update Info Card */}
+              <div className="rounded-[32px] border border-black/5 bg-white p-8 shadow-[0_18px_60px_rgba(0,0,0,0.05)]">
+                <h2 className="font-sans text-xl font-bold text-stone-900 mb-2 flex items-center gap-2">
+                  <User className="text-[#5844e9]" /> Admin Information
+                </h2>
+                <p className="text-xs text-zinc-500 mb-6">
+                  Update your display name. This name is used to greet you in the panel interface.
+                </p>
 
-              {profileSuccess && (
-                <div className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-800 p-3.5 rounded-xl text-xs flex items-center gap-2 animate-bounce">
-                  <CheckCircle className="w-4 h-4 text-emerald-600" />
-                  <span>{profileSuccess}</span>
-                </div>
-              )}
+                {profileSuccess && (
+                  <div className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-800 p-3.5 rounded-xl text-xs flex items-center gap-2 animate-bounce">
+                    <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    <span>{profileSuccess}</span>
+                  </div>
+                )}
 
-              {profileError && (
-                <div className="mb-4 bg-red-50 border border-red-200 p-3.5 rounded-xl text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-650" />
-                  <span>{profileError}</span>
-                </div>
-              )}
+                {profileError && (
+                  <div className="mb-4 bg-red-50 border border-red-200 p-3.5 rounded-xl text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-650" />
+                    <span>{profileError}</span>
+                  </div>
+                )}
 
-              <form onSubmit={handleProfileUpdate} className="space-y-5">
-                <div>
-                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
-                    Account Email
-                  </label>
-                  <input
-                    type="text"
-                    disabled
-                    value={session.user.email}
-                    className="w-full text-xs bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-500 cursor-not-allowed font-medium"
-                  />
-                </div>
+                <form onSubmit={handleProfileUpdate} className="space-y-5">
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
+                      Account Email
+                    </label>
+                    <input
+                      type="text"
+                      disabled
+                      value={session.user.email}
+                      className="w-full text-xs bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-500 cursor-not-allowed font-medium"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
-                    Display Name
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={profileName}
-                    onChange={(e) => setProfileName(e.target.value)}
-                    placeholder="Admin Display Name"
-                    className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-800 focus:outline-none focus:border-violet-500 focus:bg-zinc-50 transition-colors"
-                  />
-                </div>
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
+                      Display Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={profileName}
+                      onChange={(e) => setProfileName(e.target.value)}
+                      placeholder="Admin Display Name"
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-800 focus:outline-none focus:border-violet-500 focus:bg-zinc-50 transition-colors"
+                    />
+                  </div>
 
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    disabled={profileSubmitting}
-                    className="bg-[#5844e9] hover:bg-[#4338ca] disabled:opacity-60 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-md transition-all uppercase tracking-wider cursor-pointer"
-                  >
-                    {profileSubmitting ? "Updating..." : "Save Changes"}
-                  </button>
-                </div>
-              </form>
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={profileSubmitting}
+                      className="bg-[#5844e9] hover:bg-[#4338ca] disabled:opacity-60 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-md transition-all uppercase tracking-wider cursor-pointer"
+                    >
+                      {profileSubmitting ? "Updating..." : "Save Changes"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Change Password Card */}
+              <div className="rounded-[32px] border border-black/5 bg-white p-8 shadow-[0_18px_60px_rgba(0,0,0,0.05)]">
+                <h2 className="font-sans text-xl font-bold text-stone-900 mb-2 flex items-center gap-2">
+                  <KeyRound className="text-[#5844e9]" /> Change Security Password
+                </h2>
+                <p className="text-xs text-zinc-500 mb-6">
+                  Update your credentials. Once saved, you must log back in with the new password on future visits.
+                </p>
+
+                <form onSubmit={handleProfileUpdate} className="space-y-5">
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
+                      New Security Password
+                    </label>
+                    <input
+                      type="password"
+                      value={profilePassword}
+                      onChange={(e) => setProfilePassword(e.target.value)}
+                      placeholder="•••••••• (Min 6 characters)"
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-800 focus:outline-none focus:border-violet-500 focus:bg-zinc-50 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
+                      Confirm Password
+                    </label>
+                    <input
+                      type="password"
+                      value={profileConfirmPassword}
+                      onChange={(e) => setProfileConfirmPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-800 focus:outline-none focus:border-violet-500 focus:bg-zinc-50 transition-colors"
+                    />
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={profileSubmitting || !profilePassword}
+                      className="bg-[#5844e9] hover:bg-[#4338ca] disabled:opacity-60 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-md transition-all uppercase tracking-wider cursor-pointer"
+                    >
+                      {profileSubmitting ? "Updating Password..." : "Update Password"}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
 
-            {/* Change Password Card */}
+            {/* Email Template Settings Card — full width */}
             <div className="rounded-[32px] border border-black/5 bg-white p-8 shadow-[0_18px_60px_rgba(0,0,0,0.05)]">
               <h2 className="font-sans text-xl font-bold text-stone-900 mb-2 flex items-center gap-2">
-                <KeyRound className="text-[#5844e9]" /> Change Security Password
+                <Mail className="text-[#5844e9]" /> Email Template Settings
               </h2>
               <p className="text-xs text-zinc-500 mb-6">
-                Update your credentials. Once saved, you must log back in with the new password on future visits.
+                Customize the images used in all outgoing emails. Toggle <strong>Custom</strong> to override the server default (<code className="bg-zinc-100 px-1 py-0.5 rounded text-[10px]">.env</code>). When toggled off, the env default is used automatically.
               </p>
 
-              <form onSubmit={handleProfileUpdate} className="space-y-5">
-                <div>
-                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
-                    New Security Password
-                  </label>
-                  <input
-                    type="password"
-                    value={profilePassword}
-                    onChange={(e) => setProfilePassword(e.target.value)}
-                    placeholder="•••••••• (Min 6 characters)"
-                    className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-800 focus:outline-none focus:border-violet-500 focus:bg-zinc-50 transition-colors"
-                  />
+              {emailSettingsLoading ? (
+                <div className="flex items-center gap-2 text-xs text-zinc-400 py-6">
+                  <span className="w-4 h-4 border-2 border-violet-300 border-t-violet-600 rounded-full animate-spin shrink-0" />
+                  Loading current settings...
                 </div>
+              ) : (
+                <form onSubmit={handleSaveEmailSettings} className="space-y-8">
 
-                <div>
-                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1.5">
-                    Confirm Password
-                  </label>
-                  <input
-                    type="password"
-                    value={profileConfirmPassword}
-                    onChange={(e) => setProfileConfirmPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-800 focus:outline-none focus:border-violet-500 focus:bg-zinc-50 transition-colors"
-                  />
-                </div>
+                  {emailSettingsSuccess && (
+                    <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3.5 rounded-xl text-xs flex items-center gap-2 animate-bounce">
+                      <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{emailSettingsSuccess}</span>
+                    </div>
+                  )}
+                  {emailSettingsError && (
+                    <div className="bg-red-50 border border-red-200 p-3.5 rounded-xl text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                      <span>{emailSettingsError}</span>
+                    </div>
+                  )}
 
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    disabled={profileSubmitting || !profilePassword}
-                    className="bg-[#5844e9] hover:bg-[#4338ca] disabled:opacity-60 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-md transition-all uppercase tracking-wider cursor-pointer"
-                  >
-                    {profileSubmitting ? "Updating Password..." : "Update Password"}
-                  </button>
-                </div>
-              </form>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+                    {/* ── Logo Image ── */}
+                    <div className="space-y-4">
+                      {/* Header row with toggle */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-bold text-stone-800">Logo Image</p>
+                          <p className="text-[10px] text-zinc-400 mt-0.5">Used in <strong>both</strong> selection &amp; certificate emails.</p>
+                        </div>
+                        {/* Toggle switch */}
+                        <button
+                          type="button"
+                          onClick={() => { setUseCustomLogo(v => !v); setEmailSettingsSuccess(""); setEmailSettingsError(""); }}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                            useCustomLogo ? "bg-[#5844e9]" : "bg-zinc-200"
+                          }`}
+                          aria-pressed={useCustomLogo}
+                        >
+                          <span className="sr-only">Use custom logo</span>
+                          <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            useCustomLogo ? "translate-x-5" : "translate-x-0"
+                          }`} />
+                        </button>
+                      </div>
+
+                      {/* Status badge */}
+                      <div className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full ${
+                        useCustomLogo
+                          ? "bg-violet-50 text-violet-700 border border-violet-200"
+                          : "bg-zinc-100 text-zinc-500 border border-zinc-200"
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${ useCustomLogo ? "bg-violet-500" : "bg-zinc-400" }`} />
+                        {useCustomLogo ? "Custom URL active" : "Using .env default"}
+                      </div>
+
+                      {/* Custom URL input — only visible when toggle is ON */}
+                      {useCustomLogo && (
+                        <div className="space-y-3">
+                          <input
+                            type="url"
+                            value={emailLogoUrl}
+                            onChange={(e) => { setEmailLogoUrl(e.target.value); setEmailSettingsSuccess(""); setEmailSettingsError(""); }}
+                            placeholder="https://example.com/logo.svg"
+                            className="w-full text-xs bg-white border border-violet-200 rounded-xl px-4 py-3 text-zinc-800 focus:outline-none focus:border-violet-500 focus:bg-zinc-50 transition-colors font-mono"
+                          />
+                          {/* Live preview */}
+                          {emailLogoUrl && (
+                            <div className="rounded-2xl border border-zinc-100 bg-zinc-50 p-4 flex flex-col items-center gap-2">
+                              <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">Preview</span>
+                              <div className="flex items-center gap-3 bg-white border border-zinc-200 rounded-xl px-5 py-3 shadow-sm">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={emailLogoUrl}
+                                  alt="Logo preview"
+                                  className="h-9 w-auto rounded-lg object-contain"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                  onLoad={(e) => { (e.target as HTMLImageElement).style.display = ''; }}
+                                />
+                                <span className="text-sm font-extrabold text-stone-900 tracking-tight">CopterCode</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Hero Image ── */}
+                    <div className="space-y-4">
+                      {/* Header row with toggle */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-bold text-stone-800">Hero Image</p>
+                          <p className="text-[10px] text-zinc-400 mt-0.5">Used only in the <strong>intern certificate</strong> email.</p>
+                        </div>
+                        {/* Toggle switch */}
+                        <button
+                          type="button"
+                          onClick={() => { setUseCustomHero(v => !v); setEmailSettingsSuccess(""); setEmailSettingsError(""); }}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                            useCustomHero ? "bg-[#5844e9]" : "bg-zinc-200"
+                          }`}
+                          aria-pressed={useCustomHero}
+                        >
+                          <span className="sr-only">Use custom hero image</span>
+                          <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            useCustomHero ? "translate-x-5" : "translate-x-0"
+                          }`} />
+                        </button>
+                      </div>
+
+                      {/* Status badge */}
+                      <div className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full ${
+                        useCustomHero
+                          ? "bg-violet-50 text-violet-700 border border-violet-200"
+                          : "bg-zinc-100 text-zinc-500 border border-zinc-200"
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${ useCustomHero ? "bg-violet-500" : "bg-zinc-400" }`} />
+                        {useCustomHero ? "Custom URL active" : "Using .env default"}
+                      </div>
+
+                      {/* Custom URL input — only visible when toggle is ON */}
+                      {useCustomHero && (
+                        <div className="space-y-3">
+                          <input
+                            type="url"
+                            value={emailHeroImageUrl}
+                            onChange={(e) => { setEmailHeroImageUrl(e.target.value); setEmailSettingsSuccess(""); setEmailSettingsError(""); }}
+                            placeholder="https://example.com/hero.jpg"
+                            className="w-full text-xs bg-white border border-violet-200 rounded-xl px-4 py-3 text-zinc-800 focus:outline-none focus:border-violet-500 focus:bg-zinc-50 transition-colors font-mono"
+                          />
+                          {/* Live preview */}
+                          {emailHeroImageUrl && (
+                            <div className="rounded-2xl border border-zinc-100 bg-zinc-50 p-4 flex flex-col items-center gap-2">
+                              <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">Preview</span>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={emailHeroImageUrl}
+                                alt="Hero image preview"
+                                className="w-full max-h-36 object-cover rounded-xl border border-zinc-200 shadow-sm"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                onLoad={(e) => { (e.target as HTMLImageElement).style.display = ''; }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+
+                  <div className="pt-2 border-t border-zinc-100">
+                    <button
+                      type="submit"
+                      disabled={emailSettingsSaving}
+                      className="bg-[#5844e9] hover:bg-[#4338ca] disabled:opacity-60 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-md transition-all uppercase tracking-wider cursor-pointer flex items-center gap-2"
+                    >
+                      {emailSettingsSaving ? (
+                        <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving...</>
+                      ) : (
+                        <><Mail className="w-3.5 h-3.5" /> Save Email Settings</>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         )}

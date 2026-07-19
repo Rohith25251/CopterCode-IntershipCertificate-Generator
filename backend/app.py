@@ -733,6 +733,23 @@ async def send_email_notification(
     email_logo_url = os.getenv("EMAIL_LOGO_URL", "https://coptercode-website.vercel.app/coptercode-logo.svg").strip()
     email_hero_image_url = os.getenv("EMAIL_HERO_IMAGE_URL", "https://coptercode-website.vercel.app/hero-3.jpg").strip()
 
+    # Override with DB settings if available
+    try:
+        _supabase_url = os.getenv("SUPABASE_URL")
+        _supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        if _supabase_url and _supabase_key:
+            from supabase import create_client as _create_client
+            _db = _create_client(_supabase_url, _supabase_key)
+            _settings_res = _db.table("email_template_settings").select("logo_url,hero_image_url").eq("id", 1).maybe_single().execute()
+            if _settings_res and _settings_res.data:
+                _s = _settings_res.data
+                if _s.get("logo_url"):
+                    email_logo_url = _s["logo_url"].strip()
+                if _s.get("hero_image_url"):
+                    email_hero_image_url = _s["hero_image_url"].strip()
+    except Exception as _db_err:
+        print(f"[email] Could not read email_template_settings from DB, using env: {_db_err}")
+
     if not smtp_server or not smtp_username or not smtp_password or not smtp_from_email:
         print("WARNING: SMTP credentials not fully configured. Skipping email dispatch.")
         return False
@@ -927,6 +944,21 @@ async def send_registration_email(
 
     email_logo_url = os.getenv("EMAIL_LOGO_URL", "https://coptercode-website.vercel.app/coptercode-logo.svg").strip()
 
+    # Override with DB settings if available
+    try:
+        _supabase_url = os.getenv("SUPABASE_URL")
+        _supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        if _supabase_url and _supabase_key:
+            from supabase import create_client as _create_client
+            _db = _create_client(_supabase_url, _supabase_key)
+            _settings_res = _db.table("email_template_settings").select("logo_url").eq("id", 1).maybe_single().execute()
+            if _settings_res and _settings_res.data:
+                _s = _settings_res.data
+                if _s.get("logo_url"):
+                    email_logo_url = _s["logo_url"].strip()
+    except Exception as _db_err:
+        print(f"[email] Could not read email_template_settings from DB, using env: {_db_err}")
+
     if not smtp_server or not smtp_username or not smtp_password or not smtp_from_email:
         print("WARNING: SMTP credentials not fully configured. Skipping email dispatch.")
         return False
@@ -945,12 +977,16 @@ async def send_registration_email(
             else:
                 period_text = "three-month"
 
+        # Dynamic year — auto-updates every year
+        from datetime import datetime as _dt
+        current_year = _dt.now().year
+
         # Highly premium, fully inline table-based HTML onboarding email template compatible with all clients
         html_content = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>CopterCode — Internship Phase 2026</title>
+<title>CopterCode — Internship Phase {current_year}</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #eef1f7; font-family: 'Inter', -apple-system, BlinkMacSystemFont, Arial, sans-serif; -webkit-font-smoothing: antialiased; width: 100% !important;">
 
@@ -984,7 +1020,7 @@ async def send_registration_email(
             <h1 style="font-size: 22px; font-weight: 700; color: #0f172a; margin: 0 0 18px; letter-spacing: -0.01em;">Greetings, {student_name}!</h1>
             
             <p style="font-size: 15px; line-height: 1.75; color: #475569; margin: 0 0 18px;">
-              We are pleased to inform you that you have been <span style="color: #3b4cca; font-weight: 500;">successfully selected</span> for the {period_text} internship program at <span style="color: #0f172a; font-weight: 700;">CopterCode</span> — Internship Phase 2026, {preferred_batch} Batch. The program is designed around real-time industry exposure, international project experience, and advanced technical learning.
+              We are pleased to inform you that you have been <span style="color: #3b4cca; font-weight: 500;">successfully selected</span> for the {period_text} internship program at <span style="color: #0f172a; font-weight: 700;">CopterCode</span> — Internship Phase {current_year}, {preferred_batch} Batch. The program is designed around real-time industry exposure, international project experience, and advanced technical learning.
             </p>
             
             <!-- Venue Section -->
@@ -1024,19 +1060,11 @@ async def send_registration_email(
             <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8f9fc; border: 1px solid #e7eaf3; border-radius: 12px; overflow: hidden; border-collapse: separate; margin-bottom: 22px;">
               <tr>
                 <td style="padding: 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 14px; color: #475569;">Duration</td>
-                <td align="right" style="padding: 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 14px; font-weight: 600; color: #0f172a;">{internship_period}</td>
+                <td align="right" style="padding: 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 13px; font-weight: 600; color: #0f172a;">1 Month (15 days offline and 15 days hybrid)</td>
               </tr>
               <tr>
                 <td style="padding: 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 14px; color: #475569;">Selected Elective</td>
                 <td align="right" style="padding: 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 13px; font-weight: 600; color: #0f172a; max-width: 300px; word-wrap: break-word;">{elective}</td>
-              </tr>
-              <tr>
-                <td style="padding: 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 14px; color: #475569;">Offline Phase</td>
-                <td align="right" style="padding: 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 14px; font-weight: 600; color: #0f172a;">06 &ndash; 20 July 2026</td>
-              </tr>
-              <tr>
-                <td style="padding: 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 14px; color: #475569;">Hybrid / Online Phase</td>
-                <td align="right" style="padding: 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 14px; font-weight: 600; color: #0f172a;">21 Jul &ndash; 05 Aug 2026</td>
               </tr>
               <tr>
                 <td style="padding: 13px 22px; font-size: 14px; color: #475569;">Completion Certificate</td>
@@ -1141,30 +1169,30 @@ async def send_registration_email(
             <!-- HR Team Section -->
             <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6c5ce7; margin: 34px 0 10px;">HR &amp; Technical Lead Team</div>
             
-            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8f9fc; border: 1px solid #e7eaf3; border-radius: 12px; padding: 6px 22px; margin-bottom: 22px; border-collapse: collapse;">
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8f9fc; border: 1px solid #e7eaf3; border-radius: 12px; margin-bottom: 22px; border-collapse: collapse;">
               <tr>
-                <td style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; font-weight: 600; color: #0f172a;">Sarvesh R</td>
-                <td align="right" style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; color: #475569;">Tech HR &mdash; Chennai</td>
+                <td valign="middle" style="padding: 13px 22px 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; font-weight: 600; color: #0f172a;">Sarvesh R</td>
+                <td valign="middle" align="right" style="padding: 13px 22px 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; color: #475569; white-space: nowrap;">Tech HR &mdash; Chennai</td>
               </tr>
               <tr>
-                <td style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; font-weight: 600; color: #0f172a;">Karthik Sundharesan</td>
-                <td align="right" style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; color: #475569;">Senior HR &mdash; Chennai</td>
+                <td valign="middle" style="padding: 13px 22px 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; font-weight: 600; color: #0f172a;">Karthik Sundharesan</td>
+                <td valign="middle" align="right" style="padding: 13px 22px 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; color: #475569; white-space: nowrap;">Senior HR &mdash; Chennai</td>
               </tr>
               <tr>
-                <td style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; font-weight: 600; color: #0f172a;">Pranav Mahalingam</td>
-                <td align="right" style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; color: #475569;">Sr. Tech HR Head &mdash; Ann Arbor</td>
+                <td valign="middle" style="padding: 13px 22px 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; font-weight: 600; color: #0f172a;">Pranav Mahalingam</td>
+                <td valign="middle" align="right" style="padding: 13px 22px 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; color: #475569; white-space: nowrap;">Sr. Tech HR Head &mdash; Ann Arbor</td>
               </tr>
               <tr>
-                <td style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; font-weight: 600; color: #0f172a;">Rachel Emery</td>
-                <td align="right" style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; color: #475569;">HR Team Head &mdash; Houston</td>
+                <td valign="middle" style="padding: 13px 22px 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; font-weight: 600; color: #0f172a;">Rachel Emery</td>
+                <td valign="middle" align="right" style="padding: 13px 22px 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; color: #475569; white-space: nowrap;">HR Team Head &mdash; Houston</td>
               </tr>
               <tr>
-                <td style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; font-weight: 600; color: #0f172a;">Naveen Kumar</td>
-                <td align="right" style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; color: #475569;">Tech HR &mdash; Netherlands</td>
+                <td valign="middle" style="padding: 13px 22px 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; font-weight: 600; color: #0f172a;">Naveen Kumar</td>
+                <td valign="middle" align="right" style="padding: 13px 22px 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; color: #475569; white-space: nowrap;">Tech HR &mdash; Netherlands</td>
               </tr>
               <tr>
-                <td style="padding: 13px 0; font-size: 13.5px; font-weight: 600; color: #0f172a;">Jayasurya Gnanavel</td>
-                <td align="right" style="padding: 13px 0; font-size: 13.5px; color: #475569;">Associate Technical Lead &mdash; Chennai</td>
+                <td valign="middle" style="padding: 13px 22px 13px 22px; font-size: 13.5px; font-weight: 600; color: #0f172a;">Jayasurya Gnanavel</td>
+                <td valign="middle" align="right" style="padding: 13px 22px 13px 22px; font-size: 13.5px; color: #475569; white-space: nowrap;">Associate Technical Lead &mdash; Chennai</td>
               </tr>
             </table>
             
@@ -1182,7 +1210,7 @@ async def send_registration_email(
             
             <!-- Closing Section -->
             <div style="margin-top: 38px; padding-top: 24px; border-top: 1px solid #e7eaf3; font-size: 14.5px; line-height: 1.8; color: #475569;">
-              <p style="margin-bottom: 6px; color: #475569;">We once again congratulate all selected interns and look forward to welcoming you to the CopterCode Internship Phase 2026.</p>
+              <p style="margin-bottom: 6px; color: #475569;">We once again congratulate all selected interns and look forward to welcoming you to the CopterCode Internship Phase {current_year}.</p>
               <p style="margin-bottom: 0; color: #475569;">Warm regards,</p>
               <div style="color: #0f172a; font-weight: 700; margin-top: 6px;">Team CopterCode</div>
             </div>
@@ -1195,12 +1223,17 @@ async def send_registration_email(
           <td align="center" style="padding: 32px 24px; background-color: #0f172a; text-align: center; border-top: 1px solid #1e293b;">
             <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, Arial, sans-serif; font-size: 14px; font-weight: 700; color: #ffffff; margin-bottom: 8px; letter-spacing: 0.02em;">Karthikeyan Sundharesan &middot; Sr HR</div>
             <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, Arial, sans-serif; font-size: 12.5px; color: #94a3b8; line-height: 1.6; margin-bottom: 12px;">
-              044 6132 9380 &nbsp;&middot;&nbsp; +91 80721 93600
+              <a href="tel:04461329380" style="color: #94a3b8; text-decoration: none;">044 6132 9380</a> &nbsp;&middot;&nbsp; <a href="tel:+918072193600" style="color: #94a3b8; text-decoration: none;">+91 80721 93600</a>
             </div>
-            <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, Arial, sans-serif; font-size: 12.5px; line-height: 1.6;">
+            <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, Arial, sans-serif; font-size: 12.5px; line-height: 1.6; margin-bottom: 10px;">
               <a href="mailto:hr@coptercode.co.in" style="color: #a5b4fc !important; text-decoration: none; font-weight: 600;">hr@coptercode.co.in</a>
               <span style="color: #334155; padding: 0 8px;">&middot;</span>
               <a href="https://www.coptercode.co.in" target="_blank" style="color: #a5b4fc !important; text-decoration: none; font-weight: 600;">www.coptercode.co.in</a>
+            </div>
+            <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, Arial, sans-serif; font-size: 12.5px; line-height: 1.6;">
+              <a href="https://www.instagram.com/coptercode/?hl=en" target="_blank" style="color: #cbd5e1 !important; text-decoration: none; font-weight: 500;">Instagram</a>
+              <span style="color: #334155; padding: 0 8px;">&middot;</span>
+              <a href="https://in.linkedin.com/company/coptercode" target="_blank" style="color: #cbd5e1 !important; text-decoration: none; font-weight: 500;">LinkedIn</a>
             </div>
           </td>
         </tr>
@@ -3373,6 +3406,85 @@ async def update_intern(intern_id: str, payload: InternUpdatePayload):
         raise HTTPException(
             status_code=500,
             detail=str(e)
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Email Template Settings API
+# ─────────────────────────────────────────────────────────────────────────────
+
+class EmailTemplateSettingsPayload(BaseModel):
+    logo_url: Optional[str] = None
+    hero_image_url: Optional[str] = None
+
+
+@app.get("/api/email-template-settings")
+def get_email_template_settings():
+    """
+    Returns the current email template settings (logo URL, hero image URL).
+    Falls back to environment variable defaults if no DB row exists.
+    """
+    if not supabase:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Supabase client is not configured."
+        )
+
+    default_logo = os.getenv("EMAIL_LOGO_URL", "https://coptercode-website.vercel.app/coptercode-logo.svg").strip()
+    default_hero = os.getenv("EMAIL_HERO_IMAGE_URL", "https://coptercode-website.vercel.app/hero-3.jpg").strip()
+
+    try:
+        res = supabase.table("email_template_settings").select("logo_url,hero_image_url,updated_at").eq("id", 1).maybe_single().execute()
+        if res and res.data:
+            return {
+                "status": "success",
+                "logo_url": res.data.get("logo_url"),
+                "hero_image_url": res.data.get("hero_image_url"),
+                "updated_at": res.data.get("updated_at"),
+            }
+        # Row doesn't exist yet — return nulls
+        return {
+            "status": "success",
+            "logo_url": None,
+            "hero_image_url": None,
+            "updated_at": None,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch email template settings: {str(e)}"
+        )
+
+
+@app.put("/api/email-template-settings")
+def update_email_template_settings(payload: EmailTemplateSettingsPayload):
+    """
+    Saves email template settings (logo URL, hero image URL) to the DB.
+    Performs an upsert on the single row with id=1.
+    """
+    if not supabase:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Supabase client is not configured."
+        )
+
+    try:
+        from datetime import datetime, timezone
+        upsert_data = {
+            "id": 1,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if payload.logo_url is not None:
+            upsert_data["logo_url"] = payload.logo_url.strip() if payload.logo_url.strip() else None
+        if payload.hero_image_url is not None:
+            upsert_data["hero_image_url"] = payload.hero_image_url.strip() if payload.hero_image_url.strip() else None
+
+        res = supabase.table("email_template_settings").upsert(upsert_data).execute()
+        return {"status": "success", "message": "Email template settings saved successfully."}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save email template settings: {str(e)}"
         )
 
 
