@@ -3473,11 +3473,9 @@ def update_email_template_settings(payload: EmailTemplateSettingsPayload):
         upsert_data = {
             "id": 1,
             "updated_at": datetime.now(timezone.utc).isoformat(),
+            "logo_url": payload.logo_url.strip() if payload.logo_url else None,
+            "hero_image_url": payload.hero_image_url.strip() if payload.hero_image_url else None,
         }
-        if payload.logo_url is not None:
-            upsert_data["logo_url"] = payload.logo_url.strip() if payload.logo_url.strip() else None
-        if payload.hero_image_url is not None:
-            upsert_data["hero_image_url"] = payload.hero_image_url.strip() if payload.hero_image_url.strip() else None
 
         res = supabase.table("email_template_settings").upsert(upsert_data).execute()
         return {"status": "success", "message": "Email template settings saved successfully."}
