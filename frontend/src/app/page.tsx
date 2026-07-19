@@ -2,14 +2,14 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
-import { 
-  Upload, 
-  MapPin, 
-  Settings, 
-  FileText, 
-  CheckCircle, 
-  AlertCircle, 
-  Download, 
+import {
+  Upload,
+  MapPin,
+  Settings,
+  FileText,
+  CheckCircle,
+  AlertCircle,
+  Download,
   RotateCcw,
   Link as LinkIcon,
   Trash2,
@@ -45,49 +45,49 @@ interface FontOption {
 
 const CERTIFICATE_FONTS: FontOption[] = [
   // ── Built-in PDF fonts (always available, no download needed) ──
-  { value: "Helvetica",             label: "Helvetica",          category: "Built-in" },
-  { value: "Helvetica-Bold",        label: "Helvetica Bold",     category: "Built-in" },
-  { value: "Times-Roman",           label: "Times Roman",        category: "Built-in", preview: "Times New Roman" },
-  { value: "Times-Bold",            label: "Times Bold",         category: "Built-in", preview: "Times New Roman" },
-  { value: "Courier",               label: "Courier",            category: "Built-in" },
+  { value: "Helvetica", label: "Helvetica", category: "Built-in" },
+  { value: "Helvetica-Bold", label: "Helvetica Bold", category: "Built-in" },
+  { value: "Times-Roman", label: "Times Roman", category: "Built-in", preview: "Times New Roman" },
+  { value: "Times-Bold", label: "Times Bold", category: "Built-in", preview: "Times New Roman" },
+  { value: "Courier", label: "Courier", category: "Built-in" },
   // ── Elegant Serif (Google) ──
-  { value: "Playfair Display",      label: "Playfair Display",   category: "Serif",     google: true },
-  { value: "Cinzel",                label: "Cinzel",             category: "Serif",     google: true },
-  { value: "Cinzel Decorative",     label: "Cinzel Decorative",  category: "Serif",     google: true },
-  { value: "Cormorant Garamond",    label: "Cormorant Garamond", category: "Serif",     google: true },
-  { value: "EB Garamond",           label: "EB Garamond",        category: "Serif",     google: true },
-  { value: "Lora",                  label: "Lora",               category: "Serif",     google: true },
-  { value: "Merriweather",          label: "Merriweather",       category: "Serif",     google: true },
-  { value: "Libre Baskerville",     label: "Libre Baskerville",  category: "Serif",     google: true },
-  { value: "Crimson Text",          label: "Crimson Text",       category: "Serif",     google: true },
-  { value: "Spectral",              label: "Spectral",           category: "Serif",     google: true },
-  { value: "Bitter",                label: "Bitter",             category: "Serif",     google: true },
-  { value: "Zilla Slab",            label: "Zilla Slab",         category: "Serif",     google: true },
+  { value: "Playfair Display", label: "Playfair Display", category: "Serif", google: true },
+  { value: "Cinzel", label: "Cinzel", category: "Serif", google: true },
+  { value: "Cinzel Decorative", label: "Cinzel Decorative", category: "Serif", google: true },
+  { value: "Cormorant Garamond", label: "Cormorant Garamond", category: "Serif", google: true },
+  { value: "EB Garamond", label: "EB Garamond", category: "Serif", google: true },
+  { value: "Lora", label: "Lora", category: "Serif", google: true },
+  { value: "Merriweather", label: "Merriweather", category: "Serif", google: true },
+  { value: "Libre Baskerville", label: "Libre Baskerville", category: "Serif", google: true },
+  { value: "Crimson Text", label: "Crimson Text", category: "Serif", google: true },
+  { value: "Spectral", label: "Spectral", category: "Serif", google: true },
+  { value: "Bitter", label: "Bitter", category: "Serif", google: true },
+  { value: "Zilla Slab", label: "Zilla Slab", category: "Serif", google: true },
   // ── Modern Sans-Serif (Google) ──
-  { value: "Montserrat",            label: "Montserrat",         category: "Sans-Serif", google: true },
-  { value: "Open Sans",             label: "Open Sans",          category: "Sans-Serif", google: true },
-  { value: "Roboto",                label: "Roboto",             category: "Sans-Serif", google: true },
-  { value: "Poppins",               label: "Poppins",            category: "Sans-Serif", google: true },
-  { value: "Raleway",               label: "Raleway",            category: "Sans-Serif", google: true },
-  { value: "Nunito",                label: "Nunito",             category: "Sans-Serif", google: true },
-  { value: "Lato",                  label: "Lato",               category: "Sans-Serif", google: true },
-  { value: "Inter",                 label: "Inter",              category: "Sans-Serif", google: true },
-  { value: "Josefin Sans",          label: "Josefin Sans",       category: "Sans-Serif", google: true },
-  { value: "Oswald",                label: "Oswald",             category: "Sans-Serif", google: true },
-  { value: "Ubuntu",                label: "Ubuntu",             category: "Sans-Serif", google: true },
-  { value: "Cabin",                 label: "Cabin",              category: "Sans-Serif", google: true },
-  { value: "Exo 2",                 label: "Exo 2",              category: "Sans-Serif", google: true },
-  { value: "Quicksand",             label: "Quicksand",          category: "Sans-Serif", google: true },
-  { value: "Varela Round",          label: "Varela Round",       category: "Sans-Serif", google: true },
+  { value: "Montserrat", label: "Montserrat", category: "Sans-Serif", google: true },
+  { value: "Open Sans", label: "Open Sans", category: "Sans-Serif", google: true },
+  { value: "Roboto", label: "Roboto", category: "Sans-Serif", google: true },
+  { value: "Poppins", label: "Poppins", category: "Sans-Serif", google: true },
+  { value: "Raleway", label: "Raleway", category: "Sans-Serif", google: true },
+  { value: "Nunito", label: "Nunito", category: "Sans-Serif", google: true },
+  { value: "Lato", label: "Lato", category: "Sans-Serif", google: true },
+  { value: "Inter", label: "Inter", category: "Sans-Serif", google: true },
+  { value: "Josefin Sans", label: "Josefin Sans", category: "Sans-Serif", google: true },
+  { value: "Oswald", label: "Oswald", category: "Sans-Serif", google: true },
+  { value: "Ubuntu", label: "Ubuntu", category: "Sans-Serif", google: true },
+  { value: "Cabin", label: "Cabin", category: "Sans-Serif", google: true },
+  { value: "Exo 2", label: "Exo 2", category: "Sans-Serif", google: true },
+  { value: "Quicksand", label: "Quicksand", category: "Sans-Serif", google: true },
+  { value: "Varela Round", label: "Varela Round", category: "Sans-Serif", google: true },
   // ── Script / Calligraphy (Google) ──
-  { value: "Dancing Script",        label: "Dancing Script",     category: "Script",    google: true },
-  { value: "Great Vibes",           label: "Great Vibes",        category: "Script",    google: true },
-  { value: "Pacifico",              label: "Pacifico",           category: "Display",   google: true },
-  { value: "Sacramento",            label: "Sacramento",         category: "Script",    google: true },
-  { value: "Alex Brush",            label: "Alex Brush",         category: "Script",    google: true },
-  { value: "Allura",                label: "Allura",             category: "Script",    google: true },
-  { value: "Pinyon Script",         label: "Pinyon Script",      category: "Script",    google: true },
-  { value: "Petit Formal Script",   label: "Petit Formal Script",category: "Script",    google: true },
+  { value: "Dancing Script", label: "Dancing Script", category: "Script", google: true },
+  { value: "Great Vibes", label: "Great Vibes", category: "Script", google: true },
+  { value: "Pacifico", label: "Pacifico", category: "Display", google: true },
+  { value: "Sacramento", label: "Sacramento", category: "Script", google: true },
+  { value: "Alex Brush", label: "Alex Brush", category: "Script", google: true },
+  { value: "Allura", label: "Allura", category: "Script", google: true },
+  { value: "Pinyon Script", label: "Pinyon Script", category: "Script", google: true },
+  { value: "Petit Formal Script", label: "Petit Formal Script", category: "Script", google: true },
 ];
 
 const CATEGORY_ORDER = ["Built-in", "Serif", "Sans-Serif", "Script", "Display"];
@@ -106,9 +106,9 @@ function FontPicker({ value, onChange, accentColor = "#6d28d9" }: FontPickerProp
 
   const filtered = query.trim()
     ? CERTIFICATE_FONTS.filter(f =>
-        f.label.toLowerCase().includes(query.toLowerCase()) ||
-        f.category.toLowerCase().includes(query.toLowerCase())
-      )
+      f.label.toLowerCase().includes(query.toLowerCase()) ||
+      f.category.toLowerCase().includes(query.toLowerCase())
+    )
     : CERTIFICATE_FONTS;
 
   // Group by category in defined order
@@ -172,9 +172,8 @@ function FontPicker({ value, onChange, accentColor = "#6d28d9" }: FontPickerProp
                     key={font.value}
                     type="button"
                     onClick={() => { onChange(font.value); setOpen(false); }}
-                    className={`w-full text-left px-3 py-2.5 text-[13px] transition-colors cursor-pointer hover:bg-violet-50 ${
-                      font.value === value ? "bg-violet-100 text-violet-700" : "text-zinc-700"
-                    }`}
+                    className={`w-full text-left px-3 py-2.5 text-[13px] transition-colors cursor-pointer hover:bg-violet-50 ${font.value === value ? "bg-violet-100 text-violet-700" : "text-zinc-700"
+                      }`}
                     style={{ fontFamily: font.preview ?? font.value }}
                   >
                     {font.label}
@@ -218,31 +217,31 @@ interface FieldBox { x: number; y: number; w: number; h: number; }
 
 // Sample preview text shown inside each box on the design canvas
 const FIELD_SAMPLES: Record<string, string> = {
-  name:       "Candidate Name",
-  college:    "Institute Name",
-  year:       "II Year",
+  name: "Candidate Name",
+  college: "Institute Name",
+  year: "II Year",
   department: "Computer Science",
-  role:       "Intern",
-  project:    "Web Development",
-  month:      "June",
-  date:       "07-07-2026",
+  role: "Intern",
+  project: "Web Development",
+  month: "June",
+  date: "07-07-2026",
 };
 
 // Per-field color palette
 const FIELD_CFG: Record<string, { border: string; bg: string; text: string; label: string }> = {
-  name:       { border: "#7c3aed", bg: "rgba(124,58,237,0.10)",  text: "#7c3aed", label: "NAME" },
-  college:    { border: "#4f46e5", bg: "rgba(79,70,229,0.10)",   text: "#4f46e5", label: "COLLEGE" },
-  year:       { border: "#0891b2", bg: "rgba(8,145,178,0.10)",   text: "#0891b2", label: "YEAR" },
-  department: { border: "#ea580c", bg: "rgba(234,88,12,0.10)",   text: "#ea580c", label: "DEPT" },
-  role:       { border: "#db2777", bg: "rgba(219,39,119,0.10)",  text: "#db2777", label: "ROLE" },
-  project:    { border: "#d97706", bg: "rgba(217,119,6,0.10)",   text: "#d97706", label: "PROJECT" },
-  month:      { border: "#0d9488", bg: "rgba(13,148,136,0.10)",  text: "#0d9488", label: "MONTH" },
-  date:       { border: "#2563eb", bg: "rgba(37,99,235,0.10)",   text: "#2563eb", label: "DATE" },
+  name: { border: "#7c3aed", bg: "rgba(124,58,237,0.10)", text: "#7c3aed", label: "NAME" },
+  college: { border: "#4f46e5", bg: "rgba(79,70,229,0.10)", text: "#4f46e5", label: "COLLEGE" },
+  year: { border: "#0891b2", bg: "rgba(8,145,178,0.10)", text: "#0891b2", label: "YEAR" },
+  department: { border: "#ea580c", bg: "rgba(234,88,12,0.10)", text: "#ea580c", label: "DEPT" },
+  role: { border: "#db2777", bg: "rgba(219,39,119,0.10)", text: "#db2777", label: "ROLE" },
+  project: { border: "#d97706", bg: "rgba(217,119,6,0.10)", text: "#d97706", label: "PROJECT" },
+  month: { border: "#0d9488", bg: "rgba(13,148,136,0.10)", text: "#0d9488", label: "MONTH" },
+  date: { border: "#2563eb", bg: "rgba(37,99,235,0.10)", text: "#2563eb", label: "DATE" },
 };
 
 export default function AdminDashboard() {
   const [isMounted, setIsMounted] = useState(false);
-  
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -265,9 +264,25 @@ export default function AdminDashboard() {
   const [profileSuccess, setProfileSuccess] = useState("");
   const [profileSubmitting, setProfileSubmitting] = useState(false);
 
-  // Tab State: "generator" | "history" | "profile"
-  const [activeTab, setActiveTab] = useState<"generator" | "history" | "profile">("generator");
+  // Tab State: "generator" | "history" | "registration" | "profile"
+  const [activeTab, setActiveTab] = useState<"generator" | "history" | "registration" | "profile">("generator");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Registration state
+  const [registrations, setRegistrations] = useState<any[]>([]);
+  const [regLoading, setRegLoading] = useState(false);
+  const [regError, setRegError] = useState("");
+  const [regQuery, setRegQuery] = useState("");
+  const [selectedRegBatch, setSelectedRegBatch] = useState("");
+  const [selectedRegElective, setSelectedRegElective] = useState("");
+  const [selectedRegBranch, setSelectedRegBranch] = useState("");
+  const [selectedRegPlacement, setSelectedRegPlacement] = useState("");
+  const [selectedRegPeriod, setSelectedRegPeriod] = useState("");
+  const [isExportingRegExcel, setIsExportingRegExcel] = useState(false);
+  const [selectedRegIds, setSelectedRegIds] = useState<Set<string>>(new Set());
+  const [viewingReg, setViewingReg] = useState<any | null>(null);
+  const [isSendingRegEmails, setIsSendingRegEmails] = useState(false);
+  const [regEmailProgress, setRegEmailProgress] = useState({ done: 0, total: 0 });
 
   // History state
   const [historyCerts, setHistoryCerts] = useState<any[]>([]);
@@ -285,7 +300,7 @@ export default function AdminDashboard() {
   const [selectedCertIds, setSelectedCertIds] = useState<Set<string>>(new Set());
   const [isSendingHistoryEmails, setIsSendingHistoryEmails] = useState(false);
   const [historyEmailProgress, setHistoryEmailProgress] = useState({ done: 0, total: 0 });
-  
+
   // Edit Intern modal states
   const [editingCert, setEditingCert] = useState<any | null>(null);
   const [editInternId, setEditInternId] = useState("");
@@ -314,13 +329,13 @@ export default function AdminDashboard() {
       // Collect raw values for unique filters
       const d = c.intern?.department || c.department;
       if (d) depts.add(d);
-      
+
       const r = c.intern?.role || c.role;
       if (r) domains.add(r);
-      
+
       const col = c.intern?.college || c.college;
       if (col) colleges.add(col);
-      
+
       const b = c.intern?.month || c.month;
       if (b) batches.add(b);
 
@@ -388,6 +403,71 @@ export default function AdminDashboard() {
       return true;
     });
   }, [historyCerts, historyQuery, selectedDept, selectedDomain, selectedProject, selectedCollege, selectedBatch]);
+
+  // Dynamically calculate stats and unique filter values from registrations
+  const {
+    regBatchCounts,
+    totalRegistrations,
+    regUniqueBatches,
+    regUniqueElectives,
+    regUniqueBranches,
+    regUniquePeriods,
+  } = React.useMemo(() => {
+    const batches = new Set<string>();
+    const electives = new Set<string>();
+    const branches = new Set<string>();
+    const periods = new Set<string>();
+    const batchCounts: Record<string, number> = {};
+
+    registrations.forEach((r) => {
+      const b = r.preferred_batch;
+      if (b) {
+        batches.add(b);
+        batchCounts[b] = (batchCounts[b] || 0) + 1;
+      }
+
+      const el = r.preferable_elective;
+      if (el) electives.add(el);
+
+      const br = r.department_branch;
+      if (br) branches.add(br);
+
+      const pr = r.internship_period;
+      if (pr) periods.add(pr);
+    });
+
+    return {
+      regBatchCounts: batchCounts,
+      totalRegistrations: registrations.length,
+      regUniqueBatches: Array.from(batches).sort(),
+      regUniqueElectives: Array.from(electives).sort(),
+      regUniqueBranches: Array.from(branches).sort(),
+      regUniquePeriods: Array.from(periods).sort(),
+    };
+  }, [registrations]);
+
+  const filteredRegistrations = React.useMemo(() => {
+    return registrations.filter((r) => {
+      const q = regQuery.toLowerCase().trim();
+      if (q) {
+        const name = (r.student_name || "").toLowerCase();
+        const email = (r.email_address || "").toLowerCase();
+        const college = (r.college_name || "").toLowerCase();
+        const contact = (r.whatsapp_contact || "").toLowerCase();
+        const branch = (r.department_branch || "").toLowerCase();
+        const matches = name.includes(q) || email.includes(q) || college.includes(q) || contact.includes(q) || branch.includes(q);
+        if (!matches) return false;
+      }
+
+      if (selectedRegBatch && r.preferred_batch !== selectedRegBatch) return false;
+      if (selectedRegElective && r.preferable_elective !== selectedRegElective) return false;
+      if (selectedRegBranch && r.department_branch !== selectedRegBranch) return false;
+      if (selectedRegPlacement && r.placement_support_interest !== selectedRegPlacement) return false;
+      if (selectedRegPeriod && r.internship_period !== selectedRegPeriod) return false;
+
+      return true;
+    });
+  }, [registrations, regQuery, selectedRegBatch, selectedRegElective, selectedRegBranch, selectedRegPlacement, selectedRegPeriod]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -538,9 +618,77 @@ export default function AdminDashboard() {
     };
   }, [session, activeTab, fetchHistoryCerts]);
 
+  const fetchRegistrations = useCallback(async () => {
+    setRegLoading(true);
+    setRegError("");
+    setSelectedRegIds(new Set());
+    try {
+      const { data, error } = await anonSupabase
+        .from("internship_registration")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setRegistrations(data || []);
+    } catch (err: any) {
+      console.error(err);
+      setRegError(err.message || "Failed to load registrations.");
+    } finally {
+      setRegLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!session || activeTab !== "registration") return;
+
+    fetchRegistrations();
+
+    // Subscribe to realtime database changes for internship registrations
+    const regChannel = anonSupabase
+      .channel("realtime-registrations")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "internship_registration" },
+        (payload) => {
+          console.log("Realtime change in registrations:", payload);
+          fetchRegistrations();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      anonSupabase.removeChannel(regChannel);
+    };
+  }, [session, activeTab, fetchRegistrations]);
+
+  const handleDownloadRegExcel = async () => {
+    setIsExportingRegExcel(true);
+    try {
+      const params = new URLSearchParams();
+      if (selectedRegIds.size > 0) {
+        params.append("ids", Array.from(selectedRegIds).join(","));
+      } else {
+        if (regQuery.trim()) params.append("query", regQuery.trim());
+        if (selectedRegBatch) params.append("batch", selectedRegBatch);
+        if (selectedRegElective) params.append("elective", selectedRegElective);
+        if (selectedRegBranch) params.append("branch", selectedRegBranch);
+        if (selectedRegPlacement) params.append("placement", selectedRegPlacement);
+        if (selectedRegPeriod) params.append("period", selectedRegPeriod);
+      }
+
+      const base = backendUrl.replace(/\/+$/, "");
+      const downloadUrl = `${base}/api/registrations/export?${params.toString()}`;
+
+      window.open(downloadUrl, "_blank");
+    } catch (err) {
+      console.error("Failed to export registrations excel", err);
+    } finally {
+      setIsExportingRegExcel(false);
+    }
+  };
+
   const handleSendHistoryEmail = async (internId: string) => {
     if (!internId) return;
-    
+
     // Update local state to sending
     setHistoryCerts((prev) =>
       prev.map((c) => (c.intern_id === internId ? { ...c, intern: { ...c.intern, email_status: "sending" } } : c))
@@ -552,7 +700,7 @@ export default function AdminDashboard() {
         method: "POST"
       });
       const data = await res.json();
-      
+
       const nextStatus = res.ok && data.status === "success" ? "sent" : "failed";
       setHistoryCerts((prev) =>
         prev.map((c) => (c.intern_id === internId ? { ...c, intern: { ...c.intern, email_status: nextStatus } } : c))
@@ -567,11 +715,11 @@ export default function AdminDashboard() {
 
   const handleSendFilteredEmails = async () => {
     const isSelectedFlow = selectedCertIds.size > 0;
-    
+
     // Filter active certificates that have a valid intern_id
     // If nothing selected: filter out already sent ones (i.e. keep those whose email_status !== 'sent')
     const activeCerts = isSelectedFlow
-      ? historyCerts.filter((c) => selectedCertIds.has(c.id) && c.status === "active" && c.intern_id)
+      ? historyCerts.filter((c) => selectedCertIds.has(c.id) && c.status === "active" && c.intern_id && c.intern?.email_status !== "sent")
       : filteredCerts.filter((c) => c.status === "active" && c.intern_id && c.intern?.email_status !== "sent");
 
     // Find unique intern IDs
@@ -579,7 +727,7 @@ export default function AdminDashboard() {
 
     if (uniqueInternIds.length === 0) {
       if (isSelectedFlow) {
-        alert("No active interns with valid certificates selected to email.");
+        alert("All selected interns have already received their emails.");
       } else {
         alert("All matching interns have already received their emails (or no active certificates match the filters).");
       }
@@ -587,7 +735,7 @@ export default function AdminDashboard() {
     }
 
     const confirmMsg = isSelectedFlow
-      ? `Are you sure you want to send emails to the ${uniqueInternIds.length} selected intern(s)?`
+      ? `Are you sure you want to send emails to the ${uniqueInternIds.length} pending/un-sent selected intern(s)?`
       : `Are you sure you want to send emails to the ${uniqueInternIds.length} pending/un-sent intern(s)?`;
 
     if (!confirm(confirmMsg)) {
@@ -599,7 +747,7 @@ export default function AdminDashboard() {
 
     for (let i = 0; i < uniqueInternIds.length; i++) {
       const internId = uniqueInternIds[i];
-      
+
       // Update local state to sending
       setHistoryCerts((prev) =>
         prev.map((c) => (c.intern_id === internId ? { ...c, intern: { ...c.intern, email_status: "sending" } } : c))
@@ -611,7 +759,7 @@ export default function AdminDashboard() {
           method: "POST"
         });
         const data = await res.json();
-        
+
         const nextStatus = res.ok && data.status === "success" ? "sent" : "failed";
         setHistoryCerts((prev) =>
           prev.map((c) => (c.intern_id === internId ? { ...c, intern: { ...c.intern, email_status: nextStatus } } : c))
@@ -622,12 +770,106 @@ export default function AdminDashboard() {
           prev.map((c) => (c.intern_id === internId ? { ...c, intern: { ...c.intern, email_status: "failed" } } : c))
         );
       }
-      
+
       setHistoryEmailProgress((prev) => ({ ...prev, done: i + 1 }));
     }
 
     setIsSendingHistoryEmails(false);
     setHistoryEmailProgress({ done: 0, total: 0 });
+    alert("Batch email process complete!");
+  };
+
+  const handleSendRegEmail = async (regId: string) => {
+    if (!regId) return;
+
+    // Update local state to sending
+    setRegistrations((prev) =>
+      prev.map((r) => (r.id === regId ? { ...r, email_status: "sending" } : r))
+    );
+
+    try {
+      const base = backendUrl.replace(/\/+$/, "");
+      const res = await fetch(`${base}/api/registrations/${regId}/send-email`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || "Failed to send email");
+      }
+      // Update local state to sent
+      setRegistrations((prev) =>
+        prev.map((r) => (r.id === regId ? { ...r, email_status: "sent" } : r))
+      );
+    } catch (err: any) {
+      console.error(err);
+      // Update local state to failed
+      setRegistrations((prev) =>
+        prev.map((r) => (r.id === regId ? { ...r, email_status: "failed" } : r))
+      );
+      alert(err.message || "Failed to send email");
+    }
+  };
+
+  const handleSendFilteredRegEmails = async () => {
+    const isSelectedFlow = selectedRegIds.size > 0;
+
+    // Filter registrations
+    // If nothing selected: filter out already sent ones (i.e. keep those whose email_status !== 'sent')
+    const targetRegs = isSelectedFlow
+      ? registrations.filter((r) => selectedRegIds.has(r.id) && r.email_status !== "sent")
+      : filteredRegistrations.filter((r) => r.email_status !== "sent");
+
+    if (targetRegs.length === 0) {
+      if (isSelectedFlow) {
+        alert("All selected applicants have already received their emails.");
+      } else {
+        alert("All matching applicants have already received their emails.");
+      }
+      return;
+    }
+
+    const confirmMsg = isSelectedFlow
+      ? `Are you sure you want to send selection emails to the ${targetRegs.length} pending/un-sent selected applicant(s)?`
+      : `Are you sure you want to send selection emails to the ${targetRegs.length} pending/un-sent applicant(s)?`;
+
+    if (!confirm(confirmMsg)) {
+      return;
+    }
+
+    setIsSendingRegEmails(true);
+    setRegEmailProgress({ done: 0, total: targetRegs.length });
+
+    for (let i = 0; i < targetRegs.length; i++) {
+      const reg = targetRegs[i];
+
+      // Update local state to sending
+      setRegistrations((prev) =>
+        prev.map((r) => (r.id === reg.id ? { ...r, email_status: "sending" } : r))
+      );
+
+      try {
+        const base = backendUrl.replace(/\/+$/, "");
+        const res = await fetch(`${base}/api/registrations/${reg.id}/send-email`, {
+          method: "POST"
+        });
+        const data = await res.json();
+
+        const nextStatus = res.ok && data.status === "success" ? "sent" : "failed";
+        setRegistrations((prev) =>
+          prev.map((r) => (r.id === reg.id ? { ...r, email_status: nextStatus } : r))
+        );
+      } catch (err) {
+        console.error(`Failed to send email to applicant ${reg.id}`, err);
+        setRegistrations((prev) =>
+          prev.map((r) => (r.id === reg.id ? { ...r, email_status: "failed" } : r))
+        );
+      }
+
+      setRegEmailProgress((prev) => ({ ...prev, done: i + 1 }));
+    }
+
+    setIsSendingRegEmails(false);
+    setRegEmailProgress({ done: 0, total: 0 });
     alert("Batch email process complete!");
   };
 
@@ -709,7 +951,7 @@ export default function AdminDashboard() {
 
       const base = backendUrl.replace(/\/+$/, "");
       const downloadUrl = `${base}/api/certificates/export?${params.toString()}`;
-      
+
       window.open(downloadUrl, "_blank");
     } catch (err) {
       console.error("Failed to export excel", err);
@@ -721,14 +963,14 @@ export default function AdminDashboard() {
   const handleDownloadHistoryZip = async (certsList: any[]) => {
     const certsWithPdf = certsList.filter((c) => c.pdf_url && c.status === "active");
     if (certsWithPdf.length === 0) return;
-    
+
     setIsExportingHistoryZip(true);
     setHistoryZipProgress({ done: 0, total: certsWithPdf.length });
-    
+
     try {
       const zip = new JSZip();
       let zipTitle = "Certificates_History";
-      
+
       const certTypeLabels: Record<string, string> = {
         lor: "Letter of Recommendation",
         experience: "Experience Letter",
@@ -742,7 +984,7 @@ export default function AdminDashboard() {
         try {
           const res = await fetch(url);
           const blob = await res.arrayBuffer();
-          
+
           const certTitle = certTypeLabels[cert.cert_type] || "Certificate";
           const safeName = (cert.intern?.name || cert.name || `certificate_${i + 1}`).replace(/[^a-zA-Z0-9_\- ]/g, "_");
           zip.file(`${safeName}_(${certTitle}).pdf`, blob);
@@ -751,7 +993,7 @@ export default function AdminDashboard() {
         }
         setHistoryZipProgress({ done: i + 1, total: certsWithPdf.length });
       }
-      
+
       const content = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
       const downloadUrl = URL.createObjectURL(content);
       const a = document.createElement("a");
@@ -788,13 +1030,13 @@ export default function AdminDashboard() {
     }
     return url;
   }, [backendUrl]);
-  
+
   // Files
   const [lorTemplateFile, setLorTemplateFile] = useState<File | null>(null);
   const [experienceTemplateFile, setExperienceTemplateFile] = useState<File | null>(null);
   const [internshipTemplateFile, setInternshipTemplateFile] = useState<File | null>(null);
   const [excelFile, setExcelFile] = useState<File | null>(null);
-  
+
   // Batch details
   const [batchId, setBatchId] = useState<string>("");
   const [batchMonth, setBatchMonth] = useState<string>("");
@@ -802,7 +1044,7 @@ export default function AdminDashboard() {
 
   // Loaded Template ID (used as batch_id)
   const [templateId, setTemplateId] = useState<string>("");
-  
+
   // Generator states
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [excelDownloadUrl, setExcelDownloadUrl] = useState<string>("");
@@ -820,7 +1062,7 @@ export default function AdminDashboard() {
     try {
       const zip = new JSZip();
       let zipTitle = "Certificates";
-      
+
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         if (!row.pdf_url) continue;
@@ -828,16 +1070,16 @@ export default function AdminDashboard() {
         try {
           const res = await fetch(url);
           const blob = await res.arrayBuffer();
-          
+
           // Parse cert title from the PDF filename
           const filename = url.substring(url.lastIndexOf('/') + 1);
           const match = filename.match(/\(([^)]+)\)/);
           const certTitle = match ? match[1].replace(/_/g, ' ') : "Certificate";
-          
+
           if (certTitle !== "Certificate" && zipTitle === "Certificates") {
             zipTitle = certTitle;
           }
-          
+
           const safeName = (row.name || `certificate_${i + 1}`).replace(/[^a-zA-Z0-9_\- ]/g, "_");
           zip.file(`${safeName}_(${certTitle}).pdf`, blob);
         } catch {
@@ -875,7 +1117,7 @@ export default function AdminDashboard() {
         method: "POST"
       });
       const data = await res.json();
-      
+
       setGenerationResults((prev) => {
         const nextStatus = res.ok && data.status === "success" ? "sent" : "failed";
         return prev.map((r) => (r.intern_id === row.intern_id ? { ...r, email_status: nextStatus } : r));
@@ -925,7 +1167,7 @@ export default function AdminDashboard() {
     }, 4500); // Cross-fade every 4.5 seconds
     return () => clearInterval(timer);
   }, [heroImages.length]);
-  
+
   const saveBackendUrl = (url: string) => {
     setBackendUrl(url);
     localStorage.setItem("cert_generator_backend_url", url);
@@ -996,7 +1238,7 @@ export default function AdminDashboard() {
     formData.append("batch_id", batchId.trim());
     formData.append("month", batchMonth.trim());
     formData.append("issue_date", issueDate);
-    
+
     if (lorTemplateFile) formData.append("lor_template", lorTemplateFile);
     if (experienceTemplateFile) formData.append("experience_template", experienceTemplateFile);
     if (internshipTemplateFile) formData.append("internship_template", internshipTemplateFile);
@@ -1014,7 +1256,7 @@ export default function AdminDashboard() {
 
       const data = await response.json();
       setTemplateId(data.batch_id); // Save batch_id in templateId to maintain compat with Step 2 UI
-      
+
       // Auto-advance to Step 2
       setStep(2);
     } catch (err: unknown) {
@@ -1124,17 +1366,15 @@ export default function AdminDashboard() {
           <div className="flex bg-zinc-100 p-1.5 rounded-xl border border-zinc-200 mb-6">
             <button
               onClick={() => { setAuthMode("login"); setAuthError(""); setAuthMsg(""); }}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                authMode === "login" ? "bg-white text-stone-900 shadow-sm border border-zinc-200/50" : "text-zinc-500 hover:text-zinc-850"
-              }`}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${authMode === "login" ? "bg-white text-stone-900 shadow-sm border border-zinc-200/50" : "text-zinc-500 hover:text-zinc-850"
+                }`}
             >
               Log In
             </button>
             <button
               onClick={() => { setAuthMode("signup"); setAuthError(""); setAuthMsg(""); }}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                authMode === "signup" ? "bg-white text-stone-900 shadow-sm border border-zinc-200/50" : "text-zinc-500 hover:text-zinc-850"
-              }`}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${authMode === "signup" ? "bg-white text-stone-900 shadow-sm border border-zinc-200/50" : "text-zinc-500 hover:text-zinc-850"
+                }`}
             >
               Sign Up
             </button>
@@ -1244,25 +1484,29 @@ export default function AdminDashboard() {
           <div className="hidden md:flex items-center gap-1 bg-zinc-100 rounded-xl p-1 border border-zinc-200 shadow-sm">
             <button
               onClick={() => setActiveTab("generator")}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                activeTab === "generator" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-900"
-              }`}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeTab === "generator" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-900"
+                }`}
             >
               <LayoutDashboard size={14} /> Generator
             </button>
             <button
               onClick={() => setActiveTab("history")}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                activeTab === "history" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-900"
-              }`}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeTab === "history" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-900"
+                }`}
             >
-              <Database size={14} /> Database History
+              <Database size={14} /> Interns
+            </button>
+            <button
+              onClick={() => setActiveTab("registration")}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeTab === "registration" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-900"
+                }`}
+            >
+              <FileText size={14} /> Internship Registration
             </button>
             <button
               onClick={() => setActiveTab("profile")}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                activeTab === "profile" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-900"
-              }`}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeTab === "profile" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-900"
+                }`}
             >
               <User size={14} /> Profile
             </button>
@@ -1302,625 +1546,619 @@ export default function AdminDashboard() {
         {activeTab === "generator" && (
           <>
             {/* Full-width Immersive Hero Section with Smooth Fading Slideshow */}
-        <div className="relative mb-12 overflow-hidden rounded-[32px] h-[360px] md:h-[400px] w-full shadow-[0_15px_50px_rgba(0,0,0,0.08)] border-4 border-white">
-          {heroImages.map((src, idx) => {
-            const isActive = idx === currentHeroImageIdx;
-            return (
-              <div
-                key={src}
-                className="absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ease-in-out"
-                style={{
-                  backgroundImage: `url('${src}')`,
-                  opacity: isActive ? 1 : 0,
-                  zIndex: isActive ? 1 : 0
-                }}
-              />
-            );
-          })}
-        </div>
-
-        {/* Error Toast */}
-        {errorMsg && (
-          <div className="mb-6 flex items-start gap-3 bg-red-50 border border-red-200 p-4 rounded-xl text-red-800">
-            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-            <div>
-              <h4 className="font-bold text-sm">Action Failed</h4>
-              <p className="text-xs text-red-700 mt-1">{errorMsg}</p>
+            <div className="relative mb-12 overflow-hidden rounded-[32px] h-[360px] md:h-[400px] w-full shadow-[0_15px_50px_rgba(0,0,0,0.08)] border-4 border-white">
+              {heroImages.map((src, idx) => {
+                const isActive = idx === currentHeroImageIdx;
+                return (
+                  <div
+                    key={src}
+                    className="absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ease-in-out"
+                    style={{
+                      backgroundImage: `url('${src}')`,
+                      opacity: isActive ? 1 : 0,
+                      zIndex: isActive ? 1 : 0
+                    }}
+                  />
+                );
+              })}
             </div>
-          </div>
-        )}
 
-        {/* Active Stage Guidance Note Card */}
-        <div id="active-stage-card" className="mb-8 rounded-3xl border border-emerald-100 bg-white p-6 shadow-[0_8px_30px_rgba(0,0,0,0.02)] flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
-          {/* Accent vertical border detail */}
-          <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#12a150]" />
-          
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-5">
-            {/* Step badge */}
-            <div className="rounded-2xl border border-[#12a150]/20 bg-[#12a150]/10 px-4 py-2 text-center shrink-0">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#12a150] block">Active Stage</span>
-              <span className="text-xl font-bold font-mono text-[#12a150] mt-0.5 block">0{step} / 02</span>
-            </div>
-            
-            {/* Note text */}
-            <div>
-              <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
-                <span className="inline-block w-2 h-2 rounded-full bg-[#12a150] animate-pulse" />
-                {step === 1 && "Upload Base Certificate Files"}
-                {step === 2 && "Compile Batch Certificate Run"}
-              </h3>
-              <p className="mt-1.5 text-xs text-stone-600 leading-relaxed max-w-3xl">
-                {step === 1 && "Note: Select the base HTML or PPTX certificate templates and the intern details Excel sheet (.xlsx)."}
-                {step === 2 && "Note: Verify intern record mappings and run the generator. The platform will automatically locate placeholders (e.g. <<NAME>>, <<COLLEGE>>), redact them, insert details, generate QRs, and compile certificates."}
-              </p>
-            </div>
-          </div>
-
-          {/* Action indicator button/icon on right */}
-          <div className="hidden lg:flex items-center gap-2 shrink-0">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Status</span>
-            <div className="flex items-center gap-2 bg-[#12a150] px-4 py-2 rounded-full shadow-[0_4px_12px_rgba(18,161,80,0.15)] select-none">
-              <div className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-              <span className="text-[10px] font-bold text-white uppercase tracking-wider">Ready</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Dynamic Panels */}
-        
-        {/* STEP 1: ASSETS UPLOAD */}
-        {step === 1 && (
-          <div className="rounded-[32px] border border-zinc-800 bg-[#030712] p-8 shadow-[0_18px_60px_rgba(0,0,0,0.15)] text-white">
-            <h2 className="font-sans text-2xl font-bold text-white mb-6">
-              Upload Base <span className="text-[#3b82f6]">Certificate Templates</span>
-            </h2>
-            <form onSubmit={handleBatchCreate} className="space-y-8">
-              
-              {/* Three HTML or PPTX Templates Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                
-                {/* 1. LOR Template */}
-                <div className="relative group">
-                  <label className="block text-sm font-bold text-zinc-400 mb-2">
-                    1. Letter of Recommendation (LOR) HTML or PPTX
-                  </label>
-                  <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${
-                    lorTemplateFile 
-                      ? "border-[#3b82f6]/60 bg-[#3b82f6]/8" 
-                      : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
-                  }`}>
-                    <input 
-                      type="file" 
-                      accept="text/html,.html,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
-                      onChange={(e) => setLorTemplateFile(e.target.files?.[0] || null)}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    />
-                    <FileText className={`w-10 h-10 mb-3 transition-colors ${lorTemplateFile ? "text-[#3b82f6]" : "text-zinc-500 group-hover:text-zinc-400"}`} />
-                    {lorTemplateFile ? (
-                      <div className="text-center">
-                        <p className="text-xs font-bold text-white truncate max-w-[200px]">{lorTemplateFile.name}</p>
-                        <p className="text-[10px] text-zinc-400 mt-0.5">{(lorTemplateFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                        <button 
-                          type="button" 
-                          onClick={(e) => { e.stopPropagation(); setLorTemplateFile(null); }}
-                          className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="text-center">
-                        <p className="text-xs font-semibold text-zinc-200">Upload LOR HTML or PPTX</p>
-                        <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
-                      </div>
-                    )}
-                  </div>
+            {/* Error Toast */}
+            {errorMsg && (
+              <div className="mb-6 flex items-start gap-3 bg-red-50 border border-red-200 p-4 rounded-xl text-red-800">
+                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-bold text-sm">Action Failed</h4>
+                  <p className="text-xs text-red-700 mt-1">{errorMsg}</p>
                 </div>
-
-                {/* 2. Experience Letter Template */}
-                <div className="relative group">
-                  <label className="block text-sm font-bold text-zinc-400 mb-2">
-                    2. Experience Letter HTML or PPTX
-                  </label>
-                  <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${
-                    experienceTemplateFile 
-                      ? "border-[#3b82f6]/60 bg-[#3b82f6]/8" 
-                      : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
-                  }`}>
-                    <input 
-                      type="file" 
-                      accept="text/html,.html,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
-                      onChange={(e) => setExperienceTemplateFile(e.target.files?.[0] || null)}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    />
-                    <FileText className={`w-10 h-10 mb-3 transition-colors ${experienceTemplateFile ? "text-[#3b82f6]" : "text-zinc-500 group-hover:text-zinc-400"}`} />
-                    {experienceTemplateFile ? (
-                      <div className="text-center">
-                        <p className="text-xs font-bold text-white truncate max-w-[200px]">{experienceTemplateFile.name}</p>
-                        <p className="text-[10px] text-zinc-400 mt-0.5">{(experienceTemplateFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                        <button 
-                          type="button" 
-                          onClick={(e) => { e.stopPropagation(); setExperienceTemplateFile(null); }}
-                          className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="text-center">
-                        <p className="text-xs font-semibold text-zinc-200">Upload Experience HTML or PPTX</p>
-                        <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 3. Internship Certificate Template */}
-                <div className="relative group">
-                  <label className="block text-sm font-bold text-zinc-400 mb-2">
-                    3. Internship Certificate HTML or PPTX
-                  </label>
-                  <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${
-                    internshipTemplateFile 
-                      ? "border-[#3b82f6]/60 bg-[#3b82f6]/8" 
-                      : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
-                  }`}>
-                    <input 
-                      type="file" 
-                      accept="text/html,.html,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
-                      onChange={(e) => setInternshipTemplateFile(e.target.files?.[0] || null)}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    />
-                    <FileText className={`w-10 h-10 mb-3 transition-colors ${internshipTemplateFile ? "text-[#3b82f6]" : "text-zinc-500 group-hover:text-zinc-400"}`} />
-                    {internshipTemplateFile ? (
-                      <div className="text-center">
-                        <p className="text-xs font-bold text-white truncate max-w-[200px]">{internshipTemplateFile.name}</p>
-                        <p className="text-[10px] text-zinc-400 mt-0.5">{(internshipTemplateFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                        <button 
-                          type="button" 
-                          onClick={(e) => { e.stopPropagation(); setInternshipTemplateFile(null); }}
-                          className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="text-center">
-                        <p className="text-xs font-semibold text-zinc-200">Upload Internship HTML or PPTX</p>
-                        <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
               </div>
+            )}
 
-              {/* Excel and Batch Details Split */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-                
-                {/* Excel Upload */}
-                <div className="relative group">
-                  <label className="block text-sm font-bold text-zinc-400 mb-2">
-                    4. Intern Details Sheet (.xlsx)
-                  </label>
-                  <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${
-                    excelFile 
-                      ? "border-emerald-500/60 bg-emerald-500/8" 
-                      : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
-                  }`}>
-                    <input 
-                      type="file" 
-                      accept=".xlsx,.xls"
-                      onChange={(e) => setExcelFile(e.target.files?.[0] || null)}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    />
-                    <FileText className={`w-10 h-10 mb-3 transition-colors ${excelFile ? "text-emerald-400" : "text-zinc-500 group-hover:text-zinc-400"}`} />
-                    {excelFile ? (
-                      <div className="text-center">
-                        <p className="text-xs font-bold text-white truncate max-w-[240px]">{excelFile.name}</p>
-                        <p className="text-[10px] text-zinc-400 mt-0.5">{(excelFile.size / 1024).toFixed(1)} KB • Has YES/NO columns</p>
-                        <button 
-                          type="button" 
-                          onClick={(e) => { e.stopPropagation(); setExcelFile(null); }}
-                          className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="text-center">
-                        <p className="text-xs font-semibold text-zinc-200">Drag & drop your Excel sheet here</p>
-                        <p className="text-[10px] text-zinc-500 mt-0.5">Must contain Email and certificate choice columns</p>
-                      </div>
-                    )}
-                  </div>
+            {/* Active Stage Guidance Note Card */}
+            <div id="active-stage-card" className="mb-8 rounded-3xl border border-emerald-100 bg-white p-6 shadow-[0_8px_30px_rgba(0,0,0,0.02)] flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
+              {/* Accent vertical border detail */}
+              <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#12a150]" />
+
+              <div className="flex flex-col md:flex-row items-start md:items-center gap-5">
+                {/* Step badge */}
+                <div className="rounded-2xl border border-[#12a150]/20 bg-[#12a150]/10 px-4 py-2 text-center shrink-0">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#12a150] block">Active Stage</span>
+                  <span className="text-xl font-bold font-mono text-[#12a150] mt-0.5 block">0{step} / 02</span>
                 </div>
 
-                {/* Batch Details Form */}
-                <div className="bg-[#0b0f19]/85 border border-zinc-800 rounded-2xl p-6 space-y-4">
-                  <h3 className="text-sm font-bold text-zinc-400 border-b border-zinc-850 pb-2">
-                    5. Batch Release Details
+                {/* Note text */}
+                <div>
+                  <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-full bg-[#12a150] animate-pulse" />
+                    {step === 1 && "Upload Base Certificate Files"}
+                    {step === 2 && "Compile Batch Certificate Run"}
                   </h3>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
-                        Batch ID
-                      </label>
-                      <input 
-                        type="text" 
-                        required
-                        value={batchId}
-                        onChange={(e) => setBatchId(e.target.value)}
-                        placeholder="e.g. Batch_34_ERP"
-                        className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500 focus:bg-black transition-colors"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
-                        Month / Year
-                      </label>
-                      <input 
-                        type="text" 
-                        required
-                        value={batchMonth}
-                        onChange={(e) => setBatchMonth(e.target.value)}
-                        placeholder="e.g. July 2026"
-                        className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500 focus:bg-black transition-colors"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
-                      Certificate Issue Date
-                    </label>
-                    <input 
-                      type="date" 
-                      required
-                      value={issueDate}
-                      onChange={(e) => setIssueDate(e.target.value)}
-                      className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500 focus:bg-black transition-colors"
-                    />
-                  </div>
+                  <p className="mt-1.5 text-xs text-stone-600 leading-relaxed max-w-3xl">
+                    {step === 1 && "Note: Select the base HTML or PPTX certificate templates and the intern details Excel sheet (.xlsx)."}
+                    {step === 2 && "Note: Verify intern record mappings and run the generator. The platform will automatically locate placeholders (e.g. <<NAME>>, <<COLLEGE>>), redact them, insert details, generate QRs, and compile certificates."}
+                  </p>
                 </div>
-
               </div>
 
-              <div className="flex justify-end pt-6 border-t border-zinc-800">
-                <button
-                  type="submit"
-                  disabled={isUploadingTemplate}
-                  className={`flex items-center gap-2 px-6 py-3.5 rounded-xl font-bold text-sm transition-all duration-300 ${
-                    !isUploadingTemplate
-                      ? "bg-blue-600 hover:bg-blue-500 text-white shadow-lg cursor-pointer"
-                      : "bg-zinc-900 text-zinc-600 border border-zinc-850 cursor-not-allowed"
-                  }`}
-                >
-                  {isUploadingTemplate ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-zinc-700 border-t-white rounded-full animate-spin" />
-                      Uploading templates...
-                    </>
-                  ) : (
-                    <>
-                      Create Batch
-                    </>
-                  )}
-                </button>
+              {/* Action indicator button/icon on right */}
+              <div className="hidden lg:flex items-center gap-2 shrink-0">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Status</span>
+                <div className="flex items-center gap-2 bg-[#12a150] px-4 py-2 rounded-full shadow-[0_4px_12px_rgba(18,161,80,0.15)] select-none">
+                  <div className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                  <span className="text-[10px] font-bold text-white uppercase tracking-wider">Ready</span>
+                </div>
               </div>
-            </form>
-          </div>
-        )}
+            </div>
 
-        {/* STEP 2: EXCEL DETAILS UPLOAD & BATCH GENERATION */}
-        {step === 2 && (
-          <div className="space-y-8">
-            
-            {/* Generate Trigger Card */}
-            <div className="rounded-[32px] border border-black/5 bg-white p-8 shadow-[0_18px_60px_rgba(0,0,0,0.05)]">
-              <h2 className="font-display text-2xl text-stone-900 mb-2">
-                Generate Certificates Batch
-              </h2>
-              <p className="text-xs text-zinc-550 mb-6">
-                Template uploaded successfully. Next, run the batch certificate builder to search, redact, and replace placeholders (e.g. &lt;&lt;NAME&gt;&gt;, &lt;&lt;QR&gt;&gt;) in the template.
-              </p>
+            {/* Dynamic Panels */}
 
-              <form onSubmit={handleGenerate} className="space-y-6">
-                <div className="bg-zinc-50 border border-zinc-150 p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6">
-                  <div className="flex items-center gap-4">
-                    <div className="bg-indigo-50 border border-indigo-150 p-3 rounded-xl text-indigo-650">
-                      <FileText className="w-6 h-6" />
+            {/* STEP 1: ASSETS UPLOAD */}
+            {step === 1 && (
+              <div className="rounded-[32px] border border-zinc-800 bg-[#030712] p-8 shadow-[0_18px_60px_rgba(0,0,0,0.15)] text-white">
+                <h2 className="font-sans text-2xl font-bold text-white mb-6">
+                  Upload Base <span className="text-[#3b82f6]">Certificate Templates</span>
+                </h2>
+                <form onSubmit={handleBatchCreate} className="space-y-8">
+
+                  {/* Three HTML or PPTX Templates Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                    {/* 1. LOR Template */}
+                    <div className="relative group">
+                      <label className="block text-sm font-bold text-zinc-400 mb-2">
+                        1. Letter of Recommendation (LOR) HTML or PPTX
+                      </label>
+                      <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${lorTemplateFile
+                          ? "border-[#3b82f6]/60 bg-[#3b82f6]/8"
+                          : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
+                        }`}>
+                        <input
+                          type="file"
+                          accept="text/html,.html,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
+                          onChange={(e) => setLorTemplateFile(e.target.files?.[0] || null)}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                        <FileText className={`w-10 h-10 mb-3 transition-colors ${lorTemplateFile ? "text-[#3b82f6]" : "text-zinc-500 group-hover:text-zinc-400"}`} />
+                        {lorTemplateFile ? (
+                          <div className="text-center">
+                            <p className="text-xs font-bold text-white truncate max-w-[200px]">{lorTemplateFile.name}</p>
+                            <p className="text-[10px] text-zinc-400 mt-0.5">{(lorTemplateFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setLorTemplateFile(null); }}
+                              className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="text-center">
+                            <p className="text-xs font-semibold text-zinc-200">Upload LOR HTML or PPTX</p>
+                            <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="font-bold text-sm text-zinc-850">Intern Excel Details File</h4>
-                      <p className="text-xs text-zinc-500 mt-0.5">
-                        {excelFile ? `${excelFile.name} (${(excelFile.size / 1024).toFixed(1)} KB)` : "No Excel file selected"}
-                      </p>
+
+                    {/* 2. Experience Letter Template */}
+                    <div className="relative group">
+                      <label className="block text-sm font-bold text-zinc-400 mb-2">
+                        2. Experience Letter HTML or PPTX
+                      </label>
+                      <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${experienceTemplateFile
+                          ? "border-[#3b82f6]/60 bg-[#3b82f6]/8"
+                          : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
+                        }`}>
+                        <input
+                          type="file"
+                          accept="text/html,.html,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
+                          onChange={(e) => setExperienceTemplateFile(e.target.files?.[0] || null)}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                        <FileText className={`w-10 h-10 mb-3 transition-colors ${experienceTemplateFile ? "text-[#3b82f6]" : "text-zinc-500 group-hover:text-zinc-400"}`} />
+                        {experienceTemplateFile ? (
+                          <div className="text-center">
+                            <p className="text-xs font-bold text-white truncate max-w-[200px]">{experienceTemplateFile.name}</p>
+                            <p className="text-[10px] text-zinc-400 mt-0.5">{(experienceTemplateFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setExperienceTemplateFile(null); }}
+                              className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="text-center">
+                            <p className="text-xs font-semibold text-zinc-200">Upload Experience HTML or PPTX</p>
+                            <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
+
+                    {/* 3. Internship Certificate Template */}
+                    <div className="relative group">
+                      <label className="block text-sm font-bold text-zinc-400 mb-2">
+                        3. Internship Certificate HTML or PPTX
+                      </label>
+                      <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${internshipTemplateFile
+                          ? "border-[#3b82f6]/60 bg-[#3b82f6]/8"
+                          : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
+                        }`}>
+                        <input
+                          type="file"
+                          accept="text/html,.html,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
+                          onChange={(e) => setInternshipTemplateFile(e.target.files?.[0] || null)}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                        <FileText className={`w-10 h-10 mb-3 transition-colors ${internshipTemplateFile ? "text-[#3b82f6]" : "text-zinc-500 group-hover:text-zinc-400"}`} />
+                        {internshipTemplateFile ? (
+                          <div className="text-center">
+                            <p className="text-xs font-bold text-white truncate max-w-[200px]">{internshipTemplateFile.name}</p>
+                            <p className="text-[10px] text-zinc-400 mt-0.5">{(internshipTemplateFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setInternshipTemplateFile(null); }}
+                              className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="text-center">
+                            <p className="text-xs font-semibold text-zinc-200">Upload Internship HTML or PPTX</p>
+                            <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    {/* File reselector */}
-                    <div className="relative">
-                      <button type="button" className="px-4 py-2 border border-zinc-200 bg-white text-xs font-bold text-zinc-650 rounded-lg hover:bg-zinc-50 transition-colors">
-                        Select Different File
-                      </button>
-                      <input 
-                        type="file" 
-                        accept=".xlsx,.xls"
-                        onChange={(e) => setExcelFile(e.target.files?.[0] || null)}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      />
+                  {/* Excel and Batch Details Split */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+
+                    {/* Excel Upload */}
+                    <div className="relative group">
+                      <label className="block text-sm font-bold text-zinc-400 mb-2">
+                        4. Intern Details Sheet (.xlsx)
+                      </label>
+                      <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${excelFile
+                          ? "border-emerald-500/60 bg-emerald-500/8"
+                          : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
+                        }`}>
+                        <input
+                          type="file"
+                          accept=".xlsx,.xls"
+                          onChange={(e) => setExcelFile(e.target.files?.[0] || null)}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                        <FileText className={`w-10 h-10 mb-3 transition-colors ${excelFile ? "text-emerald-400" : "text-zinc-500 group-hover:text-zinc-400"}`} />
+                        {excelFile ? (
+                          <div className="text-center">
+                            <p className="text-xs font-bold text-white truncate max-w-[240px]">{excelFile.name}</p>
+                            <p className="text-[10px] text-zinc-400 mt-0.5">{(excelFile.size / 1024).toFixed(1)} KB • Has YES/NO columns</p>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setExcelFile(null); }}
+                              className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="text-center">
+                            <p className="text-xs font-semibold text-zinc-200">Drag & drop your Excel sheet here</p>
+                            <p className="text-[10px] text-zinc-500 mt-0.5">Must contain Email and certificate choice columns</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
+                    {/* Batch Details Form */}
+                    <div className="bg-[#0b0f19]/85 border border-zinc-800 rounded-2xl p-6 space-y-4">
+                      <h3 className="text-sm font-bold text-zinc-400 border-b border-zinc-850 pb-2">
+                        5. Batch Release Details
+                      </h3>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
+                            Batch ID
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={batchId}
+                            onChange={(e) => setBatchId(e.target.value)}
+                            placeholder="e.g. Batch_34_ERP"
+                            className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500 focus:bg-black transition-colors"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
+                            Month / Year
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={batchMonth}
+                            onChange={(e) => setBatchMonth(e.target.value)}
+                            placeholder="e.g. July 2026"
+                            className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500 focus:bg-black transition-colors"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
+                          Certificate Issue Date
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={issueDate}
+                          onChange={(e) => setIssueDate(e.target.value)}
+                          className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500 focus:bg-black transition-colors"
+                        />
+                      </div>
+                    </div>
+
+                  </div>
+
+                  <div className="flex justify-end pt-6 border-t border-zinc-800">
                     <button
                       type="submit"
-                      disabled={!excelFile || isGenerating}
-                      className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-extrabold text-xs shadow-md transition-all duration-300 ${
-                        excelFile && !isGenerating
-                          ? "bg-[#12a150] hover:bg-[#0e8340] text-white cursor-pointer"
-                          : "bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed"
-                      }`}
+                      disabled={isUploadingTemplate}
+                      className={`flex items-center gap-2 px-6 py-3.5 rounded-xl font-bold text-sm transition-all duration-300 ${!isUploadingTemplate
+                          ? "bg-blue-600 hover:bg-blue-500 text-white shadow-lg cursor-pointer"
+                          : "bg-zinc-900 text-zinc-600 border border-zinc-850 cursor-not-allowed"
+                        }`}
                     >
-                      {isGenerating ? (
+                      {isUploadingTemplate ? (
                         <>
-                          <div className="w-3.5 h-3.5 border-2 border-zinc-450 border-t-white rounded-full animate-spin" />
-                          Processing Batch...
+                          <div className="w-4 h-4 border-2 border-zinc-700 border-t-white rounded-full animate-spin" />
+                          Uploading templates...
                         </>
                       ) : (
                         <>
-                          Run Certificate Builder
+                          Create Batch
                         </>
                       )}
                     </button>
                   </div>
-                </div>
-              </form>
-            </div>
+                </form>
+              </div>
+            )}
 
-            {/* Loading / Results display section */}
-            {(isGenerating || generationResults.length > 0) && (
-              <div className="space-y-6 rounded-[32px] border border-black/5 bg-white p-8 shadow-[0_18px_60px_rgba(0,0,0,0.05)]">
-                
-                {/* Header Stats */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-zinc-150">
-                  <div>
-                    <h3 className="text-lg font-bold text-zinc-800">Batch Processing Results</h3>
-                    <p className="text-xs text-zinc-500 mt-0.5">
-                      {isGenerating ? "Certificates are currently generating..." : "Processing complete."}
-                    </p>
-                  </div>
+            {/* STEP 2: EXCEL DETAILS UPLOAD & BATCH GENERATION */}
+            {step === 2 && (
+              <div className="space-y-8">
 
-                  {!isGenerating && generationResults.length > 0 && (
-                    <div className="flex items-center gap-3">
-                      {excelDownloadUrl && (
-                        <a
-                          href={excelDownloadUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-2.5 px-5 rounded-xl shadow-md text-xs transition-all duration-300"
+                {/* Generate Trigger Card */}
+                <div className="rounded-[32px] border border-black/5 bg-white p-8 shadow-[0_18px_60px_rgba(0,0,0,0.05)]">
+                  <h2 className="font-display text-2xl text-stone-900 mb-2">
+                    Generate Certificates Batch
+                  </h2>
+                  <p className="text-xs text-zinc-550 mb-6">
+                    Template uploaded successfully. Next, run the batch certificate builder to search, redact, and replace placeholders (e.g. &lt;&lt;NAME&gt;&gt;, &lt;&lt;QR&gt;&gt;) in the template.
+                  </p>
+
+                  <form onSubmit={handleGenerate} className="space-y-6">
+                    <div className="bg-zinc-50 border border-zinc-150 p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+                      <div className="flex items-center gap-4">
+                        <div className="bg-indigo-50 border border-indigo-150 p-3 rounded-xl text-indigo-650">
+                          <FileText className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-sm text-zinc-850">Intern Excel Details File</h4>
+                          <p className="text-xs text-zinc-500 mt-0.5">
+                            {excelFile ? `${excelFile.name} (${(excelFile.size / 1024).toFixed(1)} KB)` : "No Excel file selected"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        {/* File reselector */}
+                        <div className="relative">
+                          <button type="button" className="px-4 py-2 border border-zinc-200 bg-white text-xs font-bold text-zinc-650 rounded-lg hover:bg-zinc-50 transition-colors">
+                            Select Different File
+                          </button>
+                          <input
+                            type="file"
+                            accept=".xlsx,.xls"
+                            onChange={(e) => setExcelFile(e.target.files?.[0] || null)}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                          />
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={!excelFile || isGenerating}
+                          className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-extrabold text-xs shadow-md transition-all duration-300 ${excelFile && !isGenerating
+                              ? "bg-[#12a150] hover:bg-[#0e8340] text-white cursor-pointer"
+                              : "bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed"
+                            }`}
                         >
-                          <Download className="w-4 h-4" /> Download Result Excel Sheet
-                        </a>
-                      )}
-
-                      {generationResults.some((r) => r.pdf_url && r.status === "active") && (
-                        <>
-                          <button
-                            onClick={handleDownloadAllZip}
-                            disabled={isZipping}
-                            className="inline-flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-2.5 px-5 rounded-xl shadow-md text-xs transition-all duration-300 cursor-pointer"
-                          >
-                            {isZipping ? (
-                              <>
-                                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                {zipProgress.total > 0
-                                  ? `Packing ${zipProgress.done}/${zipProgress.total}…`
-                                  : "Preparing…"}
-                              </>
-                            ) : (
-                              <>
-                                <Download className="w-4 h-4" /> Download All PDFs as ZIP
-                              </>
-                            )}
-                          </button>
-
-                          <button
-                            onClick={handleSendAllEmails}
-                            disabled={isSendingEmails}
-                            className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-2.5 px-5 rounded-xl shadow-md text-xs transition-all duration-300 cursor-pointer"
-                          >
-                            {isSendingEmails ? (
-                              <>
-                                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                Sending Emails…
-                              </>
-                            ) : (
-                              <>
-                                <Mail className="w-4 h-4" /> Send Emails to All
-                              </>
-                            )}
-                          </button>
-                        </>
-                      )}
+                          {isGenerating ? (
+                            <>
+                              <div className="w-3.5 h-3.5 border-2 border-zinc-450 border-t-white rounded-full animate-spin" />
+                              Processing Batch...
+                            </>
+                          ) : (
+                            <>
+                              Run Certificate Builder
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
-                  )}
+                  </form>
                 </div>
 
-                {/* Progress HUD */}
-                {!isGenerating && generationResults.length > 0 && (
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="bg-zinc-50 border border-zinc-150 p-4 rounded-2xl text-center">
-                      <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider">Total Rows</span>
-                      <p className="text-2xl font-extrabold text-zinc-800 mt-1">{genStats.total}</p>
-                    </div>
-                    <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl text-center">
-                      <span className="text-emerald-600 text-[10px] font-bold uppercase tracking-wider">Generated</span>
-                      <p className="text-2xl font-extrabold text-emerald-700 mt-1">{genStats.success}</p>
-                    </div>
-                    <div className="bg-red-50 border border-red-100 p-4 rounded-2xl text-center">
-                      <span className="text-red-600 text-[10px] font-bold uppercase tracking-wider">Errors</span>
-                      <p className="text-2xl font-extrabold text-red-700 mt-1">{genStats.failed}</p>
-                    </div>
-                  </div>
-                )}
+                {/* Loading / Results display section */}
+                {(isGenerating || generationResults.length > 0) && (
+                  <div className="space-y-6 rounded-[32px] border border-black/5 bg-white p-8 shadow-[0_18px_60px_rgba(0,0,0,0.05)]">
 
-                {/* Results Table */}
-                <div className="overflow-x-auto border border-zinc-150 rounded-2xl bg-white">
-                  <table className="w-full text-left border-collapse text-sm">
-                    <thead>
-                      <tr className="border-b border-zinc-150 bg-zinc-50 text-zinc-550 text-xs font-bold font-mono">
-                        <th className="p-4">Intern Name</th>
-                        <th className="p-4">College</th>
-                        <th className="p-4">Department</th>
-                        <th className="p-4">Batch</th>
-                        <th className="p-4">Certificate ID</th>
-                        <th className="p-4">Status</th>
-                        <th className="p-4">Email Status</th>
-                        <th className="p-4 text-right">PDF File</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-100">
-                      {isGenerating ? (
-                        <tr>
-                          <td colSpan={8} className="p-8 text-center text-zinc-500 text-xs">
-                            <div className="w-8 h-8 border-2 border-zinc-200 border-t-violet-500 rounded-full animate-spin mx-auto mb-3" />
-                            Overlaying PDF fields and uploading certificates...
-                          </td>
-                        </tr>
-                      ) : (
-                        generationResults.map((row, idx) => {
-                          const isFirstRowForIntern = row.intern_id
-                            ? generationResults.findIndex((r) => r.intern_id === row.intern_id) === idx
-                            : true;
-                          const internRowCount = row.intern_id
-                            ? generationResults.filter((r) => r.intern_id === row.intern_id).length
-                            : 1;
+                    {/* Header Stats */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-zinc-150">
+                      <div>
+                        <h3 className="text-lg font-bold text-zinc-800">Batch Processing Results</h3>
+                        <p className="text-xs text-zinc-500 mt-0.5">
+                          {isGenerating ? "Certificates are currently generating..." : "Processing complete."}
+                        </p>
+                      </div>
 
-                          return (
-                            <tr key={idx} className="hover:bg-zinc-50/50 transition-colors">
-                              <td className="p-4 font-bold text-zinc-800">{row.name}</td>
-                              <td className="p-4 text-zinc-650">{row.college}</td>
-                              <td className="p-4 text-zinc-650">{row.department || "—"}</td>
-                              <td className="p-4 font-mono text-zinc-500 text-xs">{row.month || row.year || "—"}</td>
-                              <td className="p-4 font-mono text-zinc-700 text-xs">
-                                {row.cert_code || <span className="text-zinc-400">—</span>}
-                              </td>
-                              <td className="p-4">
-                                {row.status === "active" ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 border border-emerald-150 text-emerald-700 px-2 py-0.5 rounded-full">
-                                    Success
-                                  </span>
+                      {!isGenerating && generationResults.length > 0 && (
+                        <div className="flex items-center gap-3">
+                          {excelDownloadUrl && (
+                            <a
+                              href={excelDownloadUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-2.5 px-5 rounded-xl shadow-md text-xs transition-all duration-300"
+                            >
+                              <Download className="w-4 h-4" /> Download Result Excel Sheet
+                            </a>
+                          )}
+
+                          {generationResults.some((r) => r.pdf_url && r.status === "active") && (
+                            <>
+                              <button
+                                onClick={handleDownloadAllZip}
+                                disabled={isZipping}
+                                className="inline-flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-2.5 px-5 rounded-xl shadow-md text-xs transition-all duration-300 cursor-pointer"
+                              >
+                                {isZipping ? (
+                                  <>
+                                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    {zipProgress.total > 0
+                                      ? `Packing ${zipProgress.done}/${zipProgress.total}…`
+                                      : "Preparing…"}
+                                  </>
                                 ) : (
-                                  <span className="inline-flex flex-col gap-0.5">
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-red-50 border border-red-150 text-red-700 px-2 py-0.5 rounded-full w-max">
-                                      Error
-                                    </span>
-                                    <span className="text-[10px] text-red-600 block max-w-xs truncate">{row.error}</span>
-                                  </span>
+                                  <>
+                                    <Download className="w-4 h-4" /> Download All PDFs as ZIP
+                                  </>
                                 )}
-                              </td>
-                              {isFirstRowForIntern && (
-                                <td className="p-4 align-middle border-l border-r border-zinc-100 bg-zinc-50/20" rowSpan={internRowCount}>
-                                  {row.status !== "active" ? (
-                                    <span className="text-zinc-400">—</span>
-                                  ) : row.email_status === "sending" ? (
-                                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-150 px-2.5 py-1 rounded-lg">
-                                      <span className="w-2.5 h-2.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
-                                      Sending...
-                                    </span>
-                                  ) : row.email_status === "sent" ? (
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 border border-emerald-150 text-emerald-700 px-2.5 py-1 rounded-lg">
-                                      <CheckCircle className="w-3 h-3 text-emerald-650" /> Sent
-                                    </span>
-                                  ) : row.email_status === "failed" ? (
-                                    <div className="inline-flex items-center gap-2">
-                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-red-50 border border-red-150 text-red-700 px-2.5 py-1 rounded-lg">
-                                        <AlertCircle className="w-3 h-3 text-red-650" /> Failed
-                                      </span>
-                                      <button
-                                        onClick={() => handleSendEmail(idx)}
-                                        className="text-[10px] text-zinc-500 hover:text-zinc-700 font-bold underline cursor-pointer"
-                                      >
-                                        Retry
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <button
-                                      onClick={() => handleSendEmail(idx)}
-                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-605 hover:text-indigo-805 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg transition-all duration-150 cursor-pointer"
-                                    >
-                                      <Mail className="w-3 h-3" /> Send Email
-                                    </button>
-                                  )}
-                                </td>
-                              )}
-                              <td className="p-4 text-right">
-                                {row.pdf_url ? (
-                                  <div className="inline-flex items-center gap-2">
-                                    {/* View in new tab */}
-                                    <a
-                                      href={getResolvedPdfUrl(row.pdf_url)}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      title="Open PDF in new tab"
-                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-violet-600 hover:text-violet-800 bg-violet-50 hover:bg-violet-100 border border-violet-200 px-2.5 py-1 rounded-lg transition-all duration-150"
-                                    >
-                                      <LinkIcon className="w-3 h-3" /> View
-                                    </a>
+                              </button>
 
-                                    {/* Force-download */}
-                                    <button
-                                      title="Download PDF"
-                                      onClick={async () => {
-                                        try {
-                                          const res = await fetch(getResolvedPdfUrl(row.pdf_url));
-                                          const blob = await res.blob();
-                                          const url = URL.createObjectURL(blob);
-                                          const a = document.createElement("a");
-                                          a.href = url;
-                                          const safeName = (row.name || "certificate").replace(/[^a-zA-Z0-9_\- ]/g, "_");
-                                          a.download = `${safeName}.pdf`;
-                                          a.click();
-                                          URL.revokeObjectURL(url);
-                                        } catch {
-                                          alert("Failed to download PDF. Please try View instead.");
-                                        }
-                                      }}
-                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-all duration-150 cursor-pointer"
-                                    >
-                                      <Download className="w-3 h-3" /> Download
-                                    </button>
-                                  </div>
+                              <button
+                                onClick={handleSendAllEmails}
+                                disabled={isSendingEmails}
+                                className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-2.5 px-5 rounded-xl shadow-md text-xs transition-all duration-300 cursor-pointer"
+                              >
+                                {isSendingEmails ? (
+                                  <>
+                                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    Sending Emails…
+                                  </>
                                 ) : (
-                                  <span className="text-zinc-400 text-xs font-bold">Unsaved</span>
+                                  <>
+                                    <Mail className="w-4 h-4" /> Send Emails to All
+                                  </>
                                 )}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Progress HUD */}
+                    {!isGenerating && generationResults.length > 0 && (
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="bg-zinc-50 border border-zinc-150 p-4 rounded-2xl text-center">
+                          <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider">Total Rows</span>
+                          <p className="text-2xl font-extrabold text-zinc-800 mt-1">{genStats.total}</p>
+                        </div>
+                        <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl text-center">
+                          <span className="text-emerald-600 text-[10px] font-bold uppercase tracking-wider">Generated</span>
+                          <p className="text-2xl font-extrabold text-emerald-700 mt-1">{genStats.success}</p>
+                        </div>
+                        <div className="bg-red-50 border border-red-100 p-4 rounded-2xl text-center">
+                          <span className="text-red-600 text-[10px] font-bold uppercase tracking-wider">Errors</span>
+                          <p className="text-2xl font-extrabold text-red-700 mt-1">{genStats.failed}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Results Table */}
+                    <div className="overflow-x-auto border border-zinc-150 rounded-2xl bg-white">
+                      <table className="w-full text-left border-collapse text-sm">
+                        <thead>
+                          <tr className="border-b border-zinc-150 bg-zinc-50 text-zinc-550 text-xs font-bold font-mono">
+                            <th className="p-4">Intern Name</th>
+                            <th className="p-4">College</th>
+                            <th className="p-4">Department</th>
+                            <th className="p-4">Batch</th>
+                            <th className="p-4">Certificate ID</th>
+                            <th className="p-4">Status</th>
+                            <th className="p-4">Email Status</th>
+                            <th className="p-4 text-right">PDF File</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100">
+                          {isGenerating ? (
+                            <tr>
+                              <td colSpan={8} className="p-8 text-center text-zinc-500 text-xs">
+                                <div className="w-8 h-8 border-2 border-zinc-200 border-t-violet-500 rounded-full animate-spin mx-auto mb-3" />
+                                Overlaying PDF fields and uploading certificates...
                               </td>
                             </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                          ) : (
+                            generationResults.map((row, idx) => {
+                              const isFirstRowForIntern = row.intern_id
+                                ? generationResults.findIndex((r) => r.intern_id === row.intern_id) === idx
+                                : true;
+                              const internRowCount = row.intern_id
+                                ? generationResults.filter((r) => r.intern_id === row.intern_id).length
+                                : 1;
 
-                {!isGenerating && (
-                  <div className="pt-4 flex justify-end border-t border-zinc-150">
-                    <button
-                      onClick={handleReset}
-                      className="inline-flex items-center gap-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold py-3 px-6 rounded-xl text-xs transition-colors cursor-pointer"
-                    >
-                      <RotateCcw className="w-4 h-4" /> Start New Batch Session
-                    </button>
+                              return (
+                                <tr key={idx} className="hover:bg-zinc-50/50 transition-colors">
+                                  <td className="p-4 font-bold text-zinc-800">{row.name}</td>
+                                  <td className="p-4 text-zinc-650">{row.college}</td>
+                                  <td className="p-4 text-zinc-650">{row.department || "—"}</td>
+                                  <td className="p-4 font-mono text-zinc-500 text-xs">{row.month || row.year || "—"}</td>
+                                  <td className="p-4 font-mono text-zinc-700 text-xs">
+                                    {row.cert_code || <span className="text-zinc-400">—</span>}
+                                  </td>
+                                  <td className="p-4">
+                                    {row.status === "active" ? (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 border border-emerald-150 text-emerald-700 px-2 py-0.5 rounded-full">
+                                        Success
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex flex-col gap-0.5">
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-red-50 border border-red-150 text-red-700 px-2 py-0.5 rounded-full w-max">
+                                          Error
+                                        </span>
+                                        <span className="text-[10px] text-red-600 block max-w-xs truncate">{row.error}</span>
+                                      </span>
+                                    )}
+                                  </td>
+                                  {isFirstRowForIntern && (
+                                    <td className="p-4 align-middle border-l border-r border-zinc-100 bg-zinc-50/20" rowSpan={internRowCount}>
+                                      {row.status !== "active" ? (
+                                        <span className="text-zinc-400">—</span>
+                                      ) : row.email_status === "sending" ? (
+                                        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-150 px-2.5 py-1 rounded-lg">
+                                          <span className="w-2.5 h-2.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                                          Sending...
+                                        </span>
+                                      ) : row.email_status === "sent" ? (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 border border-emerald-150 text-emerald-700 px-2.5 py-1 rounded-lg">
+                                          <CheckCircle className="w-3 h-3 text-emerald-650" /> Sent
+                                        </span>
+                                      ) : row.email_status === "failed" ? (
+                                        <div className="inline-flex items-center gap-2">
+                                          <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-red-50 border border-red-150 text-red-700 px-2.5 py-1 rounded-lg">
+                                            <AlertCircle className="w-3 h-3 text-red-650" /> Failed
+                                          </span>
+                                          <button
+                                            onClick={() => handleSendEmail(idx)}
+                                            className="text-[10px] text-zinc-500 hover:text-zinc-700 font-bold underline cursor-pointer"
+                                          >
+                                            Retry
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <button
+                                          onClick={() => handleSendEmail(idx)}
+                                          className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-605 hover:text-indigo-805 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg transition-all duration-150 cursor-pointer"
+                                        >
+                                          <Mail className="w-3 h-3" /> Send Email
+                                        </button>
+                                      )}
+                                    </td>
+                                  )}
+                                  <td className="p-4 text-right">
+                                    {row.pdf_url ? (
+                                      <div className="inline-flex items-center gap-2">
+                                        {/* View in new tab */}
+                                        <a
+                                          href={getResolvedPdfUrl(row.pdf_url)}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title="Open PDF in new tab"
+                                          className="inline-flex items-center gap-1 text-[11px] font-bold text-violet-600 hover:text-violet-800 bg-violet-50 hover:bg-violet-100 border border-violet-200 px-2.5 py-1 rounded-lg transition-all duration-150"
+                                        >
+                                          <LinkIcon className="w-3 h-3" /> View
+                                        </a>
+
+                                        {/* Force-download */}
+                                        <button
+                                          title="Download PDF"
+                                          onClick={async () => {
+                                            try {
+                                              const res = await fetch(getResolvedPdfUrl(row.pdf_url));
+                                              const blob = await res.blob();
+                                              const url = URL.createObjectURL(blob);
+                                              const a = document.createElement("a");
+                                              a.href = url;
+                                              const safeName = (row.name || "certificate").replace(/[^a-zA-Z0-9_\- ]/g, "_");
+                                              a.download = `${safeName}.pdf`;
+                                              a.click();
+                                              URL.revokeObjectURL(url);
+                                            } catch {
+                                              alert("Failed to download PDF. Please try View instead.");
+                                            }
+                                          }}
+                                          className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-all duration-150 cursor-pointer"
+                                        >
+                                          <Download className="w-3 h-3" /> Download
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <span className="text-zinc-400 text-xs font-bold">Unsaved</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {!isGenerating && (
+                      <div className="pt-4 flex justify-end border-t border-zinc-150">
+                        <button
+                          onClick={handleReset}
+                          className="inline-flex items-center gap-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold py-3 px-6 rounded-xl text-xs transition-colors cursor-pointer"
+                        >
+                          <RotateCcw className="w-4 h-4" /> Start New Batch Session
+                        </button>
+                      </div>
+                    )}
+
                   </div>
                 )}
 
               </div>
             )}
-
-          </div>
-        )}
           </>
         )}
 
@@ -1975,11 +2213,10 @@ export default function AdminDashboard() {
                       <div
                         key={batchName}
                         onClick={() => setSelectedBatch(isSelected ? "" : batchName)}
-                        className={`rounded-[24px] p-5 border transition-all duration-300 cursor-pointer flex flex-col justify-between group relative overflow-hidden select-none ${
-                          isSelected
+                        className={`rounded-[24px] p-5 border transition-all duration-300 cursor-pointer flex flex-col justify-between group relative overflow-hidden select-none ${isSelected
                             ? "bg-violet-50/50 border-[#5844e9] shadow-[0_4px_20px_rgba(88,68,233,0.08)]"
                             : "bg-white border-zinc-150 hover:border-zinc-350 hover:bg-zinc-50/30 hover:shadow-md"
-                        }`}
+                          }`}
                       >
                         {isSelected && (
                           <div className="absolute right-4 top-4 bg-[#5844e9] text-white p-1 rounded-full">
@@ -2023,7 +2260,7 @@ export default function AdminDashboard() {
                     </button>
                   )}
                 </div>
-                
+
                 {/* Download Filtered Excel Button */}
                 {!historyLoading && historyCerts.length > 0 && (
                   <button
@@ -2035,8 +2272,8 @@ export default function AdminDashboard() {
                     {isExportingExcel
                       ? "Exporting..."
                       : selectedCertIds.size > 0
-                      ? "Download Selected Excel"
-                      : "Download Filtered Excel"}
+                        ? "Download Selected Excel"
+                        : "Download Filtered Excel"}
                   </button>
                 )}
 
@@ -2273,12 +2510,12 @@ export default function AdminDashboard() {
                           const nameVal = cert.intern?.name || cert.name;
                           const collegeVal = cert.intern?.college || cert.college;
                           const isSelected = selectedCertIds.has(cert.id);
-                          
+
                           return (
                             <tr key={cert.id} className={`transition-colors hover:bg-zinc-50/50 ${isSelected ? "bg-violet-50/20" : ""}`}>
                               {isFirstRowForIntern && (
-                                <td 
-                                  className="p-4 w-10 text-center select-none align-middle border-l border-zinc-100 bg-zinc-50/10" 
+                                <td
+                                  className="p-4 w-10 text-center select-none align-middle border-l border-zinc-100 bg-zinc-50/10"
                                   rowSpan={internRowCount}
                                 >
                                   <input
@@ -2330,13 +2567,12 @@ export default function AdminDashboard() {
                                 </div>
                               </td>
                               <td className="p-4">
-                                <span className={`inline-flex items-center text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
-                                  cert.cert_type === "lor"
+                                <span className={`inline-flex items-center text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${cert.cert_type === "lor"
                                     ? "bg-violet-50 text-violet-750 border border-violet-100"
                                     : cert.cert_type === "experience"
                                       ? "bg-amber-50 text-amber-750 border border-amber-100"
                                       : "bg-emerald-50 text-emerald-750 border border-emerald-100"
-                                }`}>
+                                  }`}>
                                   {cert.cert_type || "internship"}
                                 </span>
                               </td>
@@ -2618,6 +2854,509 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* Internship Registration Tab */}
+        {activeTab === "registration" && (
+          <div className="rounded-[32px] border border-black/5 bg-white p-8 shadow-[0_18px_60px_rgba(0,0,0,0.05)] animate-[fadeIn_0.3s_ease-out]">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 pb-6 border-b border-zinc-150">
+              <div>
+                <h2 className="font-sans text-2xl font-bold text-zinc-800 flex items-center gap-2">
+                  <FileText className="text-[#5844e9]" /> Internship Registrations
+                </h2>
+                <p className="text-xs text-zinc-500 mt-1">
+                  View and manage all internship application responses received via CopterCode.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-4 shrink-0">
+                <button
+                  onClick={fetchRegistrations}
+                  disabled={regLoading}
+                  className="px-4 py-2 bg-zinc-105 hover:bg-zinc-200 border border-zinc-250 text-xs font-bold text-zinc-650 rounded-xl transition-all cursor-pointer"
+                >
+                  Refresh Data
+                </button>
+              </div>
+            </div>
+
+            {/* Analytics Stats Grid */}
+            {!regLoading && registrations.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-xs font-extrabold text-zinc-450 uppercase tracking-wider mb-4">Registration Analytics</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-sans">
+                  {/* Total Registrations Card */}
+                  <div className="bg-gradient-to-br from-[#5844e9] to-[#7f6cf2] rounded-[24px] p-5 text-white shadow-sm flex flex-col justify-between relative overflow-hidden group">
+                    <div className="absolute right-0 top-0 translate-x-2 -translate-y-2 opacity-10 group-hover:scale-110 transition-transform duration-500">
+                      <Users size={120} />
+                    </div>
+                    <div className="z-10">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">Total Applications</p>
+                      <h4 className="text-3xl font-extrabold mt-1 tracking-tight">{totalRegistrations}</h4>
+                    </div>
+                    <div className="mt-4 flex items-center gap-1 text-[10px] text-violet-100 font-medium z-10">
+                      <Activity size={12} className="animate-pulse" />
+                      <span>Across all elective choices</span>
+                    </div>
+                  </div>
+
+                  {/* Batch Cards */}
+                  {Object.entries(regBatchCounts).slice(0, 3).map(([batchName, count]) => {
+                    const isSelected = selectedRegBatch === batchName;
+                    return (
+                      <div
+                        key={batchName}
+                        onClick={() => setSelectedRegBatch(isSelected ? "" : batchName)}
+                        className={`rounded-[24px] p-5 border transition-all duration-300 cursor-pointer flex flex-col justify-between group relative overflow-hidden select-none ${isSelected
+                            ? "bg-violet-50/50 border-[#5844e9] shadow-[0_4px_20px_rgba(88,68,233,0.08)]"
+                            : "bg-white border-zinc-150 hover:border-zinc-350 hover:bg-zinc-50/30 hover:shadow-md"
+                          }`}
+                      >
+                        {isSelected && (
+                          <div className="absolute right-4 top-4 bg-[#5844e9] text-white p-1 rounded-full">
+                            <CheckCircle size={12} />
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 group-hover:text-[#5844e9] transition-colors truncate">
+                            {batchName}
+                          </p>
+                          <h4 className="text-3xl font-extrabold mt-1 tracking-tight text-zinc-800">
+                            {count}
+                          </h4>
+                        </div>
+                        <div className="mt-4 text-[10px] font-bold text-zinc-400 flex items-center gap-1 group-hover:text-[#5844e9] transition-colors">
+                          <span>{isSelected ? "Filter active (click to clear)" : "Click to filter applications"}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Filter/Search Section */}
+            <div className="mb-8 bg-zinc-50/30 border border-zinc-150 rounded-[24px] p-5 shadow-sm space-y-4 font-sans">
+              <div className="flex flex-col md:flex-row gap-3">
+                {/* Search Input */}
+                <div className="flex-1 flex items-center gap-2.5 bg-white border border-zinc-200 rounded-xl px-4 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.02)] focus-within:ring-2 focus-within:ring-violet-500/20 focus-within:border-violet-500 transition-all">
+                  <Search size={15} className="text-zinc-400 shrink-0" />
+                  <input
+                    type="text"
+                    value={regQuery}
+                    onChange={(e) => setRegQuery(e.target.value)}
+                    placeholder="Search by student name, college, email, or contact number..."
+                    className="flex-1 text-xs bg-transparent outline-none text-zinc-700 placeholder:text-zinc-450"
+                  />
+                  {regQuery && (
+                    <button onClick={() => setRegQuery("")} className="text-zinc-400 hover:text-zinc-650 cursor-pointer">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Download Filtered Excel Button */}
+                {!regLoading && registrations.length > 0 && (
+                  <button
+                    onClick={handleDownloadRegExcel}
+                    disabled={isExportingRegExcel}
+                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold shadow-md transition-all duration-300 cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <Download size={14} />
+                    {isExportingRegExcel
+                      ? "Exporting..."
+                      : selectedRegIds.size > 0
+                        ? "Download Selected Excel"
+                        : "Download Filtered Excel"}
+                  </button>
+                )}
+
+                {/* Send Filtered/Selected Emails Button */}
+                {!regLoading && registrations.length > 0 && (
+                  <button
+                    onClick={handleSendFilteredRegEmails}
+                    disabled={isSendingRegEmails}
+                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white rounded-xl text-xs font-bold shadow-md transition-all duration-300 cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {isSendingRegEmails ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>{`Sending ${regEmailProgress.done}/${regEmailProgress.total}...`}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mail size={14} />
+                        <span>Send Email</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {/* Clear All Filters Button */}
+                {(regQuery || selectedRegBatch || selectedRegElective || selectedRegBranch || selectedRegPlacement || selectedRegPeriod) && (
+                  <button
+                    onClick={() => {
+                      setRegQuery("");
+                      setSelectedRegBatch("");
+                      setSelectedRegElective("");
+                      setSelectedRegBranch("");
+                      setSelectedRegPlacement("");
+                      setSelectedRegPeriod("");
+                    }}
+                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 border border-dashed border-red-200 text-red-650 bg-red-50/30 hover:bg-red-50 hover:border-red-300 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
+                  >
+                    <Trash2 size={14} />
+                    Reset Filters
+                  </button>
+                )}
+              </div>
+
+              {/* Dynamic Dropdowns Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                {/* Batch Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Preferred Batch</label>
+                  <div className="relative">
+                    <select
+                      value={selectedRegBatch}
+                      onChange={(e) => setSelectedRegBatch(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-3 py-2.5 pr-8 appearance-none text-zinc-700 outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all cursor-pointer"
+                    >
+                      <option value="">All Batches</option>
+                      {regUniqueBatches.map((b) => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Elective Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Preferable Elective</label>
+                  <div className="relative">
+                    <select
+                      value={selectedRegElective}
+                      onChange={(e) => setSelectedRegElective(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-3 py-2.5 pr-8 appearance-none text-zinc-700 outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all cursor-pointer"
+                    >
+                      <option value="">All Electives</option>
+                      {regUniqueElectives.map((e) => (
+                        <option key={e} value={e}>{e}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Department/Branch Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Department/Branch</label>
+                  <div className="relative">
+                    <select
+                      value={selectedRegBranch}
+                      onChange={(e) => setSelectedRegBranch(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-3 py-2.5 pr-8 appearance-none text-zinc-700 outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all cursor-pointer"
+                    >
+                      <option value="">All Branches</option>
+                      {regUniqueBranches.map((br) => (
+                        <option key={br} value={br}>{br}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Internship Period Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Internship Period</label>
+                  <div className="relative">
+                    <select
+                      value={selectedRegPeriod}
+                      onChange={(e) => setSelectedRegPeriod(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-3 py-2.5 pr-8 appearance-none text-zinc-700 outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all cursor-pointer"
+                    >
+                      <option value="">All Periods</option>
+                      {regUniquePeriods.map((p) => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Placement Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Placement Support</label>
+                  <div className="relative">
+                    <select
+                      value={selectedRegPlacement}
+                      onChange={(e) => setSelectedRegPlacement(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-3 py-2.5 pr-8 appearance-none text-zinc-700 outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all cursor-pointer"
+                    >
+                      <option value="">All Preferences</option>
+                      <option value="Yes">Yes</option>
+                      <option value="No">No</option>
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {regError && (
+              <div className="mb-6 bg-red-50 border border-red-250 p-4 rounded-2xl text-red-850 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-650" />
+                <span>{regError}</span>
+              </div>
+            )}
+
+            {regLoading ? (
+              <div className="py-20 text-center">
+                <div className="w-10 h-10 border-2 border-zinc-200 border-t-violet-600 rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-xs font-bold text-zinc-550 font-sans">Querying Supabase database...</p>
+              </div>
+            ) : (
+              (() => {
+                const filtered = filteredRegistrations;
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="py-16 text-center border border-dashed border-zinc-200 rounded-2xl font-sans">
+                      <p className="text-sm font-bold text-zinc-550 font-sans">No registrations found matching &quot;{regQuery}&quot;</p>
+                      <p className="text-xs text-zinc-400 mt-1">Make sure you have registration submissions in Supabase or try a different filter.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="overflow-x-auto border border-zinc-150 rounded-2xl bg-white shadow-sm font-sans">
+                    <table className="w-full text-left border-collapse text-sm">
+                      <thead>
+                        <tr className="border-b border-zinc-150 bg-zinc-50/50 text-zinc-550 text-xs font-bold font-mono">
+                          <th className="p-4 w-10 text-center select-none">
+                            <input
+                              type="checkbox"
+                              checked={filtered.length > 0 && filtered.every((r) => selectedRegIds.has(r.id))}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedRegIds(new Set([...selectedRegIds, ...filtered.map((r) => r.id)]));
+                                } else {
+                                  const next = new Set(selectedRegIds);
+                                  filtered.forEach((r) => next.delete(r.id));
+                                  setSelectedRegIds(next);
+                                }
+                              }}
+                              className="w-4 h-4 rounded border-zinc-300 text-indigo-650 bg-white focus:ring-indigo-500 focus:ring-2 focus:ring-offset-2 transition-all cursor-pointer"
+                            />
+                          </th>
+                          <th className="p-4">Student Details</th>
+                          <th className="p-4">College / Branch</th>
+                          <th className="p-4">Elective</th>
+                          <th className="p-4">Period</th>
+                          <th className="p-4">Batch</th>
+                          <th className="p-4">Date Submitted</th>
+                          <th className="p-4">Email Delivery</th>
+                          <th className="p-4 text-right">Details</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100">
+                        {filtered.map((reg) => {
+                          const dateStr = reg.registration_date
+                            ? new Date(reg.registration_date).toLocaleString()
+                            : (reg.created_at ? new Date(reg.created_at).toLocaleString() : "—");
+                          const isSelected = selectedRegIds.has(reg.id);
+
+                          return (
+                            <tr key={reg.id} className={`transition-colors hover:bg-zinc-50/50 ${isSelected ? "bg-violet-50/20" : ""}`}>
+                              <td className="p-4 w-10 text-center select-none align-middle">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedRegIds.has(reg.id)}
+                                  onChange={(e) => {
+                                    const next = new Set(selectedRegIds);
+                                    if (e.target.checked) {
+                                      next.add(reg.id);
+                                    } else {
+                                      next.delete(reg.id);
+                                    }
+                                    setSelectedRegIds(next);
+                                  }}
+                                  className="w-4 h-4 rounded border-zinc-300 text-indigo-650 bg-white focus:ring-indigo-500 focus:ring-2 focus:ring-offset-2 transition-all cursor-pointer"
+                                />
+                              </td>
+                              <td className="p-4">
+                                <span className="font-bold text-zinc-800 block">{reg.student_name}</span>
+                                <div className="text-[10px] text-zinc-500 mt-0.5">{reg.email_address}</div>
+                                <div className="text-[10px] text-zinc-400 mt-0.5">{reg.whatsapp_contact}</div>
+                              </td>
+                              <td className="p-4">
+                                <div className="text-xs text-zinc-700 font-medium">{reg.college_name}</div>
+                                <div className="text-[10px] text-zinc-400 mt-0.5">{reg.department_branch} (Year {reg.year_of_study || "—"})</div>
+                              </td>
+                              <td className="p-4">
+                                <span className="inline-flex items-center text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-violet-50 text-violet-750 border border-violet-100">
+                                  {reg.preferable_elective}
+                                </span>
+                              </td>
+                              <td className="p-4 text-zinc-600 text-xs">{reg.internship_period || "—"}</td>
+                              <td className="p-4 font-mono text-zinc-550 text-xs">{reg.preferred_batch}</td>
+                              <td className="p-4 font-mono text-zinc-550 text-xs">{dateStr}</td>
+                              <td className="p-4 align-middle">
+                                {reg.email_status === "sending" ? (
+                                  <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-150 px-2 py-0.5 rounded-md">
+                                    <span className="w-2 h-2 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                                    Sending...
+                                  </span>
+                                ) : reg.email_status === "sent" ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 border border-emerald-150 text-emerald-700 px-2.5 py-1 rounded-lg">
+                                    <CheckCircle className="w-3 h-3 text-emerald-650" /> Sent
+                                  </span>
+                                ) : reg.email_status === "failed" ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-red-50 border border-red-150 text-red-700 px-2 py-0.5 rounded-md">
+                                      Failed
+                                    </span>
+                                    <button
+                                      onClick={() => handleSendRegEmail(reg.id)}
+                                      className="text-[10px] text-zinc-500 hover:text-zinc-700 font-bold underline cursor-pointer"
+                                    >
+                                      Retry
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => handleSendRegEmail(reg.id)}
+                                    className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-605 hover:text-indigo-805 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded-md cursor-pointer"
+                                  >
+                                    <Mail className="w-3.5 h-3.5" /> Send Mail
+                                  </button>
+                                )}
+                              </td>
+                              <td className="p-4 text-right">
+                                <button
+                                  onClick={() => setViewingReg(reg)}
+                                  className="inline-flex items-center gap-1 text-[11px] font-bold text-violet-650 hover:text-violet-855 bg-violet-50 hover:bg-violet-100 border border-violet-200 px-2.5 py-1 rounded-lg transition-all duration-150 cursor-pointer"
+                                >
+                                  <Eye className="w-3.5 h-3.5" /> View Full
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()
+            )}
+          </div>
+        )}
+
+        {/* View Full Registration Modal */}
+        {viewingReg && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 font-sans">
+            <div className="bg-white rounded-[32px] border border-black/5 p-8 max-w-2xl w-full shadow-2xl overflow-y-auto max-h-[90vh] animate-[fadeIn_0.2s_ease-out]">
+              <div className="flex justify-between items-center mb-6 pb-4 border-b border-zinc-100">
+                <div>
+                  <h3 className="text-lg font-extrabold text-stone-900">Internship Application Response</h3>
+                  <p className="text-xs text-zinc-400 mt-0.5">Submitted: {viewingReg.registration_date ? new Date(viewingReg.registration_date).toLocaleString() : (viewingReg.created_at ? new Date(viewingReg.created_at).toLocaleString() : "—")}</p>
+                </div>
+                <button
+                  onClick={() => setViewingReg(null)}
+                  className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-full transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Personal Information */}
+                <div>
+                  <h4 className="text-[10px] font-extrabold text-[#5844e9] uppercase tracking-wider mb-3">Student & Personal Information</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100">
+                    <div>
+                      <span className="block text-[9px] font-bold text-zinc-400 uppercase">Student Name</span>
+                      <span className="text-xs font-bold text-zinc-800">{viewingReg.student_name || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] font-bold text-zinc-400 uppercase">Date of Birth</span>
+                      <span className="text-xs font-bold text-zinc-800">{viewingReg.date_of_birth || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] font-bold text-zinc-400 uppercase">Email Address</span>
+                      <span className="text-xs font-bold text-zinc-800">{viewingReg.email_address || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] font-bold text-zinc-400 uppercase">WhatsApp Contact</span>
+                      <span className="text-xs font-bold text-zinc-800">{viewingReg.whatsapp_contact || "—"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Academic Information */}
+                <div>
+                  <h4 className="text-[10px] font-extrabold text-[#5844e9] uppercase tracking-wider mb-3">Academic Details</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100">
+                    <div className="sm:col-span-2">
+                      <span className="block text-[9px] font-bold text-zinc-400 uppercase">College / Institution Name</span>
+                      <span className="text-xs font-bold text-zinc-800">{viewingReg.college_name || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] font-bold text-zinc-400 uppercase">Department / Branch</span>
+                      <span className="text-xs font-bold text-zinc-800">{viewingReg.department_branch || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] font-bold text-zinc-400 uppercase">Year of Study</span>
+                      <span className="text-xs font-bold text-zinc-800">{viewingReg.year_of_study || "—"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Internship Preferences */}
+                <div>
+                  <h4 className="text-[10px] font-extrabold text-[#5844e9] uppercase tracking-wider mb-3">Internship Preferences & Outcomes</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100 font-sans">
+                    <div>
+                      <span className="block text-[9px] font-bold text-zinc-400 uppercase">Preferable Elective</span>
+                      <span className="text-xs font-bold text-zinc-800">{viewingReg.preferable_elective || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] font-bold text-zinc-400 uppercase">Preferred Batch</span>
+                      <span className="text-xs font-bold text-zinc-800">{viewingReg.preferred_batch || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] font-bold text-zinc-400 uppercase">Internship Period</span>
+                      <span className="text-xs font-bold text-zinc-800">{viewingReg.internship_period || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] font-bold text-zinc-400 uppercase">Placement Support Interest</span>
+                      <span className="text-xs font-bold text-zinc-800">{viewingReg.placement_support_interest || "—"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Residential Address */}
+                <div>
+                  <h4 className="text-[10px] font-extrabold text-[#5844e9] uppercase tracking-wider mb-3">Residential Address</h4>
+                  <div className="bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100 font-sans">
+                    <span className="block text-[9px] font-bold text-zinc-400 uppercase">Address Details</span>
+                    <span className="text-xs text-zinc-700 font-medium block whitespace-pre-line mt-1">{viewingReg.residential_address || "—"}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-zinc-100">
+                <button
+                  type="button"
+                  onClick={() => setViewingReg(null)}
+                  className="px-5 py-2.5 bg-zinc-100 hover:bg-zinc-150 text-zinc-650 hover:text-zinc-800 font-bold rounded-xl text-xs transition-all cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Tab 3: Profile Settings */}
         {activeTab === "profile" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-[fadeIn_0.3s_ease-out]">
@@ -2739,7 +3478,7 @@ export default function AdminDashboard() {
       {isProcessing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-md transition-all duration-300">
           <div className="max-w-md w-full mx-6 bg-white border border-[#5844e9]/15 rounded-3xl p-8 shadow-[0_30px_100px_rgba(0,0,0,0.06)] flex flex-col items-center text-center relative overflow-hidden">
-            
+
             {/* Ambient decorative light glow inside loader */}
             <div className="absolute -top-12 -right-12 w-24 h-24 bg-[#5844e9]/5 rounded-full blur-2xl pointer-events-none" />
             <div className="absolute -bottom-12 -left-12 w-24 h-24 bg-[#10b981]/5 rounded-full blur-2xl pointer-events-none" />
@@ -2748,13 +3487,13 @@ export default function AdminDashboard() {
             <div className="relative w-28 h-28 mb-6 flex items-center justify-center">
               {/* Outer Glow Ring */}
               <div className="absolute inset-0 rounded-full border border-dashed border-[#5844e9]/20 animate-[spin_12s_linear_infinite]" />
-              
+
               {/* Mid Ring */}
               <div className="absolute inset-2 rounded-full border-2 border-violet-100 border-t-violet-600 animate-[spin_1.5s_linear_infinite]" />
-              
+
               {/* Inner Reverse Ring */}
               <div className="absolute inset-4 rounded-full border border-dashed border-[#10b981]/30 animate-[spin_6s_linear_infinite_reverse]" />
-              
+
               {/* Core Icon */}
               <div className="absolute w-12 h-12 rounded-full bg-zinc-50 flex items-center justify-center shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]">
                 {processingStage === 1 && <Upload className="w-5 h-5 text-violet-600 animate-bounce" />}
@@ -2767,7 +3506,7 @@ export default function AdminDashboard() {
               {processingStage === 1 && "Stage 01 — Parsing Template"}
               {processingStage === 2 && "Stage 02 — Compiling Certificates"}
             </span>
-            
+
             <h3 className="font-sans text-lg text-stone-900 font-bold mb-5">
               {processingStage === 1 && "Analyzing Base Document"}
               {processingStage === 2 && "Building Batch Run"}
@@ -2780,13 +3519,12 @@ export default function AdminDashboard() {
                 const isActive = idx === activeSubStep;
                 return (
                   <div key={idx} className="flex items-center gap-3 transition-all duration-300">
-                    <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 border ${
-                      isCompleted 
-                        ? "bg-emerald-500 border-emerald-500 text-white" 
-                        : isActive 
-                          ? "border-violet-500 text-violet-500 bg-violet-50" 
+                    <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 border ${isCompleted
+                        ? "bg-emerald-500 border-emerald-500 text-white"
+                        : isActive
+                          ? "border-violet-500 text-violet-500 bg-violet-50"
                           : "border-zinc-200 text-zinc-300 bg-white"
-                    }`}>
+                      }`}>
                       {isCompleted ? (
                         <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="4">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -2795,13 +3533,12 @@ export default function AdminDashboard() {
                         <div className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-ping" />
                       ) : null}
                     </div>
-                    <span className={`text-xs font-semibold ${
-                      isCompleted 
-                        ? "text-zinc-400 line-through decoration-zinc-300" 
-                        : isActive 
-                          ? "text-zinc-800 font-bold" 
+                    <span className={`text-xs font-semibold ${isCompleted
+                        ? "text-zinc-400 line-through decoration-zinc-300"
+                        : isActive
+                          ? "text-zinc-800 font-bold"
                           : "text-zinc-400"
-                    }`}>
+                      }`}>
                       {stepText}
                     </span>
                   </div>
@@ -2815,15 +3552,14 @@ export default function AdminDashboard() {
       {/* Mobile Drawer (Side Menu) */}
       <div className={`fixed inset-0 z-[9999] transition-all duration-300 ${isMobileMenuOpen ? "visible opacity-100" : "invisible opacity-0 pointer-events-none"}`}>
         {/* Backdrop overlay */}
-        <div 
+        <div
           className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300"
           onClick={() => setIsMobileMenuOpen(false)}
         />
-        
+
         {/* Drawer content container */}
-        <div className={`absolute top-0 right-0 h-full w-[280px] sm:w-[320px] bg-white shadow-2xl p-6 flex flex-col justify-between transition-transform duration-300 ease-out transform ${
-          isMobileMenuOpen ? "translate-x-0" : "translate-x-full"
-        }`}>
+        <div className={`absolute top-0 right-0 h-full w-[280px] sm:w-[320px] bg-white shadow-2xl p-6 flex flex-col justify-between transition-transform duration-300 ease-out transform ${isMobileMenuOpen ? "translate-x-0" : "translate-x-full"
+          }`}>
           <div>
             {/* Drawer Header */}
             <div className="flex items-center justify-between pb-6 border-b border-zinc-100 mb-6">
@@ -2837,7 +3573,7 @@ export default function AdminDashboard() {
                   CopterCode
                 </span>
               </div>
-              <button 
+              <button
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors cursor-pointer"
               >
@@ -2852,11 +3588,10 @@ export default function AdminDashboard() {
                   setActiveTab("generator");
                   setIsMobileMenuOpen(false);
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-xl transition-all cursor-pointer ${
-                  activeTab === "generator"
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-xl transition-all cursor-pointer ${activeTab === "generator"
                     ? "bg-[#5844e9]/8 text-[#5844e9] border border-[#5844e9]/10 shadow-[inset_0_1px_2px_rgba(88,68,233,0.05)]"
                     : "text-stone-600 hover:text-stone-900 hover:bg-zinc-50 border border-transparent"
-                }`}
+                  }`}
               >
                 <LayoutDashboard size={16} /> Generator
               </button>
@@ -2865,24 +3600,34 @@ export default function AdminDashboard() {
                   setActiveTab("history");
                   setIsMobileMenuOpen(false);
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-xl transition-all cursor-pointer ${
-                  activeTab === "history"
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-xl transition-all cursor-pointer ${activeTab === "history"
                     ? "bg-[#5844e9]/8 text-[#5844e9] border border-[#5844e9]/10 shadow-[inset_0_1px_2px_rgba(88,68,233,0.05)]"
                     : "text-stone-600 hover:text-stone-900 hover:bg-zinc-50 border border-transparent"
-                }`}
+                  }`}
               >
-                <Database size={16} /> Database History
+                <Database size={16} /> Interns
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab("registration");
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-xl transition-all cursor-pointer ${activeTab === "registration"
+                    ? "bg-[#5844e9]/8 text-[#5844e9] border border-[#5844e9]/10 shadow-[inset_0_1px_2px_rgba(88,68,233,0.05)]"
+                    : "text-stone-600 hover:text-stone-900 hover:bg-zinc-50 border border-transparent"
+                  }`}
+              >
+                <FileText size={16} /> Internship Registration
               </button>
               <button
                 onClick={() => {
                   setActiveTab("profile");
                   setIsMobileMenuOpen(false);
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-xl transition-all cursor-pointer ${
-                  activeTab === "profile"
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-xl transition-all cursor-pointer ${activeTab === "profile"
                     ? "bg-[#5844e9]/8 text-[#5844e9] border border-[#5844e9]/10 shadow-[inset_0_1px_2px_rgba(88,68,233,0.05)]"
                     : "text-stone-600 hover:text-stone-900 hover:bg-zinc-50 border border-transparent"
-                }`}
+                  }`}
               >
                 <User size={16} /> Profile
               </button>

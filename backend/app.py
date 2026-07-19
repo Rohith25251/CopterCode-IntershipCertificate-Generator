@@ -906,6 +906,329 @@ async def send_email_notification(
         print(f"Error sending email to {to_email}: {email_err}")
         return False
 
+
+async def send_registration_email(
+    to_email: str,
+    student_name: str,
+    preferred_batch: str,
+    internship_period: str,
+    elective: str
+):
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
+    smtp_server = os.getenv("SMTP_SERVER")
+    smtp_port = os.getenv("SMTP_PORT", "587")
+    smtp_username = os.getenv("SMTP_USERNAME")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    smtp_from_email = os.getenv("SMTP_FROM_EMAIL")
+    smtp_from_name = os.getenv("SMTP_FROM_NAME", "CopterCode Team")
+
+    email_logo_url = os.getenv("EMAIL_LOGO_URL", "https://coptercode-website.vercel.app/coptercode-logo.svg").strip()
+
+    if not smtp_server or not smtp_username or not smtp_password or not smtp_from_email:
+        print("WARNING: SMTP credentials not fully configured. Skipping email dispatch.")
+        return False
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Greetings from CopterCode — Internship Selection Details"
+        msg["From"] = f"{smtp_from_name} <{smtp_from_email}>"
+        msg["To"] = to_email
+
+        # Determine internship period text for selection body
+        period_text = "one-month"
+        if "3 Month" in internship_period:
+            if "1 Month" in internship_period:
+                period_text = "one-month & three-month"
+            else:
+                period_text = "three-month"
+
+        # Highly premium, fully inline table-based HTML onboarding email template compatible with all clients
+        html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CopterCode — Internship Phase 2026</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #eef1f7; font-family: 'Inter', -apple-system, BlinkMacSystemFont, Arial, sans-serif; -webkit-font-smoothing: antialiased; width: 100% !important;">
+
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #eef1f7; padding: 40px 16px;">
+  <tr>
+    <td align="center">
+      
+      <!-- Outer Card Sheet -->
+      <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border: 1px solid #e7eaf3; border-radius: 20px; box-shadow: 0 4px 12px rgba(15,23,42,0.05); overflow: hidden; max-width: 600px; width: 100%;">
+        
+        <!-- Logo Header Row -->
+        <tr>
+          <td align="center" style="padding: 36px 40px 28px; border-bottom: 1px solid #e7eaf3;">
+            <table border="0" cellpadding="0" cellspacing="0" align="center">
+              <tr>
+                <td style="vertical-align: middle;">
+                  <img src="{email_logo_url}" alt="CopterCode Logo" width="40" height="40" style="width: 40px; height: 40px; border-radius: 11px; display: block; object-fit: cover;" />
+                </td>
+                <td style="vertical-align: middle; padding-left: 12px; font-size: 21px; font-weight: 800; color: #0f172a; letter-spacing: -0.01em; line-height: 1;">
+                  CopterCode
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        
+        <!-- Main body content -->
+        <tr>
+          <td style="padding: 36px 40px 8px;">
+            
+            <h1 style="font-size: 22px; font-weight: 700; color: #0f172a; margin: 0 0 18px; letter-spacing: -0.01em;">Greetings, {student_name}!</h1>
+            
+            <p style="font-size: 15px; line-height: 1.75; color: #475569; margin: 0 0 18px;">
+              We are pleased to inform you that you have been <span style="color: #3b4cca; font-weight: 500;">successfully selected</span> for the {period_text} internship program at <span style="color: #0f172a; font-weight: 700;">CopterCode</span> — Internship Phase 2026, {preferred_batch} Batch. The program is designed around real-time industry exposure, international project experience, and advanced technical learning.
+            </p>
+            
+            <!-- Venue Section -->
+            <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6c5ce7; margin: 34px 0 10px;">Venue</div>
+            
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8f9fc; border: 1px solid #e7eaf3; border-left: 3px solid #6c5ce7; border-radius: 12px; padding: 20px 24px; margin-bottom: 22px;">
+              <tr>
+                <td>
+                  <ul style="margin: 0; padding-left: 20px; font-size: 14.5px; line-height: 1.8; color: #475569;">
+                    <li style="color: #475569;"><strong style="color: #0f172a;">IIT Madras Research Park</strong> &mdash; RAMAN, EG 10, E Block, Ground Floor, Chennai, Tamil Nadu</li>
+                  </ul>
+                </td>
+              </tr>
+            </table>
+            
+            <!-- Highlights Section -->
+            <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6c5ce7; margin: 34px 0 10px;">Programme Highlights</div>
+            
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8f9fc; border: 1px solid #e7eaf3; border-left: 3px solid #6c5ce7; border-radius: 12px; padding: 20px 24px; margin-bottom: 22px;">
+              <tr>
+                <td>
+                  <ul style="margin: 0; padding-left: 20px; font-size: 14.5px; line-height: 1.8; color: #475569;">
+                    <li style="margin-bottom: 6px; color: #475569;"><strong style="color: #0f172a;">India's leading</strong> research &amp; innovation ecosystem</li>
+                    <li style="margin-bottom: 6px; color: #475569;">Live <strong style="color: #0f172a;">international projects</strong> with American &amp; European companies</li>
+                    <li style="margin-bottom: 6px; color: #475569;">Industrial visit opportunities for selected students</li>
+                    <li style="margin-bottom: 6px; color: #475569;">Placement training &amp; career guidance</li>
+                    <li style="margin-bottom: 6px; color: #475569;">Hybrid model &mdash; offline and online phases</li>
+                    <li style="color: #475569;">Mentorship from HR teams and technical leads</li>
+                  </ul>
+                </td>
+              </tr>
+            </table>
+            
+            <!-- Batch Details Section -->
+            <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6c5ce7; margin: 34px 0 10px;">Batch Details</div>
+            
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8f9fc; border: 1px solid #e7eaf3; border-radius: 12px; overflow: hidden; border-collapse: separate; margin-bottom: 22px;">
+              <tr>
+                <td style="padding: 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 14px; color: #475569;">Duration</td>
+                <td align="right" style="padding: 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 14px; font-weight: 600; color: #0f172a;">{internship_period}</td>
+              </tr>
+              <tr>
+                <td style="padding: 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 14px; color: #475569;">Selected Elective</td>
+                <td align="right" style="padding: 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 13px; font-weight: 600; color: #0f172a; max-width: 300px; word-wrap: break-word;">{elective}</td>
+              </tr>
+              <tr>
+                <td style="padding: 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 14px; color: #475569;">Offline Phase</td>
+                <td align="right" style="padding: 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 14px; font-weight: 600; color: #0f172a;">06 &ndash; 20 July 2026</td>
+              </tr>
+              <tr>
+                <td style="padding: 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 14px; color: #475569;">Hybrid / Online Phase</td>
+                <td align="right" style="padding: 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 14px; font-weight: 600; color: #0f172a;">21 Jul &ndash; 05 Aug 2026</td>
+              </tr>
+              <tr>
+                <td style="padding: 13px 22px; font-size: 14px; color: #475569;">Completion Certificate</td>
+                <td align="right" style="padding: 13px 22px; font-size: 14px; font-weight: 600; color: #0f172a;">Provided</td>
+              </tr>
+            </table>
+            
+            <!-- Fee Section -->
+            <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6c5ce7; margin: 34px 0 10px;">Payment</div>
+            
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #0f172a; border-radius: 12px; padding: 22px 24px; color: #ffffff; margin-bottom: 10px;">
+              <tr>
+                <td>
+                  <div style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.55); font-weight: 700;">Internship Fee</div>
+                  <div style="font-size: 24px; font-weight: 700; margin-top: 6px; color: #ffffff;">₹6,990 <span style="font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.55);">+ 18% tax</span></div>
+                </td>
+              </tr>
+            </table>
+            <p style="font-size: 13px; color: #475569; margin: 0 0 18px;">Payment mode: cash, due on the first day of the internship.</p>
+            
+            <!-- Documents Section -->
+            <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6c5ce7; margin: 34px 0 10px;">Documents to Bring</div>
+            
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 22px;">
+              <tr>
+                <td width="49%" valign="top" style="padding-bottom: 10px; padding-right: 10px;">
+                  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f3f1fe; border: 1px solid #e5e1fb; border-radius: 10px; padding: 12px 16px;">
+                    <tr>
+                      <td>
+                        <div style="font-size: 13.5px; font-weight: 600; color: #0f172a;">Aadhaar Card</div>
+                        <div style="font-size: 12px; color: #475569; margin-top: 2px;">3 colour copies</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+                <td width="49%" valign="top" style="padding-bottom: 10px;">
+                  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f3f1fe; border: 1px solid #e5e1fb; border-radius: 10px; padding: 12px 16px;">
+                    <tr>
+                      <td>
+                        <div style="font-size: 13.5px; font-weight: 600; color: #0f172a;">College ID</div>
+                        <div style="font-size: 12px; color: #475569; margin-top: 2px;">3 colour copies</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td width="49%" valign="top" style="padding-bottom: 10px; padding-right: 10px;">
+                  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f3f1fe; border: 1px solid #e5e1fb; border-radius: 10px; padding: 12px 16px;">
+                    <tr>
+                      <td>
+                        <div style="font-size: 13.5px; font-weight: 600; color: #0f172a;">Photographs</div>
+                        <div style="font-size: 12px; color: #475569; margin-top: 2px;">6 passport size</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+                <td width="49%" valign="top" style="padding-bottom: 10px;">
+                  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f3f1fe; border: 1px solid #e5e1fb; border-radius: 10px; padding: 12px 16px;">
+                    <tr>
+                      <td>
+                        <div style="font-size: 13.5px; font-weight: 600; color: #0f172a;">Zip Files</div>
+                        <div style="font-size: 12px; color: #475569; margin-top: 2px;">3 copies</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td colspan="2" valign="top">
+                  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f3f1fe; border: 1px solid #e5e1fb; border-radius: 10px; padding: 12px 16px;">
+                    <tr>
+                      <td>
+                        <div style="font-size: 13.5px; font-weight: 600; color: #0f172a;">Personal Laptop</div>
+                        <div style="font-size: 12px; color: #475569; margin-top: 2px;">Mandatory</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+            
+            <!-- Accomplishments Section -->
+            <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6c5ce7; margin: 34px 0 10px;">As a Token of Your Accomplishments</div>
+            <p style="font-size: 15px; line-height: 1.75; color: #475569; margin: 0 0 18px;">Upon completion, the following documents are issued for your reference and future endeavors:</p>
+            
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8f9fc; border: 1px solid #e7eaf3; border-left: 3px solid #6c5ce7; border-radius: 12px; padding: 20px 24px; margin-bottom: 22px;">
+              <tr>
+                <td>
+                  <ul style="margin: 0; padding-left: 20px; font-size: 14.5px; line-height: 1.8; color: #475569;">
+                    <li style="margin-bottom: 6px; color: #475569;"><strong style="color: #0f172a;">Experience Letter</strong></li>
+                    <li style="margin-bottom: 6px; color: #475569;"><strong style="color: #0f172a;">Internship Certificate</strong></li>
+                    <li style="color: #475569;"><strong style="color: #0f172a;">Letter of Recommendation (LOR)</strong></li>
+                  </ul>
+                </td>
+              </tr>
+            </table>
+            <p style="font-size: 15px; line-height: 1.75; color: #475569; margin: 0 0 18px;">
+              You can <span style="color: #3b4cca; font-weight: 500;">download, view, verify,</span> and <span style="color: #3b4cca; font-weight: 500;">share</span> your certificate(s) at any time by visiting your Intern Portal.
+            </p>
+            
+            <!-- HR Team Section -->
+            <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6c5ce7; margin: 34px 0 10px;">HR &amp; Technical Lead Team</div>
+            
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8f9fc; border: 1px solid #e7eaf3; border-radius: 12px; padding: 6px 22px; margin-bottom: 22px; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; font-weight: 600; color: #0f172a;">Sarvesh R</td>
+                <td align="right" style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; color: #475569;">Tech HR &mdash; Chennai</td>
+              </tr>
+              <tr>
+                <td style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; font-weight: 600; color: #0f172a;">Karthik Sundharesan</td>
+                <td align="right" style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; color: #475569;">Senior HR &mdash; Chennai</td>
+              </tr>
+              <tr>
+                <td style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; font-weight: 600; color: #0f172a;">Pranav Mahalingam</td>
+                <td align="right" style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; color: #475569;">Sr. Tech HR Head &mdash; Ann Arbor</td>
+              </tr>
+              <tr>
+                <td style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; font-weight: 600; color: #0f172a;">Rachel Emery</td>
+                <td align="right" style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; color: #475569;">HR Team Head &mdash; Houston</td>
+              </tr>
+              <tr>
+                <td style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; font-weight: 600; color: #0f172a;">Naveen Kumar</td>
+                <td align="right" style="padding: 13px 0; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; color: #475569;">Tech HR &mdash; Netherlands</td>
+              </tr>
+              <tr>
+                <td style="padding: 13px 0; font-size: 13.5px; font-weight: 600; color: #0f172a;">Jayasurya Gnanavel</td>
+                <td align="right" style="padding: 13px 0; font-size: 13.5px; color: #475569;">Associate Technical Lead &mdash; Chennai</td>
+              </tr>
+            </table>
+            
+            <!-- Notice Section -->
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #fff9f0; border: 1px solid #f5e4c8; border-left: 3px solid #e8a83c; border-radius: 12px; padding: 18px 22px; margin-bottom: 22px;">
+              <tr>
+                <td>
+                  <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #b9791c; margin-bottom: 6px;">Please note</div>
+                  <div style="font-size: 14px; line-height: 1.75; color: #0f172a;">
+                    Food and accommodation are <strong style="color: #0f172a;">not provided</strong> by CopterCode &mdash; students must make their own arrangements. Mandatory daily orientation and technical sessions (approx. 3 hours/day) will be conducted by HR teams, technical leads, and mentors. Batch-change requests must be made privately via WhatsApp and are subject to slot availability.
+                  </div>
+                </td>
+              </tr>
+            </table>
+            
+            <!-- Closing Section -->
+            <div style="margin-top: 38px; padding-top: 24px; border-top: 1px solid #e7eaf3; font-size: 14.5px; line-height: 1.8; color: #475569;">
+              <p style="margin-bottom: 6px; color: #475569;">We once again congratulate all selected interns and look forward to welcoming you to the CopterCode Internship Phase 2026.</p>
+              <p style="margin-bottom: 0; color: #475569;">Warm regards,</p>
+              <div style="color: #0f172a; font-weight: 700; margin-top: 6px;">Team CopterCode</div>
+            </div>
+            
+          </td>
+        </tr>
+        
+        <!-- Footer Row (Dark Theme) -->
+        <tr>
+          <td align="center" style="padding: 32px 24px; background-color: #0f172a; text-align: center; border-top: 1px solid #1e293b;">
+            <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, Arial, sans-serif; font-size: 14px; font-weight: 700; color: #ffffff; margin-bottom: 8px; letter-spacing: 0.02em;">Karthikeyan Sundharesan &middot; Sr HR</div>
+            <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, Arial, sans-serif; font-size: 12.5px; color: #94a3b8; line-height: 1.6; margin-bottom: 12px;">
+              044 6132 9380 &nbsp;&middot;&nbsp; +91 80721 93600
+            </div>
+            <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, Arial, sans-serif; font-size: 12.5px; line-height: 1.6;">
+              <a href="mailto:hr@coptercode.co.in" style="color: #a5b4fc !important; text-decoration: none; font-weight: 600;">hr@coptercode.co.in</a>
+              <span style="color: #334155; padding: 0 8px;">&middot;</span>
+              <a href="https://www.coptercode.co.in" target="_blank" style="color: #a5b4fc !important; text-decoration: none; font-weight: 600;">www.coptercode.co.in</a>
+            </div>
+          </td>
+        </tr>
+        
+      </table>
+      
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>"""
+
+        msg.attach(MIMEText(html_content, "html"))
+
+        server = smtplib.SMTP(smtp_server, int(smtp_port))
+        if int(smtp_port) == 587:
+            server.starttls()
+        server.login(smtp_username, smtp_password)
+        server.sendmail(smtp_from_email, to_email, msg.as_string())
+        server.quit()
+        print(f"Registration selection email sent successfully to {to_email}")
+        return True
+    except Exception as email_err:
+        print(f"Error sending registration email to {to_email}: {email_err}")
+        return False
+
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
@@ -2396,6 +2719,128 @@ def export_certificates_history(
         )
 
 
+@app.get("/api/registrations/export")
+def export_registrations_history(
+    query: Optional[str] = None,
+    batch: Optional[str] = None,
+    elective: Optional[str] = None,
+    branch: Optional[str] = None,
+    placement: Optional[str] = None,
+    period: Optional[str] = None,
+    ids: Optional[str] = None
+):
+    """
+    Export filtered database internship registrations to an Excel file.
+    """
+    if not supabase:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Supabase client is not configured."
+        )
+
+    try:
+        # Fetch registrations sorted by created_at descending (all records)
+        res = supabase.table("internship_registration").select("*").execute()
+        if not res.data:
+            data = []
+        else:
+            data = res.data
+
+        # Sort by created_at descending
+        data_sorted = sorted(
+            data,
+            key=lambda x: x.get("created_at") or "",
+            reverse=True
+        )
+
+        # Apply exact same filter rules as frontend
+        filtered_data = []
+        target_ids = None
+        if ids:
+            target_ids = {i.strip() for i in ids.split(",") if i.strip()}
+
+        for r in data_sorted:
+            if target_ids is not None:
+                r_id = str(r.get("id") or "")
+                if r_id not in target_ids:
+                    continue
+
+            # Query search filter
+            if query:
+                q = query.lower().strip()
+                name = str(r.get("student_name") or "").lower()
+                email = str(r.get("email_address") or "").lower()
+                college = str(r.get("college_name") or "").lower()
+                contact = str(r.get("whatsapp_contact") or "").lower()
+                branch_val = str(r.get("department_branch") or "").lower()
+                if not (q in name or q in email or q in college or q in contact or q in branch_val):
+                    continue
+
+            # Batch filter
+            if batch and r.get("preferred_batch") != batch:
+                continue
+
+            # Elective filter
+            if elective and r.get("preferable_elective") != elective:
+                continue
+
+            # Branch filter
+            if branch and r.get("department_branch") != branch:
+                continue
+
+            # Placement interest filter
+            if placement and r.get("placement_support_interest") != placement:
+                continue
+
+            # Period filter
+            if period and r.get("internship_period") != period:
+                continue
+
+            filtered_data.append(r)
+
+        # Structure pandas DataFrame
+        rows = []
+        for r in filtered_data:
+            rows.append({
+                "Student Name": r.get("student_name") or "",
+                "WhatsApp Contact": r.get("whatsapp_contact") or "",
+                "Email Address": r.get("email_address") or "",
+                "College Name": r.get("college_name") or "",
+                "Preferable Elective": r.get("preferable_elective") or "",
+                "Preferred Batch": r.get("preferred_batch") or "",
+                "Department/Branch": r.get("department_branch") or "",
+                "Year of Study": r.get("year_of_study") or "",
+                "Date of Birth": r.get("date_of_birth") or "",
+                "Residential Address": r.get("residential_address") or "",
+                "Internship Period": r.get("internship_period") or "",
+                "Placement Support Interest": r.get("placement_support_interest") or "",
+                "Registration Date": r.get("registration_date") or ""
+            })
+
+        df = pd.DataFrame(rows)
+
+        # Output to buffer as Excel sheet
+        import io
+        buffer = io.BytesIO()
+        df.to_excel(buffer, index=False)
+        buffer.seek(0)
+
+        from fastapi.responses import StreamingResponse
+        headers = {
+            'Content-Disposition': 'attachment; filename="internship_registrations.xlsx"'
+        }
+        return StreamingResponse(
+            buffer,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers=headers
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to export registrations: {str(e)}"
+        )
+
+
 @app.get("/api/certificates/{cert_code}")
 def lookup_certificate(cert_code: str):
     """
@@ -2736,6 +3181,72 @@ async def manual_send_intern_email(intern_id: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to dispatch email: {str(e)}"
+        )
+
+
+@app.post("/api/registrations/{registration_id}/send-email")
+async def manual_send_registration_email(registration_id: str):
+    """
+    Manually triggers selection email dispatch for a specific registration entry.
+    Loads registration details, then sends SMTP email.
+    """
+    if not supabase:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Supabase client is not configured."
+        )
+
+    try:
+        # 1. Fetch Registration details
+        reg_res = supabase.table("internship_registration").select("*").eq("id", registration_id).execute()
+        if not reg_res.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Registration with ID {registration_id} not found."
+            )
+        reg_data = reg_res.data[0]
+        email_val = reg_data.get("email_address")
+        name_val = reg_data.get("student_name")
+        batch_val = reg_data.get("preferred_batch")
+        period_val = reg_data.get("internship_period")
+        elective_val = reg_data.get("preferable_elective")
+
+        if not email_val:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Registration does not have a configured email address."
+            )
+
+        # 2. Call email notification
+        success = await send_registration_email(
+            to_email=email_val,
+            student_name=name_val,
+            preferred_batch=batch_val,
+            internship_period=period_val,
+            elective=elective_val
+        )
+
+        # Update email_status in the DB (defensive try-except)
+        next_status = "sent" if success else "failed"
+        try:
+            supabase.table("internship_registration").update({"email_status": next_status}).eq("id", registration_id).execute()
+        except Exception as update_err:
+            print(f"Could not update email_status in database: {update_err}")
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="SMTP dispatch failed. Check backend credentials and SMTP server config."
+            )
+
+        return {"status": "success", "message": f"Selection email successfully dispatched to {email_val}."}
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to dispatch selection email: {str(e)}"
         )
 
 
