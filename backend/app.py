@@ -912,6 +912,7 @@ async def send_email_notification(
         # Certificates are accessible via the Portal download button.
 
         server = smtplib.SMTP(smtp_server, int(smtp_port))
+        server.set_debuglevel(1)
         if int(smtp_port) == 587:
             server.starttls()
         server.login(smtp_username, smtp_password)
@@ -1250,6 +1251,7 @@ async def send_registration_email(
         msg.attach(MIMEText(html_content, "html"))
 
         server = smtplib.SMTP(smtp_server, int(smtp_port))
+        server.set_debuglevel(1)
         if int(smtp_port) == 587:
             server.starttls()
         server.login(smtp_username, smtp_password)
