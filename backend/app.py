@@ -197,12 +197,38 @@ import shutil
 # allocated in Dokploy (start with 2 for a 1-2 vCPU container)
 LIBREOFFICE_SEMAPHORE = asyncio.Semaphore(2)
 
+def get_soffice_command():
+    # Check if soffice is in system path
+    cmd = shutil.which("soffice")
+    if cmd:
+        return cmd
+    
+    # Check standard Windows paths
+    standard_paths = [
+        r"C:\Program Files\LibreOffice\program\soffice.exe",
+        r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+    ]
+    for p in standard_paths:
+        if os.path.exists(p):
+            return p
+            
+    return None
+
 def export_pptx_to_pdf(pptx_path: str, output_dir: str) -> str:
     """
     Converts PPTX to PDF using headless LibreOffice.
     Uses an isolated user profile per call to avoid lock-file
     collisions under concurrent requests.
     """
+    soffice_cmd = get_soffice_command()
+    if not soffice_cmd:
+        raise RuntimeError(
+            "LibreOffice ('soffice') was not found on your system. "
+            "PPTX-to-PDF conversion requires LibreOffice to be installed. "
+            "Please download and install LibreOffice from https://www.libreoffice.org/download/download/ "
+            "and verify it is added to your system PATH or installed at the default location."
+        )
+
     os.makedirs(output_dir, exist_ok=True)
 
     # Isolated profile dir per invocation — prevents concurrent
@@ -210,7 +236,7 @@ def export_pptx_to_pdf(pptx_path: str, output_dir: str) -> str:
     profile_dir = f"/tmp/lo_profile_{uuid.uuid4().hex}"
 
     cmd = [
-        "soffice",
+        soffice_cmd,
         "--headless",
         "--norestore",
         "--nofirststartwizard",
@@ -2612,6 +2638,559 @@ async def generate_certificates(
         "excel_download_url": excel_download_url,
         "rows": rows_results
     }
+
+
+# ───────────────────────────────────────────────────────────────────
+# Event Certificates Pipeline
+# ───────────────────────────────────────────────────────────────────
+
+@app.post("/api/events/batch/create")
+async def create_event_batch(
+    event_name: str = Form(...),
+    event_date: str = Form(...),
+    event_template: UploadFile = File(...)
+):
+    event_name = event_name.strip()
+    event_date = event_date.strip()
+    if not supabase:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Supabase client is not configured."
+        )
+
+    ext = os.path.splitext(event_template.filename)[1].lower()
+    if ext not in (".html", ".pptx"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Event template file must be an HTML or PPTX file."
+        )
+
+    try:
+        import uuid
+        # Generate a unique event_id
+        event_id = f"event_{uuid.uuid4().hex[:8]}"
+        template_bytes = await event_template.read()
+        template_path = f"templates/{event_id}/template{ext}"
+        content_type = "text/html" if ext == ".html" else "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+
+        # Upload template to the templates bucket
+        supabase.storage.from_("templates").upload(
+            path=template_path,
+            file=template_bytes,
+            file_options={"content-type": content_type, "upsert": "true"}
+        )
+
+        return {
+            "status": "success",
+            "event_id": event_id,
+            "template_path": template_path
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create event batch: {str(e)}"
+        )
+
+
+@app.post("/api/events/generate")
+async def generate_event_certificates(
+    event_id: str = Form(...),
+    template_path: str = Form(...),
+    excel_file: UploadFile = File(...),
+    event_name: str = Form(...),
+    event_date: str = Form(...)
+):
+    event_id = event_id.strip()
+    template_path = template_path.strip()
+    event_name_form = event_name.strip()
+    event_date_form = event_date.strip()
+
+    if not supabase:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Supabase client is not configured."
+        )
+
+    # Validate Excel format
+    if not excel_file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please upload a valid Excel file (.xlsx or .xls)."
+        )
+
+    # Read and parse Excel file
+    try:
+        excel_bytes = await excel_file.read()
+        df = pd.read_excel(io.BytesIO(excel_bytes))
+        df_orig = pd.read_excel(io.BytesIO(excel_bytes))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to parse Excel file: {e}"
+        )
+
+    # Clean and validate Excel columns
+    df.columns = [str(col).strip().lower() for col in df.columns]
+    col_mapping = {}
+    for col in df.columns:
+        if "name" in col or "recipient" in col or "participant" in col:
+            col_mapping["name"] = col
+        elif "email" in col:
+            col_mapping["email"] = col
+        elif "college" in col or "university" in col or "institution" in col:
+            col_mapping["college"] = col
+        elif "date" in col or "event_date" in col:
+            col_mapping["date"] = col
+        elif "event" in col or "event_name" in col:
+            col_mapping["event"] = col
+        elif "roll" in col:
+            col_mapping["roll_no"] = col
+        elif "year" in col:
+            col_mapping["year"] = col
+        elif "dept" in col or "department" in col:
+            col_mapping["department"] = col
+
+    # Fallback/validation check
+    missing_cols = []
+    if "name" not in col_mapping:
+        missing_cols.append("Name/Recipient")
+    if "email" not in col_mapping:
+        missing_cols.append("Email")
+
+    if missing_cols:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Excel file is missing required columns: {', '.join(missing_cols)}"
+        )
+
+    rows_results = []
+    
+    for index, row in df.iterrows():
+        try:
+            def _cell_str(r, key):
+                if key not in col_mapping:
+                    return ""
+                v = r.get(col_mapping[key], "")
+                if pd.isna(v):
+                    return ""
+                if isinstance(v, (pd.Timestamp,)):
+                    return str(v.date())
+                return str(v).strip()
+
+            name_val = _cell_str(row, "name")
+            email_val = _cell_str(row, "email")
+            college_val = _cell_str(row, "college")
+            date_val = _cell_str(row, "date") or event_date_form
+            event_val = _cell_str(row, "event") or event_name_form
+            roll_val = _cell_str(row, "roll_no")
+            year_val = _cell_str(row, "year")
+            dept_val = _cell_str(row, "department")
+
+            if not name_val or name_val.lower() == "nan" or not email_val:
+                continue
+
+            cert_code = str(uuid.uuid4())
+            pdf_url = f"{BACKEND_BASE_URL}/event-certificate/{cert_code}.pdf"
+
+            cert_record = {
+                "cert_code": cert_code,
+                "recipient_name": name_val,
+                "email": email_val,
+                "college_name": college_val,
+                "event_name": event_val,
+                "event_date": date_val,
+                "pdf_url": pdf_url,
+                "status": "active",
+                "email_status": "pending",
+                "template_path": template_path,
+                "roll_no": roll_val,
+                "year": year_val,
+                "department": dept_val
+            }
+
+            # Insert into database table 'event_certificates'
+            supabase.table("event_certificates").insert(cert_record).execute()
+
+            rows_results.append({
+                "name": name_val,
+                "college": college_val,
+                "department": dept_val,
+                "month": event_val,
+                "date": date_val,
+                "cert_code": cert_code,
+                "pdf_url": pdf_url,
+                "status": "active",
+                "email": email_val,
+                "email_status": "pending",
+                "roll_no": roll_val,
+                "year": year_val
+            })
+
+            # Save cert_code to original Excel sheet row
+            df_orig.at[index, "certificate id"] = cert_code
+
+        except Exception as row_error:
+            print(f"Row {index} failed: {row_error}")
+            df_orig.at[index, "certificate id"] = f"Error: {row_error}"
+            rows_results.append({
+                "name": str(row.get(col_mapping.get("name", ""), "Unknown")),
+                "college": str(row.get(col_mapping.get("college", ""), "Unknown")),
+                "department": "",
+                "month": "Error",
+                "cert_code": None,
+                "pdf_url": None,
+                "status": "error",
+                "error": str(row_error)
+            })
+
+    # Save output Excel sheet in cache directory
+    excel_download_url = ""
+    try:
+        file_id = str(uuid.uuid4())
+        os.makedirs("excel_cache", exist_ok=True)
+        out_path = os.path.join("excel_cache", f"{file_id}.xlsx")
+        df_orig.to_excel(out_path, index=False)
+        excel_download_url = f"{BACKEND_BASE_URL}/api/download-excel/{file_id}"
+    except Exception as save_err:
+        print(f"Failed to generate output Excel: {save_err}")
+
+    return {
+        "excel_download_url": excel_download_url,
+        "rows": rows_results
+    }
+
+
+async def get_pdf_bytes_for_event_certificate(cert_code: str) -> bytes:
+    # Check PDF cache
+    cached_pdf = pdf_cache.get(cert_code + "_event")
+    if cached_pdf:
+        return cached_pdf
+
+    if not supabase:
+        raise ValueError("Supabase client is not configured.")
+
+    # Fetch certificate record
+    res = supabase.table("event_certificates").select("*").eq("cert_code", cert_code).execute()
+    if not res.data:
+        res = supabase.table("event_certificates").select("*").eq("cert_code", cert_code.upper()).execute()
+    if not res.data:
+        res = supabase.table("event_certificates").select("*").eq("cert_code", cert_code.lower()).execute()
+
+    if not res.data:
+        raise ValueError(f"Event certificate with code {cert_code} not found.")
+
+    cert_data = res.data[0]
+    recipient_name = cert_data.get("recipient_name")
+    college_name = cert_data.get("college_name") or ""
+    event_name = cert_data.get("event_name")
+    event_date = cert_data.get("event_date") or ""
+    template_path = cert_data.get("template_path")
+    roll_no = cert_data.get("roll_no") or ""
+    year = cert_data.get("year") or ""
+    department = cert_data.get("department") or ""
+
+    # Double curly braces and double angle brackets replacements to support both styles
+    replacements = {
+        "<<NAME>>": recipient_name or "",
+        "<<RECIPIENT_NAME>>": recipient_name or "",
+        "<<COLLEGE>>": college_name or "",
+        "<<COLLEGE_NAME>>": college_name or "",
+        "<<EVENT_NAME>>": event_name or "",
+        "<<EVENT_DATE>>": event_date or "",
+        "<<ROLLNO>>": roll_no,
+        "<<ROLL_NO>>": roll_no,
+        "<<YEAR>>": year,
+        "<<DEPARTMENT>>": department,
+        "<<DEPT>>": department,
+        
+        "{{recipient_name}}": recipient_name or "",
+        "{{college_name}}": college_name or "",
+        "{{event_name}}": event_name or "",
+        "{{event_date}}": event_date or "",
+        "{{roll_no}}": roll_no,
+        "{{year}}": year,
+        "{{department}}": department
+    }
+
+    # Generate QR Code pointing to the PDF itself
+    pdf_url = f"{BACKEND_BASE_URL}/event-certificate/{cert_code}.pdf"
+    replacements["<<QR>>"] = pdf_url
+    replacements["{{qr_code}}"] = pdf_url
+
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_H,
+        box_size=12,
+        border=2
+    )
+    qr.add_data(pdf_url)
+    qr.make(fit=True)
+    from qrcode.image.pil import PilImage
+    qr_img = qr.make_image(image_factory=PilImage, fill_color="black", back_color="white")
+    qr_io = io.BytesIO()
+    try:
+        qr_img.save(qr_io, format="PNG")
+    except TypeError:
+        qr_io.seek(0)
+        qr_io.truncate(0)
+        qr_img.save(qr_io)
+    qr_bytes = qr_io.getvalue()
+
+    # Download template from templates bucket
+    if not template_path:
+      raise ValueError("No template path associated with this event certificate.")
+
+    template_bytes = supabase.storage.from_("templates").download(template_path)
+    ext = os.path.splitext(template_path)[1].lower()
+    pdf_bytes = render_certificate_pdf(template_bytes, replacements, qr_bytes, ext)
+
+    pdf_cache.set(cert_code + "_event", pdf_bytes)
+    return pdf_bytes
+
+
+@app.get("/event-certificate/{cert_code}.pdf")
+@app.get("/api/events/certificates/{cert_code}/pdf")
+async def get_event_certificate_pdf(cert_code: str):
+    from fastapi.responses import StreamingResponse
+    try:
+        pdf_bytes = await get_pdf_bytes_for_event_certificate(cert_code)
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"inline; filename={cert_code}.pdf"}
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Certificate PDF generation failed or file not found: {str(e)}"
+        )
+
+
+@app.post("/api/events/certificates/{cert_code}/send-email")
+async def send_event_email_endpoint(cert_code: str):
+    if not supabase:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Supabase client is not configured."
+        )
+
+    smtp_server = os.getenv("SMTP_SERVER")
+    smtp_port = os.getenv("SMTP_PORT", "587")
+    smtp_username = os.getenv("SMTP_USERNAME")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    smtp_from_email = os.getenv("SMTP_FROM_EMAIL")
+    smtp_from_name = os.getenv("SMTP_FROM_NAME", "CopterCode Team")
+
+    email_logo_url = os.getenv("EMAIL_LOGO_URL", "https://coptercode-website.vercel.app/coptercode-logo.svg").strip()
+    email_hero_image_url = os.getenv("EMAIL_HERO_IMAGE_URL", "https://coptercode-website.vercel.app/hero-3.jpg").strip()
+
+    # Override logo & hero from DB if settings exist
+    try:
+        _settings_res = supabase.table("email_template_settings").select("logo_url,hero_image_url").eq("id", 1).maybe_single().execute()
+        if _settings_res and _settings_res.data:
+            _s = _settings_res.data
+            if _s.get("logo_url"):
+                email_logo_url = _s["logo_url"].strip()
+            if _s.get("hero_image_url"):
+                email_hero_image_url = _s["hero_image_url"].strip()
+    except Exception as _db_err:
+        print(f"[email] Could not read email_template_settings: {_db_err}")
+
+    if not smtp_server or not smtp_username or not smtp_password or not smtp_from_email:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="SMTP credentials not fully configured."
+        )
+
+    try:
+        # Fetch certificate details
+        res = supabase.table("event_certificates").select("*").eq("cert_code", cert_code).execute()
+        if not res.data:
+            res = supabase.table("event_certificates").select("*").eq("cert_code", cert_code.upper()).execute()
+        if not res.data:
+            res = supabase.table("event_certificates").select("*").eq("cert_code", cert_code.lower()).execute()
+
+        if not res.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Event certificate with code {cert_code} not found."
+            )
+
+        cert_data = res.data[0]
+        recipient_name = cert_data.get("recipient_name")
+        email_val = cert_data.get("email")
+        college_name = cert_data.get("college_name") or ""
+        event_name = cert_data.get("event_name")
+        event_date = cert_data.get("event_date") or ""
+
+        # Update local status in database to sending
+        supabase.table("event_certificates").update({"email_status": "sending"}).eq("cert_code", cert_code).execute()
+
+        # Build email structure
+        msg = MIMEMultipart("mixed")
+        msg["Subject"] = f"Congratulations on Successfully Completing {event_name}"
+        msg["From"] = f"{smtp_from_name} <{smtp_from_email}>"
+        msg["To"] = email_val
+
+        # Create alternative part for HTML body
+        msg_alternative = MIMEMultipart("alternative")
+        msg.attach(msg_alternative)
+
+        # Event Certificate PDF attachment URL (CTA link)
+        pdf_url = f"{BACKEND_BASE_URL}/event-certificate/{cert_code}.pdf"
+
+        # HTML template provided by user
+        html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Congratulations on Successfully Completing {event_name}</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 0; -webkit-font-smoothing: antialiased;">
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; padding: 40px 0;">
+        <tr>
+            <td align="center">
+                <!-- Main Email Card container -->
+                <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.035); border: 1px solid #e2e8f0;">
+
+                    <!-- Header with Logo and Brand Name -->
+                    <tr>
+                        <td align="center" style="background-color: #ffffff; padding: 36px 24px 28px 24px;">
+                            <table border="0" cellpadding="0" cellspacing="0" align="center" style="margin: 0 auto;">
+                                <tr>
+                                    <td style="vertical-align: middle;">
+                                        <img src="{email_logo_url}" alt="CopterCode Logo" style="height: 48px; width: auto; display: block; border-radius: 12px;" />
+                                    </td>
+                                    <td style="vertical-align: middle; padding-left: 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 26px; font-weight: 750; color: #0f172a; letter-spacing: -0.5px; line-height: 1;">
+                                        CopterCode
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Hero Image Banner -->
+                    <tr>
+                        <td style="padding: 0 24px;">
+                            <img src="{email_hero_image_url}" alt="Congratulations - Event Completed" style="width: 100%; height: auto; display: block; border-radius: 12px; object-fit: cover;" />
+                        </td>
+                    </tr>
+
+                    <!-- Email Content Body -->
+                    <tr>
+                        <td style="padding: 36px 36px 24px 36px;">
+                            <h2 style="font-size: 16px; font-weight: 700; color: #0f172a; margin: 0 0 16px 0;">Greetings, {recipient_name}!</h2>
+
+                            <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 18px 0;">
+                                We are pleased to inform you that you have successfully completed <strong>{event_name}</strong>, held on <strong>{event_date}</strong>, organized by <strong>CopterCode</strong>. Your dedication, engagement, and enthusiasm throughout the event have been truly commendable.
+                            </p>
+
+                            <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 18px 0;">
+                                This certifies that <strong>{recipient_name}</strong> from <strong>{college_name}</strong> has successfully participated in and completed the above event.
+                            </p>
+
+                            <!-- CTA Button to view certificate -->
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 24px 0;">
+                                <tr>
+                                    <td align="center">
+                                        <table border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
+                                            <tr>
+                                                <td align="center" style="background-color: #5844e9; border-radius: 8px;">
+                                                    <a href="{pdf_url}" target="_blank" style="display: inline-block; padding: 14px 28px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; font-weight: 700; color: #ffffff !important; text-decoration: none; border-radius: 8px;">View Certificate PDF</a>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 24px 0 18px 0;">
+                                We extend our heartfelt congratulations and best wishes for your future endeavors. We are confident that the knowledge and skills you have gained will serve you well going forward.
+                            </p>
+
+                            <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px 0;">
+                                Please feel free to stay in touch with us for any guidance or future opportunities. We look forward to seeing you achieve great success ahead.
+                            </p>
+
+                            <p style="margin: 24px 0 0 0; font-size: 14px; color: #475569; font-weight: 500; line-height: 1.5;">
+                                Best regards,<br>
+                                <span style="font-weight: 700; font-size: 15px; color: #0f172a; display: block; margin: 4px 0 2px 0;">HR Team</span>
+                                <span style="font-weight: 600; color: #334155;">CopterCode</span>
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Premium Dark Footer with Contact and Social Links -->
+                    <tr>
+                        <td style="background-color: #0f172a; padding: 24px 36px; color: #f8fafc; font-size: 13px; line-height: 1.6; border-bottom-left-radius: 15px; border-bottom-right-radius: 15px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td valign="top" align="left">
+                                        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; line-height: 2.0; color: #cbd5e1;">
+                                            <a href="mailto:hr@coptercode.co.in" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500; white-space: nowrap;">hr@coptercode.co.in</a>
+                                            <span style="padding: 0 10px; color: #334155;">|</span>
+                                            <a href="https://www.coptercode.co.in/" target="_blank" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500; white-space: nowrap;">https://www.coptercode.co.in/</a>
+                                            <span style="padding: 0 10px; color: #334155;">|</span>
+                                            <a href="https://www.instagram.com/coptercode/" target="_blank" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500; white-space: nowrap;">Instagram</a>
+                                            <span style="padding: 0 10px; color: #334155;">|</span>
+                                            <a href="https://www.linkedin.com/company/coptercode/" target="_blank" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500; white-space: nowrap;">LinkedIn</a>
+                                            <span style="padding: 0 10px; color: #334155;">|</span>
+                                            <a href="tel:+918072193600" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500; white-space: nowrap;">+91 8072 193 600</a>
+                                            <span style="padding: 0 10px; color: #334155;">|</span>
+                                            <a href="tel:04461329380" style="color: #a5b4fc !important; text-decoration: none; font-weight: 500; white-space: nowrap;">044 6132 9380</a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="padding-top: 20px; border-top: 1px solid #334155; margin-top: 0; font-size: 10px; color: #64748b;">
+                                        This is an automated message. Please do not reply directly to this mail.
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+"""
+        msg_alternative.attach(MIMEText(html_content, "html"))
+
+        # Generate and attach the certificate PDF
+        from email.mime.application import MIMEApplication
+        pdf_bytes = await get_pdf_bytes_for_event_certificate(cert_code)
+        part = MIMEApplication(pdf_bytes, Name=f"{recipient_name}_Certificate.pdf")
+        part['Content-Disposition'] = f'attachment; filename="{recipient_name}_Certificate.pdf"'
+        msg.attach(part)
+
+        # Dispatch SMTP mail
+        server = smtplib.SMTP(smtp_server, int(smtp_port))
+        server.set_debuglevel(1)
+        if int(smtp_port) == 587:
+            server.starttls()
+        server.login(smtp_username, smtp_password)
+        server.sendmail(smtp_from_email, email_val, msg.as_string())
+        server.quit()
+
+        # Update database table status to sent
+        supabase.table("event_certificates").update({"email_status": "sent"}).eq("cert_code", cert_code).execute()
+        return {"status": "success", "message": "Email sent successfully"}
+
+    except Exception as email_err:
+        print(f"Error sending email to {cert_code}: {email_err}")
+        try:
+            # Revert/update status to failed in database
+            supabase.table("event_certificates").update({"email_status": "failed"}).eq("cert_code", cert_code).execute()
+        except:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to send email: {str(email_err)}"
+        )
+
 
 @app.get("/api/certificates/export")
 def export_certificates_history(

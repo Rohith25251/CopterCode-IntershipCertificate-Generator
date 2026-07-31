@@ -29,7 +29,9 @@ import {
   Edit2,
   Users,
   X,
-  Menu
+  Menu,
+  FileSpreadsheet,
+  ExternalLink
 } from "lucide-react";
 import JSZip from "jszip";
 import { supabase, anonSupabase } from "@/lib/supabase";
@@ -210,6 +212,7 @@ interface CertRow {
   intern_id?: string;
   email?: string;
   email_status?: "pending" | "sending" | "sent" | "failed";
+  date?: string;
 }
 
 // ─── Field Box type (left-top corner + width/height, all as fractions 0–1) ──────────────────
@@ -274,9 +277,28 @@ export default function AdminDashboard() {
   const [emailSettingsError, setEmailSettingsError] = useState("");
   const [emailSettingsSaving, setEmailSettingsSaving] = useState(false);
 
-  // Tab State: "generator" | "history" | "registration" | "profile"
-  const [activeTab, setActiveTab] = useState<"generator" | "history" | "registration" | "profile">("generator");
+  // Tab State: "generator" | "history" | "registration" | "profile" | "events"
+  const [activeTab, setActiveTab] = useState<"generator" | "history" | "registration" | "profile" | "events">("generator");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Event states
+  const [generatorType, setGeneratorType] = useState<"internship" | "event">("internship");
+  const [eventTemplateFile, setEventTemplateFile] = useState<File | null>(null);
+  const [eventName, setEventName] = useState<string>("");
+  const [eventDate, setEventDate] = useState<string>("");
+  const [eventTemplatePath, setEventTemplatePath] = useState<string>("");
+
+  // Event certificates history tab state
+  const [eventCerts, setEventCerts] = useState<any[]>([]);
+  const [eventLoading, setEventLoading] = useState<boolean>(false);
+  const [eventError, setEventError] = useState<string>("");
+  const [eventQuery, setEventQuery] = useState<string>("");
+  const [selectedEventCertIds, setSelectedEventCertIds] = useState<Set<string>>(new Set());
+  const [isSendingEventEmails, setIsSendingEventEmails] = useState<boolean>(false);
+  const [eventEmailProgress, setEventEmailProgress] = useState({ done: 0, total: 0 });
+  const [isExportingEventExcel, setIsExportingEventExcel] = useState<boolean>(false);
+  const [isExportingEventZip, setIsExportingEventZip] = useState<boolean>(false);
+  const [eventZipProgress, setEventZipProgress] = useState({ done: 0, total: 0 });
 
   // Registration state
   const [registrations, setRegistrations] = useState<any[]>([]);
@@ -413,6 +435,73 @@ export default function AdminDashboard() {
       return true;
     });
   }, [historyCerts, historyQuery, selectedDept, selectedDomain, selectedProject, selectedCollege, selectedBatch]);
+
+  const [selectedEventName, setSelectedEventName] = useState<string>("");
+  const [selectedEventCollege, setSelectedEventCollege] = useState<string>("");
+  const [selectedEventDept, setSelectedEventDept] = useState<string>("");
+  const [selectedEventYear, setSelectedEventYear] = useState<string>("");
+  const [selectedEventDate, setSelectedEventDate] = useState<string>("");
+
+  const eventMetadata = React.useMemo(() => {
+    const events = new Set<string>();
+    const colleges = new Set<string>();
+    const depts = new Set<string>();
+    const years = new Set<string>();
+    const dates = new Set<string>();
+
+    eventCerts.forEach((c) => {
+      if (c.event_name) events.add(c.event_name);
+      if (c.college_name) colleges.add(c.college_name);
+      if (c.department) depts.add(c.department);
+      if (c.year) years.add(c.year);
+      if (c.event_date) dates.add(c.event_date);
+    });
+
+    return {
+      uniqueEvents: Array.from(events).sort(),
+      uniqueColleges: Array.from(colleges).sort(),
+      uniqueDepts: Array.from(depts).sort(),
+      uniqueYears: Array.from(years).sort(),
+      uniqueDates: Array.from(dates).sort()
+    };
+  }, [eventCerts]);
+
+  const filteredEventCerts = React.useMemo(() => {
+    return eventCerts.filter((c) => {
+      const q = eventQuery.toLowerCase().trim();
+      if (q) {
+        const name = (c.recipient_name || "").toLowerCase();
+        const college = (c.college_name || "").toLowerCase();
+        const code = (c.cert_code || "").toLowerCase();
+        const email = (c.email || "").toLowerCase();
+        const roll = (c.roll_no || "").toLowerCase();
+        const matchesQuery = (
+          name.includes(q) || 
+          college.includes(q) || 
+          code.includes(q) || 
+          email.includes(q) || 
+          roll.includes(q)
+        );
+        if (!matchesQuery) return false;
+      }
+
+      if (selectedEventName && c.event_name !== selectedEventName) return false;
+      if (selectedEventCollege && c.college_name !== selectedEventCollege) return false;
+      if (selectedEventDept && c.department !== selectedEventDept) return false;
+      if (selectedEventYear && c.year !== selectedEventYear) return false;
+      if (selectedEventDate && c.event_date !== selectedEventDate) return false;
+
+      return true;
+    });
+  }, [
+    eventCerts, 
+    eventQuery, 
+    selectedEventName, 
+    selectedEventCollege, 
+    selectedEventDept, 
+    selectedEventYear, 
+    selectedEventDate
+  ]);
 
   // Dynamically calculate stats and unique filter values from registrations
   const {
@@ -681,6 +770,47 @@ export default function AdminDashboard() {
       anonSupabase.removeChannel(internsChannel);
     };
   }, [session, activeTab, fetchHistoryCerts]);
+
+  const fetchEventCerts = useCallback(async () => {
+    setEventLoading(true);
+    setEventError("");
+    setSelectedEventCertIds(new Set());
+    try {
+      const { data, error } = await anonSupabase
+        .from("event_certificates")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setEventCerts(data || []);
+    } catch (err: any) {
+      console.error(err);
+      setEventError(err.message || "Failed to load event certificates.");
+    } finally {
+      setEventLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!session || activeTab !== "events") return;
+
+    fetchEventCerts();
+
+    const eventChannel = anonSupabase
+      .channel("events-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "event_certificates" },
+        (payload) => {
+          console.log("Realtime change in event certificates:", payload);
+          fetchEventCerts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      anonSupabase.removeChannel(eventChannel);
+    };
+  }, [session, activeTab, fetchEventCerts]);
 
   const fetchRegistrations = useCallback(async () => {
     setRegLoading(true);
@@ -1073,6 +1203,132 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDownloadEventExcel = () => {
+    setIsExportingEventExcel(true);
+    try {
+      const targetCerts = selectedEventCertIds.size > 0
+        ? eventCerts.filter((c) => selectedEventCertIds.has(c.cert_code))
+        : filteredEventCerts;
+
+      if (targetCerts.length === 0) {
+        alert("No records to export.");
+        return;
+      }
+
+      // Generate CSV
+      const headers = ["Participant Name", "Email", "College Name", "Event Name", "Event Date", "Certificate ID", "PDF URL", "Created At"];
+      const rows = targetCerts.map((c) => [
+        `"${(c.recipient_name || "").replace(/"/g, '""')}"`,
+        `"${(c.email || "").replace(/"/g, '""')}"`,
+        `"${(c.college_name || "").replace(/"/g, '""')}"`,
+        `"${(c.event_name || "").replace(/"/g, '""')}"`,
+        `"${(c.event_date || "").replace(/"/g, '""')}"`,
+        `"${c.cert_code || ""}"`,
+        `"${c.pdf_url || ""}"`,
+        `"${c.created_at || ""}"`
+      ]);
+
+      const csvContent = "data:text/csv;charset=utf-8," 
+        + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `event_participants_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Failed to export events CSV", err);
+    } finally {
+      setIsExportingEventExcel(false);
+    }
+  };
+
+  const handleDownloadEventZip = async (certsList: any[]) => {
+    const certsWithPdf = certsList.filter((c) => c.status === "active" && c.pdf_url);
+    if (certsWithPdf.length === 0) {
+      alert("No valid certificate PDF links found to download.");
+      return;
+    }
+
+    setIsExportingEventZip(true);
+    setEventZipProgress({ done: 0, total: certsWithPdf.length });
+
+    try {
+      const zip = new JSZip();
+      let zipTitle = "Event_Certificates";
+
+      for (let i = 0; i < certsWithPdf.length; i++) {
+        const cert = certsWithPdf[i];
+        try {
+          const res = await fetch(cert.pdf_url);
+          if (!res.ok) throw new Error("Fetch failed");
+          const blob = await res.blob();
+          const safeName = (cert.recipient_name || "Participant").replace(/[^a-zA-Z0-9_\- ]/g, "").trim();
+          const eventNameClean = (cert.event_name || "Event").replace(/[^a-zA-Z0-9_\- ]/g, "").trim();
+          zip.file(`${safeName}_(${eventNameClean}).pdf`, blob);
+        } catch (err) {
+          console.error("Failed to fetch PDF for zip", err);
+        }
+        setEventZipProgress({ done: i + 1, total: certsWithPdf.length });
+      }
+
+      const content = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
+      const downloadUrl = URL.createObjectURL(content);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `${zipTitle}.zip`;
+      a.click();
+      URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error("Failed to generate event ZIP", err);
+    } finally {
+      setIsExportingEventZip(false);
+      setEventZipProgress({ done: 0, total: 0 });
+    }
+  };
+
+  const handleSendEventEmails = async (certsList: any[]) => {
+    const activeCerts = certsList.filter((c) => c.status === "active" && c.email_status !== "sent");
+    if (activeCerts.length === 0) {
+      alert("No active certificates pending email delivery.");
+      return;
+    }
+
+    setIsSendingEventEmails(true);
+    setEventEmailProgress({ done: 0, total: activeCerts.length });
+
+    for (let i = 0; i < activeCerts.length; i++) {
+      const cert = activeCerts[i];
+      try {
+        const base = backendUrl.replace(/\/+$/, "");
+        const res = await fetch(`${base}/api/events/certificates/${cert.cert_code}/send-email`, {
+          method: "POST"
+        });
+        if (res.ok) {
+          // Refresh event list to show update
+          setEventCerts((prev) =>
+            prev.map((c) => (c.cert_code === cert.cert_code ? { ...c, email_status: "sent" } : c))
+          );
+        } else {
+          setEventCerts((prev) =>
+            prev.map((c) => (c.cert_code === cert.cert_code ? { ...c, email_status: "failed" } : c))
+          );
+        }
+      } catch (err) {
+        console.error("Failed to send event email", err);
+        setEventCerts((prev) =>
+          prev.map((c) => (c.cert_code === cert.cert_code ? { ...c, email_status: "failed" } : c))
+        );
+      }
+      setEventEmailProgress({ done: i + 1, total: activeCerts.length });
+    }
+
+    setIsSendingEventEmails(false);
+    setEventEmailProgress({ done: 0, total: 0 });
+  };
+
   // App state (1 = upload assets, 2 = generation run)
   const [step, setStep] = useState<1 | 2>(1);
   const [backendUrl, setBackendUrl] = useState<string>(() => {
@@ -1083,7 +1339,7 @@ export default function AdminDashboard() {
 
   const getResolvedPdfUrl = useCallback((url: string | undefined) => {
     if (!url) return "";
-    const markers = ["/api/certificates/", "/certificate/"];
+    const markers = ["/api/certificates/", "/certificate/", "/api/events/certificates/", "/event-certificate/"];
     for (const marker of markers) {
       const index = url.indexOf(marker);
       if (index !== -1) {
@@ -1168,6 +1424,32 @@ export default function AdminDashboard() {
 
   const handleSendEmail = async (index: number) => {
     const row = generationResults[index];
+    if (generatorType === "event") {
+      if (!row.cert_code) return;
+      
+      setGenerationResults((prev) =>
+        prev.map((r, i) => (i === index ? { ...r, email_status: "sending" } : r))
+      );
+
+      try {
+        const base = backendUrl.replace(/\/+$/, "");
+        const res = await fetch(`${base}/api/events/certificates/${row.cert_code}/send-email`, {
+          method: "POST"
+        });
+        const data = await res.json();
+        const nextStatus = res.ok && data.status === "success" ? "sent" : "failed";
+        setGenerationResults((prev) =>
+          prev.map((r, i) => (i === index ? { ...r, email_status: nextStatus } : r))
+        );
+      } catch (err) {
+        console.error(err);
+        setGenerationResults((prev) =>
+          prev.map((r, i) => (i === index ? { ...r, email_status: "failed" } : r))
+        );
+      }
+      return;
+    }
+
     if (!row.intern_id) return;
 
     // Set row status to sending for all rows with the same intern_id
@@ -1195,6 +1477,28 @@ export default function AdminDashboard() {
   };
 
   const handleSendAllEmails = async () => {
+    if (generatorType === "event") {
+      const pendingIndices: number[] = [];
+      generationResults.forEach((row, idx) => {
+        if (row.cert_code && row.status === "active" && row.email_status !== "sent") {
+          pendingIndices.push(idx);
+        }
+      });
+
+      if (pendingIndices.length === 0) {
+        alert("No pending emails to send.");
+        return;
+      }
+
+      setIsSendingEmails(true);
+      for (let i = 0; i < pendingIndices.length; i++) {
+        const idx = pendingIndices[i];
+        await handleSendEmail(idx);
+      }
+      setIsSendingEmails(false);
+      return;
+    }
+
     // Find unique intern_ids that are pending
     const seen = new Set<string>();
     const pendingIndices: number[] = [];
@@ -1286,6 +1590,56 @@ export default function AdminDashboard() {
 
   const handleBatchCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (generatorType === "event") {
+      if (!eventName || !eventDate) {
+        setErrorMsg("Please fill in all event details (Event Name and Event Date).");
+        return;
+      }
+      if (!eventTemplateFile) {
+        setErrorMsg("Please upload an HTML or PPTX event certificate template.");
+        return;
+      }
+
+      setIsUploadingTemplate(true);
+      setErrorMsg("");
+
+      const formData = new FormData();
+      formData.append("event_name", eventName.trim());
+      formData.append("event_date", eventDate.trim());
+      formData.append("event_template", eventTemplateFile);
+
+      try {
+        const base = backendUrl.replace(/\/+$/, "");
+        const response = await fetch(`${base}/api/events/batch/create`, {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.detail || "Failed to configure event template.");
+        }
+
+        const data = await response.json();
+        setTemplateId(data.event_id); // Save event_id to templateId for Step 2 UI compat
+        setEventTemplatePath(data.template_path); // Save event template path for generation step
+
+        // Auto-advance to Step 2
+        setStep(2);
+      } catch (err: unknown) {
+        console.error(err);
+        if (err instanceof TypeError) {
+          setErrorMsg("Network error: failed to reach backend. Check that the backend is running and the Backend URL is correct.");
+        } else {
+          setErrorMsg(getErrorMessage(err) || "An error occurred connecting to the backend server.");
+        }
+      } finally {
+        setIsUploadingTemplate(false);
+      }
+      return;
+    }
+
+    // Existing Internship Flow
     if (!batchId || !batchMonth || !issueDate) {
       setErrorMsg("Please fill in all batch details (Batch ID, Month, and Issue Date).");
       return;
@@ -1308,7 +1662,8 @@ export default function AdminDashboard() {
     if (internshipTemplateFile) formData.append("internship_template", internshipTemplateFile);
 
     try {
-      const response = await fetch(`${backendUrl}/api/batch/create`, {
+      const base = backendUrl.replace(/\/+$/, "");
+      const response = await fetch(`${base}/api/batch/create`, {
         method: "POST",
         body: formData,
       });
@@ -1346,11 +1701,21 @@ export default function AdminDashboard() {
     setErrorMsg("");
 
     const formData = new FormData();
-    formData.append("batch_id", templateId);
-    formData.append("excel_file", excelFile);
+    if (generatorType === "event") {
+      formData.append("event_id", templateId);
+      formData.append("template_path", eventTemplatePath);
+      formData.append("excel_file", excelFile);
+      formData.append("event_name", eventName);
+      formData.append("event_date", eventDate);
+    } else {
+      formData.append("batch_id", templateId);
+      formData.append("excel_file", excelFile);
+    }
 
     try {
-      const response = await fetch(`${backendUrl}/api/generate`, {
+      const base = backendUrl.replace(/\/+$/, "");
+      const endpoint = generatorType === "event" ? "/api/events/generate" : "/api/generate";
+      const response = await fetch(`${base}${endpoint}`, {
         method: "POST",
         body: formData,
       });
@@ -1383,10 +1748,14 @@ export default function AdminDashboard() {
     setLorTemplateFile(null);
     setExperienceTemplateFile(null);
     setInternshipTemplateFile(null);
+    setEventTemplateFile(null);
     setExcelFile(null);
     setBatchId("");
     setBatchMonth("");
     setIssueDate("");
+    setEventName("");
+    setEventDate("");
+    setEventTemplatePath("");
     setTemplateId("");
     setExcelDownloadUrl("");
     setGenerationResults([]);
@@ -1561,6 +1930,13 @@ export default function AdminDashboard() {
               <Database size={14} /> Interns
             </button>
             <button
+              onClick={() => setActiveTab("events")}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeTab === "events" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-900"
+                }`}
+            >
+              <Database size={14} /> Events
+            </button>
+            <button
               onClick={() => setActiveTab("registration")}
               className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeTab === "registration" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-900"
                 }`}
@@ -1663,8 +2039,7 @@ export default function AdminDashboard() {
                   </p>
                 </div>
               </div>
-
-              {/* Action indicator button/icon on right */}
+{/* Action indicator button/icon on right */}
               <div className="hidden lg:flex items-center gap-2 shrink-0">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Status</span>
                 <div className="flex items-center gap-2 bg-[#12a150] px-4 py-2 rounded-full shadow-[0_4px_12px_rgba(18,161,80,0.15)] select-none">
@@ -1683,213 +2058,353 @@ export default function AdminDashboard() {
                   Upload Base <span className="text-[#3b82f6]">Certificate Templates</span>
                 </h2>
                 <form onSubmit={handleBatchCreate} className="space-y-8">
-
-                  {/* Three HTML or PPTX Templates Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-                    {/* 1. LOR Template */}
-                    <div className="relative group">
-                      <label className="block text-sm font-bold text-zinc-400 mb-2">
-                        1. Letter of Recommendation (LOR) HTML or PPTX
-                      </label>
-                      <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${lorTemplateFile
-                          ? "border-[#3b82f6]/60 bg-[#3b82f6]/8"
-                          : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
-                        }`}>
-                        <input
-                          type="file"
-                          accept="text/html,.html,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
-                          onChange={(e) => setLorTemplateFile(e.target.files?.[0] || null)}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        />
-                        <FileText className={`w-10 h-10 mb-3 transition-colors ${lorTemplateFile ? "text-[#3b82f6]" : "text-zinc-500 group-hover:text-zinc-400"}`} />
-                        {lorTemplateFile ? (
-                          <div className="text-center">
-                            <p className="text-xs font-bold text-white truncate max-w-[200px]">{lorTemplateFile.name}</p>
-                            <p className="text-[10px] text-zinc-400 mt-0.5">{(lorTemplateFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); setLorTemplateFile(null); }}
-                              className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="text-center">
-                            <p className="text-xs font-semibold text-zinc-200">Upload LOR HTML or PPTX</p>
-                            <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
-                          </div>
-                        )}
-                      </div>
+                  {/* Run Type Toggle Switch */}
+                  <div className="mb-6 bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Certificate Run Type</h3>
+                      <p className="text-xs text-zinc-400 mt-0.5">Choose between issuing internship certificates or event completion certificates.</p>
                     </div>
-
-                    {/* 2. Experience Letter Template */}
-                    <div className="relative group">
-                      <label className="block text-sm font-bold text-zinc-400 mb-2">
-                        2. Experience Letter HTML or PPTX
-                      </label>
-                      <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${experienceTemplateFile
-                          ? "border-[#3b82f6]/60 bg-[#3b82f6]/8"
-                          : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
-                        }`}>
-                        <input
-                          type="file"
-                          accept="text/html,.html,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
-                          onChange={(e) => setExperienceTemplateFile(e.target.files?.[0] || null)}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        />
-                        <FileText className={`w-10 h-10 mb-3 transition-colors ${experienceTemplateFile ? "text-[#3b82f6]" : "text-zinc-500 group-hover:text-zinc-400"}`} />
-                        {experienceTemplateFile ? (
-                          <div className="text-center">
-                            <p className="text-xs font-bold text-white truncate max-w-[200px]">{experienceTemplateFile.name}</p>
-                            <p className="text-[10px] text-zinc-400 mt-0.5">{(experienceTemplateFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); setExperienceTemplateFile(null); }}
-                              className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="text-center">
-                            <p className="text-xs font-semibold text-zinc-200">Upload Experience HTML or PPTX</p>
-                            <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
-                          </div>
-                        )}
-                      </div>
+                    <div className="flex items-center gap-1 bg-[#0b0f19] rounded-xl p-1 border border-zinc-850 shadow-sm shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => { setGeneratorType("internship"); handleReset(); }}
+                        className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${generatorType === "internship" ? "bg-blue-600 text-white shadow-sm" : "text-zinc-400 hover:text-white"}`}
+                      >
+                        Internships
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setGeneratorType("event"); handleReset(); setGeneratorType("event"); }}
+                        className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${generatorType === "event" ? "bg-blue-600 text-white shadow-sm" : "text-zinc-400 hover:text-white"}`}
+                      >
+                        Events
+                      </button>
                     </div>
-
-                    {/* 3. Internship Certificate Template */}
-                    <div className="relative group">
-                      <label className="block text-sm font-bold text-zinc-400 mb-2">
-                        3. Internship Certificate HTML or PPTX
-                      </label>
-                      <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${internshipTemplateFile
-                          ? "border-[#3b82f6]/60 bg-[#3b82f6]/8"
-                          : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
-                        }`}>
-                        <input
-                          type="file"
-                          accept="text/html,.html,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
-                          onChange={(e) => setInternshipTemplateFile(e.target.files?.[0] || null)}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        />
-                        <FileText className={`w-10 h-10 mb-3 transition-colors ${internshipTemplateFile ? "text-[#3b82f6]" : "text-zinc-500 group-hover:text-zinc-400"}`} />
-                        {internshipTemplateFile ? (
-                          <div className="text-center">
-                            <p className="text-xs font-bold text-white truncate max-w-[200px]">{internshipTemplateFile.name}</p>
-                            <p className="text-[10px] text-zinc-400 mt-0.5">{(internshipTemplateFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); setInternshipTemplateFile(null); }}
-                              className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="text-center">
-                            <p className="text-xs font-semibold text-zinc-200">Upload Internship HTML or PPTX</p>
-                            <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
                   </div>
 
-                  {/* Excel and Batch Details Split */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-
-                    {/* Excel Upload */}
-                    <div className="relative group">
-                      <label className="block text-sm font-bold text-zinc-400 mb-2">
-                        4. Intern Details Sheet (.xlsx)
-                      </label>
-                      <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${excelFile
-                          ? "border-emerald-500/60 bg-emerald-500/8"
-                          : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
-                        }`}>
-                        <input
-                          type="file"
-                          accept=".xlsx,.xls"
-                          onChange={(e) => setExcelFile(e.target.files?.[0] || null)}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        />
-                        <FileText className={`w-10 h-10 mb-3 transition-colors ${excelFile ? "text-emerald-400" : "text-zinc-500 group-hover:text-zinc-400"}`} />
-                        {excelFile ? (
-                          <div className="text-center">
-                            <p className="text-xs font-bold text-white truncate max-w-[240px]">{excelFile.name}</p>
-                            <p className="text-[10px] text-zinc-400 mt-0.5">{(excelFile.size / 1024).toFixed(1)} KB • Has YES/NO columns</p>
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); setExcelFile(null); }}
-                              className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="text-center">
-                            <p className="text-xs font-semibold text-zinc-200">Drag & drop your Excel sheet here</p>
-                            <p className="text-[10px] text-zinc-500 mt-0.5">Must contain Email and certificate choice columns</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Batch Details Form */}
-                    <div className="bg-[#0b0f19]/85 border border-zinc-800 rounded-2xl p-6 space-y-4">
-                      <h3 className="text-sm font-bold text-zinc-400 border-b border-zinc-850 pb-2">
-                        5. Batch Release Details
-                      </h3>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
-                            Batch ID
+                  {generatorType === "event" ? (
+                    /* Event Mode Step 1 Fields */
+                    <div className="space-y-8">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Event Template Upload */}
+                        <div className="relative group">
+                          <label className="block text-sm font-bold text-zinc-400 mb-2">
+                            1. Event Certificate HTML or PPTX
                           </label>
-                          <input
-                            type="text"
-                            required
-                            value={batchId}
-                            onChange={(e) => setBatchId(e.target.value)}
-                            placeholder="e.g. Batch_34_ERP"
-                            className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500 focus:bg-black transition-colors"
-                          />
+                          <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-350 flex flex-col items-center justify-center min-h-[180px] ${eventTemplateFile
+                              ? "border-[#3b82f6]/60 bg-[#3b82f6]/8"
+                              : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
+                            }`}>
+                            <input
+                              type="file"
+                              accept="text/html,.html,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
+                              onChange={(e) => setEventTemplateFile(e.target.files?.[0] || null)}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <FileText className={`w-10 h-10 mb-3 transition-colors ${eventTemplateFile ? "text-[#3b82f6]" : "text-zinc-500 group-hover:text-zinc-400"}`} />
+                            {eventTemplateFile ? (
+                              <div className="text-center">
+                                <p className="text-xs font-bold text-white truncate max-w-[200px]">{eventTemplateFile.name}</p>
+                                <p className="text-[10px] text-zinc-400 mt-0.5">{(eventTemplateFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setEventTemplateFile(null); }}
+                                  className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="text-center">
+                                <p className="text-xs font-semibold text-zinc-200">Upload Event Template HTML or PPTX</p>
+                                <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
-                            Month / Year
+
+                        {/* Excel Upload (Reused) */}
+                        <div className="relative group">
+                          <label className="block text-sm font-bold text-zinc-400 mb-2">
+                            2. Event Participant Details Sheet (.xlsx)
                           </label>
-                          <input
-                            type="text"
-                            required
-                            value={batchMonth}
-                            onChange={(e) => setBatchMonth(e.target.value)}
-                            placeholder="e.g. July 2026"
-                            className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500 focus:bg-black transition-colors"
-                          />
+                          <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-305 flex flex-col items-center justify-center min-h-[180px] ${excelFile
+                              ? "border-emerald-500/60 bg-emerald-500/8"
+                              : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
+                            }`}>
+                            <input
+                              type="file"
+                              accept=".xlsx,.xls"
+                              onChange={(e) => setExcelFile(e.target.files?.[0] || null)}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <FileText className={`w-10 h-10 mb-3 transition-colors ${excelFile ? "text-emerald-400" : "text-zinc-500 group-hover:text-zinc-400"}`} />
+                            {excelFile ? (
+                              <div className="text-center">
+                                <p className="text-xs font-bold text-white truncate max-w-[240px]">{excelFile.name}</p>
+                                <p className="text-[10px] text-zinc-400 mt-0.5">{(excelFile.size / 1024).toFixed(1)} KB</p>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setExcelFile(null); }}
+                                  className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="text-center">
+                                <p className="text-xs font-semibold text-zinc-200">Drag & drop your Excel sheet here</p>
+                                <p className="text-[10px] text-zinc-500 mt-0.5">Must contain Email and Name columns</p>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
-                          Certificate Issue Date
-                        </label>
-                        <input
-                          type="date"
-                          required
-                          value={issueDate}
-                          onChange={(e) => setIssueDate(e.target.value)}
-                          className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500 focus:bg-black transition-colors"
-                        />
+                      {/* Event Details Form */}
+                      <div className="bg-[#0b0f19]/85 border border-zinc-800 rounded-2xl p-6 space-y-4">
+                        <h3 className="text-sm font-bold text-zinc-400 border-b border-zinc-850 pb-2">
+                          3. Event Information Details
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
+                              Event Name
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={eventName}
+                              onChange={(e) => setEventName(e.target.value)}
+                              placeholder="e.g. Flutter Bootcamp 2026"
+                              className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500 focus:bg-black transition-colors"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
+                              Event Date
+                            </label>
+                            <input
+                              type="date"
+                              required
+                              value={eventDate}
+                              onChange={(e) => setEventDate(e.target.value)}
+                              className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500 focus:bg-black transition-colors"
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
+                  ) : (
+                    /* Original Internship Mode Fields */
+                    <div className="space-y-8">
+                      {/* Three HTML or PPTX Templates Grid */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-                  </div>
+                        {/* 1. LOR Template */}
+                        <div className="relative group">
+                          <label className="block text-sm font-bold text-zinc-400 mb-2">
+                            1. Letter of Recommendation (LOR) HTML or PPTX
+                          </label>
+                          <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-350 flex flex-col items-center justify-center min-h-[180px] ${lorTemplateFile
+                              ? "border-[#3b82f6]/60 bg-[#3b82f6]/8"
+                              : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
+                            }`}>
+                            <input
+                              type="file"
+                              accept="text/html,.html,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
+                              onChange={(e) => setLorTemplateFile(e.target.files?.[0] || null)}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <FileText className={`w-10 h-10 mb-3 transition-colors ${lorTemplateFile ? "text-[#3b82f6]" : "text-zinc-500 group-hover:text-zinc-400"}`} />
+                            {lorTemplateFile ? (
+                              <div className="text-center">
+                                <p className="text-xs font-bold text-white truncate max-w-[200px]">{lorTemplateFile.name}</p>
+                                <p className="text-[10px] text-zinc-400 mt-0.5">{(lorTemplateFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setLorTemplateFile(null); }}
+                                  className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="text-center">
+                                <p className="text-xs font-semibold text-zinc-200">Upload LOR HTML or PPTX</p>
+                                <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 2. Experience Letter Template */}
+                        <div className="relative group">
+                          <label className="block text-sm font-bold text-zinc-400 mb-2">
+                            2. Experience Letter HTML or PPTX
+                          </label>
+                          <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${experienceTemplateFile
+                              ? "border-[#3b82f6]/60 bg-[#3b82f6]/8"
+                              : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
+                            }`}>
+                            <input
+                              type="file"
+                              accept="text/html,.html,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
+                              onChange={(e) => setExperienceTemplateFile(e.target.files?.[0] || null)}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <FileText className={`w-10 h-10 mb-3 transition-colors ${experienceTemplateFile ? "text-[#3b82f6]" : "text-zinc-500 group-hover:text-zinc-400"}`} />
+                            {experienceTemplateFile ? (
+                              <div className="text-center">
+                                <p className="text-xs font-bold text-white truncate max-w-[200px]">{experienceTemplateFile.name}</p>
+                                <p className="text-[10px] text-zinc-400 mt-0.5">{(experienceTemplateFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setExperienceTemplateFile(null); }}
+                                  className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="text-center">
+                                <p className="text-xs font-semibold text-zinc-200">Upload Experience HTML or PPTX</p>
+                                <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 3. Internship Certificate Template */}
+                        <div className="relative group">
+                          <label className="block text-sm font-bold text-zinc-400 mb-2">
+                            3. Internship Certificate HTML or PPTX
+                          </label>
+                          <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${internshipTemplateFile
+                              ? "border-[#3b82f6]/60 bg-[#3b82f6]/8"
+                              : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
+                            }`}>
+                            <input
+                              type="file"
+                              accept="text/html,.html,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx"
+                              onChange={(e) => setInternshipTemplateFile(e.target.files?.[0] || null)}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <FileText className={`w-10 h-10 mb-3 transition-colors ${internshipTemplateFile ? "text-[#3b82f6]" : "text-zinc-500 group-hover:text-zinc-400"}`} />
+                            {internshipTemplateFile ? (
+                              <div className="text-center">
+                                <p className="text-xs font-bold text-white truncate max-w-[200px]">{internshipTemplateFile.name}</p>
+                                <p className="text-[10px] text-zinc-400 mt-0.5">{(internshipTemplateFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setInternshipTemplateFile(null); }}
+                                  className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="text-center">
+                                <p className="text-xs font-semibold text-zinc-200">Upload Internship HTML or PPTX</p>
+                                <p className="text-[10px] text-zinc-500 mt-0.5">Drag & drop template</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                      </div>
+
+                      {/* Excel and Batch Details Split */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+
+                        {/* Excel Upload */}
+                        <div className="relative group">
+                          <label className="block text-sm font-bold text-zinc-400 mb-2">
+                            4. Intern Details Sheet (.xlsx)
+                          </label>
+                          <div className={`border-2 border-dashed rounded-2xl p-6 transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] ${excelFile
+                              ? "border-emerald-500/60 bg-emerald-500/8"
+                              : "border-zinc-800 bg-[#0b0f19]/80 hover:border-zinc-700 hover:bg-[#121626]"
+                            }`}>
+                            <input
+                              type="file"
+                              accept=".xlsx,.xls"
+                              onChange={(e) => setExcelFile(e.target.files?.[0] || null)}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <FileText className={`w-10 h-10 mb-3 transition-colors ${excelFile ? "text-emerald-400" : "text-zinc-500 group-hover:text-zinc-400"}`} />
+                            {excelFile ? (
+                              <div className="text-center">
+                                <p className="text-xs font-bold text-white truncate max-w-[240px]">{excelFile.name}</p>
+                                <p className="text-[10px] text-zinc-400 mt-0.5">{(excelFile.size / 1024).toFixed(1)} KB • Has YES/NO columns</p>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setExcelFile(null); }}
+                                  className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-red-950/40 hover:text-red-400 transition-colors"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="text-center">
+                                <p className="text-xs font-semibold text-zinc-200">Drag & drop your Excel sheet here</p>
+                                <p className="text-[10px] text-zinc-550 mt-0.5">Must contain Email and certificate choice columns</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Batch Details Form */}
+                        <div className="bg-[#0b0f19]/85 border border-zinc-800 rounded-2xl p-6 space-y-4">
+                          <h3 className="text-sm font-bold text-zinc-400 border-b border-zinc-850 pb-2">
+                            5. Batch Release Details
+                          </h3>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
+                                Batch ID
+                              </label>
+                              <input
+                                type="text"
+                                required
+                                value={batchId}
+                                onChange={(e) => setBatchId(e.target.value)}
+                                placeholder="e.g. Batch_34_ERP"
+                                className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500 focus:bg-black transition-colors"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
+                                Month / Year
+                              </label>
+                              <input
+                                type="text"
+                                required
+                                value={batchMonth}
+                                onChange={(e) => setBatchMonth(e.target.value)}
+                                placeholder="e.g. July 2026"
+                                className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white placeholder-zinc-650 focus:outline-none focus:border-blue-500 focus:bg-black transition-colors"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
+                              Certificate Issue Date
+                            </label>
+                            <input
+                              type="date"
+                              required
+                              value={issueDate}
+                              onChange={(e) => setIssueDate(e.target.value)}
+                              className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500 focus:bg-black transition-colors"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex justify-end pt-6 border-t border-zinc-800">
                     <button
@@ -2073,10 +2588,10 @@ export default function AdminDashboard() {
                       <table className="w-full text-left border-collapse text-sm">
                         <thead>
                           <tr className="border-b border-zinc-150 bg-zinc-50 text-zinc-550 text-xs font-bold font-mono">
-                            <th className="p-4">Intern Name</th>
+                            <th className="p-4">{generatorType === "event" ? "Participant Name" : "Intern Name"}</th>
                             <th className="p-4">College</th>
-                            <th className="p-4">Department</th>
-                            <th className="p-4">Batch</th>
+                            <th className="p-4">{generatorType === "event" ? "Event Name" : "Department"}</th>
+                            <th className="p-4">{generatorType === "event" ? "Event Date" : "Batch"}</th>
                             <th className="p-4">Certificate ID</th>
                             <th className="p-4">Status</th>
                             <th className="p-4">Email Status</th>
@@ -2093,19 +2608,23 @@ export default function AdminDashboard() {
                             </tr>
                           ) : (
                             generationResults.map((row, idx) => {
-                              const isFirstRowForIntern = row.intern_id
-                                ? generationResults.findIndex((r) => r.intern_id === row.intern_id) === idx
-                                : true;
-                              const internRowCount = row.intern_id
-                                ? generationResults.filter((r) => r.intern_id === row.intern_id).length
-                                : 1;
+                              const isFirstRowForIntern = generatorType === "event"
+                                ? true
+                                : (row.intern_id ? generationResults.findIndex((r) => r.intern_id === row.intern_id) === idx : true);
+                              const internRowCount = generatorType === "event"
+                                ? 1
+                                : (row.intern_id ? generationResults.filter((r) => r.intern_id === row.intern_id).length : 1);
 
                               return (
                                 <tr key={idx} className="hover:bg-zinc-50/50 transition-colors">
                                   <td className="p-4 font-bold text-zinc-800">{row.name}</td>
                                   <td className="p-4 text-zinc-650">{row.college}</td>
-                                  <td className="p-4 text-zinc-650">{row.department || "—"}</td>
-                                  <td className="p-4 font-mono text-zinc-500 text-xs">{row.month || row.year || "—"}</td>
+                                  <td className="p-4 text-zinc-650">
+                                    {generatorType === "event" ? row.month : (row.department || "—")}
+                                  </td>
+                                  <td className="p-4 font-mono text-zinc-500 text-xs">
+                                    {generatorType === "event" ? (row.date || "—") : (row.month || row.year || "—")}
+                                  </td>
                                   <td className="p-4 font-mono text-zinc-700 text-xs">
                                     {row.cert_code || <span className="text-zinc-400">—</span>}
                                   </td>
@@ -3716,6 +4235,505 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* Tab 5: Events Certificates Database */}
+        {activeTab === "events" && (
+          <div className="rounded-[32px] border border-black/5 bg-white p-8 shadow-[0_18px_60px_rgba(0,0,0,0.05)]">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 pb-6 border-b border-zinc-150">
+              <div>
+                <h2 className="font-sans text-2xl font-bold text-zinc-800 flex items-center gap-2">
+                  <Database className="text-[#5844e9]" /> Event Certificates Database
+                </h2>
+                <p className="text-xs text-zinc-500 mt-1">
+                  View, search, download PDFs, and dispatch custom email notifications to all event participants.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-4 shrink-0">
+                <button
+                  onClick={fetchEventCerts}
+                  disabled={eventLoading}
+                  className="px-4 py-2 bg-zinc-105 hover:bg-zinc-200 border border-zinc-250 text-xs font-bold text-zinc-650 rounded-xl transition-all cursor-pointer"
+                >
+                  Refresh Data
+                </button>
+              </div>
+            </div>
+
+            {/* Analytics Stats Grid for Events */}
+            {!eventLoading && eventCerts.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-xs font-extrabold text-zinc-450 uppercase tracking-wider mb-4">Event Analytics</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
+                  {/* Total Students Card */}
+                  <div className="bg-gradient-to-br from-[#5844e9] to-[#7f6cf2] rounded-[24px] p-5 text-white shadow-sm flex flex-col justify-between relative overflow-hidden group">
+                    <div className="absolute right-0 top-0 translate-x-2 -translate-y-2 opacity-10 group-hover:scale-110 transition-transform duration-500">
+                      <Users size={120} />
+                    </div>
+                    <div className="z-10">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">Total Participants / Students</p>
+                      <h4 className="text-3xl font-extrabold mt-1 tracking-tight">{eventCerts.length}</h4>
+                    </div>
+                    <div className="mt-4 flex items-center gap-1 text-[10px] text-violet-100 font-medium z-10">
+                      <Activity size={12} className="animate-pulse" />
+                      <span>Registered across all events</span>
+                    </div>
+                  </div>
+
+                  {/* Total Events Card */}
+                  <div className="bg-gradient-to-br from-emerald-600 to-teal-600 rounded-[24px] p-5 text-white shadow-sm flex flex-col justify-between relative overflow-hidden group">
+                    <div className="absolute right-0 top-0 translate-x-2 -translate-y-2 opacity-10 group-hover:scale-110 transition-transform duration-500">
+                      <Database size={120} />
+                    </div>
+                    <div className="z-10">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">Total Unique Events</p>
+                      <h4 className="text-3xl font-extrabold mt-1 tracking-tight">{eventMetadata.uniqueEvents.length}</h4>
+                    </div>
+                    <div className="mt-4 flex items-center gap-1 text-[10px] text-emerald-100 font-medium z-10">
+                      <CheckCircle size={12} />
+                      <span>Conducted and verified</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Filter and Actions Bar */}
+            <div className="mb-8 bg-zinc-50/30 border border-zinc-150 rounded-[24px] p-5 shadow-sm space-y-4">
+              <div className="flex flex-col md:flex-row gap-3">
+                {/* Search */}
+                <div className="flex-1 flex items-center gap-2.5 bg-white border border-zinc-200 rounded-xl px-4 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.02)] focus-within:ring-2 focus-within:ring-violet-500/20 focus-within:border-violet-500 transition-all">
+                  <Search size={15} className="text-zinc-400 shrink-0" />
+                  <input
+                    type="text"
+                    value={eventQuery}
+                    onChange={(e) => setEventQuery(e.target.value)}
+                    placeholder="Search by participant name, email, college, or roll number..."
+                    className="flex-1 text-xs bg-transparent outline-none text-zinc-700 placeholder:text-zinc-450"
+                  />
+                  {eventQuery && (
+                    <button
+                      onClick={() => setEventQuery("")}
+                      className="text-zinc-400 hover:text-zinc-650 cursor-pointer"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Export Filtered (CSV) */}
+                <button
+                  onClick={handleDownloadEventExcel}
+                  disabled={isExportingEventExcel || filteredEventCerts.length === 0}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold shadow-md transition-all duration-300 cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  {selectedEventCertIds.size > 0 ? "Export Selected (CSV)" : "Export Filtered (CSV)"}
+                </button>
+
+                {/* Download Filtered ZIP */}
+                <button
+                  onClick={() => handleDownloadEventZip(
+                    selectedEventCertIds.size > 0
+                      ? eventCerts.filter((c) => selectedEventCertIds.has(c.cert_code))
+                      : filteredEventCerts
+                  )}
+                  disabled={isExportingEventZip || filteredEventCerts.length === 0}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-md transition-all duration-300 cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  {isExportingEventZip ? (
+                    <span>{`Zipping ${eventZipProgress.done}/${eventZipProgress.total}...`}</span>
+                  ) : selectedEventCertIds.size > 0 ? (
+                    "Download Selected ZIP"
+                  ) : (
+                    "Download Filtered ZIP"
+                  )}
+                </button>
+              </div>
+
+              {/* Dynamic Dropdowns Grid for Events */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                {/* Event Name Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Event Name</label>
+                  <div className="relative">
+                    <select
+                      value={selectedEventName}
+                      onChange={(e) => setSelectedEventName(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-3 py-2.5 pr-8 appearance-none text-zinc-700 outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all cursor-pointer"
+                    >
+                      <option value="">All Events ({eventMetadata.uniqueEvents.length})</option>
+                      {eventMetadata.uniqueEvents.map((evName) => (
+                        <option key={evName} value={evName}>{evName}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* College Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">College</label>
+                  <div className="relative">
+                    <select
+                      value={selectedEventCollege}
+                      onChange={(e) => setSelectedEventCollege(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-3 py-2.5 pr-8 appearance-none text-zinc-700 outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all cursor-pointer"
+                    >
+                      <option value="">All Colleges ({eventMetadata.uniqueColleges.length})</option>
+                      {eventMetadata.uniqueColleges.map((colName) => (
+                        <option key={colName} value={colName}>{colName}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Department Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Department</label>
+                  <div className="relative">
+                    <select
+                      value={selectedEventDept}
+                      onChange={(e) => setSelectedEventDept(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-3 py-2.5 pr-8 appearance-none text-zinc-700 outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all cursor-pointer"
+                    >
+                      <option value="">All Departments ({eventMetadata.uniqueDepts.length})</option>
+                      {eventMetadata.uniqueDepts.map((deptName) => (
+                        <option key={deptName} value={deptName}>{deptName}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Year Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Year</label>
+                  <div className="relative">
+                    <select
+                      value={selectedEventYear}
+                      onChange={(e) => setSelectedEventYear(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-3 py-2.5 pr-8 appearance-none text-zinc-700 outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all cursor-pointer"
+                    >
+                      <option value="">All Years ({eventMetadata.uniqueYears.length})</option>
+                      {eventMetadata.uniqueYears.map((yrName) => (
+                        <option key={yrName} value={yrName}>{yrName}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Date Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Date</label>
+                  <div className="relative">
+                    <select
+                      value={selectedEventDate}
+                      onChange={(e) => setSelectedEventDate(e.target.value)}
+                      className="w-full text-xs bg-white border border-zinc-200 rounded-xl px-3 py-2.5 pr-8 appearance-none text-zinc-700 outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all cursor-pointer"
+                    >
+                      <option value="">All Dates ({eventMetadata.uniqueDates.length})</option>
+                      {eventMetadata.uniqueDates.map((dtName) => (
+                        <option key={dtName} value={dtName}>{dtName}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Clear All Filters Button for Events */}
+              {(eventQuery || selectedEventName || selectedEventCollege || selectedEventDept || selectedEventYear || selectedEventDate) && (
+                <div className="flex justify-end pt-2">
+                  <button
+                    onClick={() => {
+                      setEventQuery("");
+                      setSelectedEventName("");
+                      setSelectedEventCollege("");
+                      setSelectedEventDept("");
+                      setSelectedEventYear("");
+                      setSelectedEventDate("");
+                    }}
+                    className="flex items-center gap-1.5 px-4 py-2 border border-dashed border-red-200 text-red-650 bg-red-50/30 hover:bg-red-50 hover:border-red-300 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm select-none"
+                  >
+                    <Trash2 size={14} />
+                    Reset Filters
+                  </button>
+                </div>
+              )}
+            </div>
+
+              {/* Batch Send Email Action */}
+              {selectedEventCertIds.size > 0 && (
+                <div className="bg-[#5844e9]/8 border border-[#5844e9]/15 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div>
+                    <span className="text-xs font-bold text-[#5844e9]">
+                      {selectedEventCertIds.size} recipient(s) selected
+                    </span>
+                    <p className="text-[10px] text-zinc-500 mt-0.5">
+                      You can send personalized certificates with attachments directly to the selected event participants.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleSendEventEmails(
+                      eventCerts.filter((c) => selectedEventCertIds.has(c.cert_code))
+                    )}
+                    disabled={isSendingEventEmails}
+                    className="flex items-center gap-1.5 px-4.5 py-2 bg-[#5844e9] hover:bg-[#4338ca] text-xs font-bold text-white rounded-xl shadow-md cursor-pointer transition-all disabled:opacity-60"
+                  >
+                    {isSendingEventEmails ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Sending {eventEmailProgress.done}/{eventEmailProgress.total}...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="w-3.5 h-3.5" />
+                        <span>Send Emails to Selected</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+            {/* Event Certificates List Table */}
+            <div className="overflow-x-auto border border-zinc-150 rounded-2xl bg-white shadow-sm">
+              {eventLoading ? (
+                <div className="p-16 text-center text-zinc-500 text-xs">
+                  <div className="w-8 h-8 border-2 border-zinc-200 border-t-violet-500 rounded-full animate-spin mx-auto mb-3" />
+                  Loading event certificates...
+                </div>
+              ) : filteredEventCerts.length === 0 ? (
+                <div className="p-16 text-center text-zinc-500 text-xs flex flex-col items-center">
+                  <Database className="w-8 h-8 text-zinc-300 mb-2" />
+                  <p className="font-bold text-zinc-650">No Event Certificates Found</p>
+                  <p className="text-zinc-400 text-[11px] mt-0.5">
+                    {eventQuery || selectedEventName || selectedEventCollege || selectedEventDept || selectedEventYear || selectedEventDate ? "Try adjusting your search filters." : "Generate completion certificates from the Generator tab first."}
+                  </p>
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-150 bg-zinc-50 text-zinc-550 text-xs font-bold font-mono">
+                      <th className="p-4 w-10">
+                        <input
+                          type="checkbox"
+                          checked={filteredEventCerts.length > 0 && filteredEventCerts.every((c) => selectedEventCertIds.has(c.cert_code))}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setSelectedEventCertIds((prev) => {
+                              const next = new Set(prev);
+                              filteredEventCerts.forEach((c) => {
+                                if (checked) next.add(c.cert_code);
+                                else next.delete(c.cert_code);
+                              });
+                              return next;
+                            });
+                          }}
+                          className="rounded text-violet-605 focus:ring-violet-500 cursor-pointer"
+                        />
+                      </th>
+                      <th className="p-4">Participant Details</th>
+                      <th className="p-4">Credential Code</th>
+                      <th className="p-4">Event Name</th>
+                      <th className="p-4">Event Date</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4">Email Delivery</th>
+                      <th className="p-4 text-right">PDF File</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100">
+                    {filteredEventCerts.map((cert) => {
+                      const isSelected = selectedEventCertIds.has(cert.cert_code);
+                      return (
+                        <tr
+                          key={cert.cert_code}
+                          className={`hover:bg-zinc-50/50 transition-colors ${isSelected ? "bg-violet-50/15" : ""}`}
+                        >
+                          <td className="p-4 align-middle">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setSelectedEventCertIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (checked) next.add(cert.cert_code);
+                                  else next.delete(cert.cert_code);
+                                  return next;
+                                });
+                              }}
+                              className="rounded text-violet-605 focus:ring-violet-500 cursor-pointer"
+                            />
+                          </td>
+                          <td className="p-4">
+                            <span className="font-bold text-zinc-800 block">{cert.recipient_name}</span>
+                            <div className="text-[10px] text-zinc-500 mt-0.5">{cert.college_name || "—"}</div>
+                            <div className="text-[10px] text-zinc-400 mt-0.5">{cert.email}</div>
+                          </td>
+                          <td className="p-4 font-mono text-zinc-700 text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <span>{cert.cert_code}</span>
+                              <button
+                                title="Copy Code"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(cert.cert_code || "");
+                                  alert("Credential code copied!");
+                                }}
+                                className="p-1 text-zinc-400 hover:text-zinc-700 rounded hover:bg-zinc-100 transition-colors cursor-pointer"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 002 2h2a2 2 0 002-2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <span className="inline-flex items-center text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-violet-50 text-violet-750 border border-violet-100">
+                              {cert.event_name}
+                            </span>
+                          </td>
+                          <td className="p-4 font-mono text-zinc-550 text-xs align-middle">
+                            {cert.event_date}
+                          </td>
+                          <td className="p-4">
+                            {cert.status === "active" ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 border border-emerald-150 text-emerald-700 px-2 py-0.5 rounded-full">
+                                Active
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-zinc-100 border border-zinc-200 text-zinc-650 px-2 py-0.5 rounded-full">
+                                Inactive
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-4 align-middle">
+                            {cert.email_status === "sending" ? (
+                              <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-150 px-2 py-0.5 rounded-md">
+                                <span className="w-2.5 h-2.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                                Sending...
+                              </span>
+                            ) : cert.email_status === "sent" ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 border border-emerald-150 text-emerald-700 px-2.5 py-1 rounded-lg">
+                                <CheckCircle className="w-3 h-3 text-emerald-650" /> Sent
+                              </span>
+                            ) : cert.email_status === "failed" ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-red-50 border border-red-150 text-red-700 px-2 py-0.5 rounded-md">
+                                  Failed
+                                </span>
+                                <button
+                                  onClick={async () => {
+                                    setEventCerts((prev) =>
+                                      prev.map((c) => (c.cert_code === cert.cert_code ? { ...c, email_status: "sending" } : c))
+                                    );
+                                    try {
+                                      const base = backendUrl.replace(/\/+$/, "");
+                                      const res = await fetch(`${base}/api/events/certificates/${cert.cert_code}/send-email`, {
+                                        method: "POST"
+                                      });
+                                      if (res.ok) {
+                                        setEventCerts((prev) =>
+                                          prev.map((c) => (c.cert_code === cert.cert_code ? { ...c, email_status: "sent" } : c))
+                                        );
+                                      } else {
+                                        setEventCerts((prev) =>
+                                          prev.map((c) => (c.cert_code === cert.cert_code ? { ...c, email_status: "failed" } : c))
+                                        );
+                                      }
+                                    } catch (err) {
+                                      console.error(err);
+                                      setEventCerts((prev) =>
+                                        prev.map((c) => (c.cert_code === cert.cert_code ? { ...c, email_status: "failed" } : c))
+                                      );
+                                    }
+                                  }}
+                                  className="text-[10px] text-zinc-500 hover:text-zinc-700 font-bold underline cursor-pointer"
+                                >
+                                  Retry
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={async () => {
+                                  setEventCerts((prev) =>
+                                    prev.map((c) => (c.cert_code === cert.cert_code ? { ...c, email_status: "sending" } : c))
+                                  );
+                                  try {
+                                    const base = backendUrl.replace(/\/+$/, "");
+                                    const res = await fetch(`${base}/api/events/certificates/${cert.cert_code}/send-email`, {
+                                      method: "POST"
+                                    });
+                                    if (res.ok) {
+                                      setEventCerts((prev) =>
+                                        prev.map((c) => (c.cert_code === cert.cert_code ? { ...c, email_status: "sent" } : c))
+                                      );
+                                    } else {
+                                      setEventCerts((prev) =>
+                                        prev.map((c) => (c.cert_code === cert.cert_code ? { ...c, email_status: "failed" } : c))
+                                      );
+                                    }
+                                  } catch (err) {
+                                    console.error(err);
+                                    setEventCerts((prev) =>
+                                      prev.map((c) => (c.cert_code === cert.cert_code ? { ...c, email_status: "failed" } : c))
+                                    );
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-605 hover:text-indigo-805 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded-md cursor-pointer"
+                              >
+                                <Mail className="w-3.5 h-3.5" /> Send Mail
+                              </button>
+                            )}
+                          </td>
+                          <td className="p-4 text-right">
+                            {cert.pdf_url ? (
+                              <div className="inline-flex items-center gap-2">
+                                <a
+                                  href={getResolvedPdfUrl(cert.pdf_url)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-[11px] font-bold text-violet-655 hover:text-violet-855 bg-violet-50 hover:bg-violet-100 border border-violet-200 px-2.5 py-1 rounded-lg transition-all duration-150"
+                                >
+                                  <LinkIcon className="w-3 h-3" /> View
+                                </a>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      const res = await fetch(getResolvedPdfUrl(cert.pdf_url));
+                                      const blob = await res.blob();
+                                      const url = URL.createObjectURL(blob);
+                                      const a = document.createElement("a");
+                                      a.href = url;
+                                      const safeName = (cert.recipient_name || "certificate").replace(/[^a-zA-Z0-9_\- ]/g, "_");
+                                      a.download = `${safeName}.pdf`;
+                                      a.click();
+                                      URL.revokeObjectURL(url);
+                                    } catch {
+                                      alert("Failed to download PDF.");
+                                    }
+                                  }}
+                                  className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-all duration-150 cursor-pointer"
+                                >
+                                  <Download className="w-3 h-3" /> Download
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-zinc-400">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
       </main>
 
       {/* Premium Process Stage Overlay Loader */}
@@ -3839,18 +4857,30 @@ export default function AdminDashboard() {
               >
                 <LayoutDashboard size={16} /> Generator
               </button>
-              <button
-                onClick={() => {
-                  setActiveTab("history");
-                  setIsMobileMenuOpen(false);
-                }}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-xl transition-all cursor-pointer ${activeTab === "history"
-                    ? "bg-[#5844e9]/8 text-[#5844e9] border border-[#5844e9]/10 shadow-[inset_0_1px_2px_rgba(88,68,233,0.05)]"
-                    : "text-stone-600 hover:text-stone-900 hover:bg-zinc-50 border border-transparent"
-                  }`}
-              >
-                <Database size={16} /> Interns
-              </button>
+               <button
+                 onClick={() => {
+                   setActiveTab("history");
+                   setIsMobileMenuOpen(false);
+                 }}
+                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-xl transition-all cursor-pointer ${activeTab === "history"
+                     ? "bg-[#5844e9]/8 text-[#5844e9] border border-[#5844e9]/10 shadow-[inset_0_1px_2px_rgba(88,68,233,0.05)]"
+                     : "text-stone-600 hover:text-stone-900 hover:bg-zinc-50 border border-transparent"
+                   }`}
+               >
+                 <Database size={16} /> Interns
+               </button>
+               <button
+                 onClick={() => {
+                   setActiveTab("events");
+                   setIsMobileMenuOpen(false);
+                 }}
+                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-xl transition-all cursor-pointer ${activeTab === "events"
+                     ? "bg-[#5844e9]/8 text-[#5844e9] border border-[#5844e9]/10 shadow-[inset_0_1px_2px_rgba(88,68,233,0.05)]"
+                     : "text-stone-600 hover:text-stone-900 hover:bg-zinc-50 border border-transparent"
+                   }`}
+               >
+                 <Database size={16} /> Events
+               </button>
               <button
                 onClick={() => {
                   setActiveTab("registration");
