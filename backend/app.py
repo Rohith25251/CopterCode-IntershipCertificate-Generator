@@ -1543,7 +1543,12 @@ def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, 
                                     font.bold = True
 
         # Fields that should WRAP to next line instead of shrinking font
-        WRAP_FIELDS = {"<<INTERNSHIP & LIVE PROJECT AREA>>", "<<PROJECT>>", "<<DOMAIN>>", "<<ROLE>>"}
+        WRAP_FIELDS = {
+            "<<INTERNSHIP & LIVE PROJECT AREA>>", "<<PROJECT>>", "<<DOMAIN>>", "<<ROLE>>",
+            "<<DEPARTMENT>>", "<<INSTITUTION>>", "<<COLLEGE>>", "<<COLLEGE_NAME>>",
+            "<<EVENT_NAME>>", "<<EVENT_DATE>>", "<<DATE>>", "<<YEAR>>", "<<DT>>",
+            "<<ROLLNO>>", "<<ROLL_NO>>", "<<ROLLNUMBER>>"
+        }
 
         # 1. Process shapes and replace text
         for shape in list(slide.shapes):
@@ -1623,7 +1628,7 @@ def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, 
                             if has_match:
                                 # For body/area fields: keep font size and let text wrap
                                 # For short label fields (name, institution): allow mild shrinking
-                                is_wrap_field = key in WRAP_FIELDS
+                                is_wrap_field = key.upper().replace("«", "<<").replace("»", ">>") in WRAP_FIELDS
                                 if not is_wrap_field and run.font.size and val:
                                     length = len(val)
                                     limit = 20 if "NAME" in key else 30
