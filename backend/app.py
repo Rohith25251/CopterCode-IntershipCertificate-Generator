@@ -3013,7 +3013,23 @@ async def get_pdf_bytes_for_event_certificate(cert_code: str) -> bytes:
 
     template_bytes = supabase.storage.from_("templates").download(template_path)
     ext = os.path.splitext(template_path)[1].lower()
-    pdf_bytes = render_certificate_pdf(template_bytes, replacements, qr_bytes, ext)
+    
+    batch_id = "events"
+    if template_path:
+        parts = template_path.split("/")
+        if len(parts) > 1:
+            batch_id = parts[-2]
+            
+    if ext == ".pptx":
+        pdf_bytes = await generate_pdf_bytes_with_weasyprint_async(
+            batch_id=batch_id,
+            cert_type="event",
+            template_bytes=template_bytes,
+            replacements=replacements,
+            qr_bytes=qr_bytes
+        )
+    else:
+        pdf_bytes = render_certificate_pdf(template_bytes, replacements, qr_bytes, ext)
 
     pdf_cache.set(cert_code + "_event", pdf_bytes)
     return pdf_bytes
