@@ -431,6 +431,28 @@ def extract_group_children(group_shape):
                         "underline": bool(r.font.underline), "color": r_color
                     })
                 paragraphs_cfg.append({"align": get_alignment_str(p), "runs": runs_cfg})
+                
+            try:
+                from pptx.enum.text import MSO_ANCHOR
+                anchor = child.text_frame.vertical_anchor
+                if anchor == MSO_ANCHOR.MIDDLE:
+                    v_align = "middle"
+                elif anchor == MSO_ANCHOR.BOTTOM:
+                    v_align = "bottom"
+                else:
+                    v_align = "top"
+            except Exception:
+                v_align = "top"
+                
+            try:
+                tf = child.text_frame
+                m_left = tf.margin_left.inches if tf.margin_left is not None else 0.1
+                m_right = tf.margin_right.inches if tf.margin_right is not None else 0.1
+                m_top = tf.margin_top.inches if tf.margin_top is not None else 0.05
+                m_bottom = tf.margin_bottom.inches if tf.margin_bottom is not None else 0.05
+            except Exception:
+                m_left, m_right, m_top, m_bottom = 0.1, 0.1, 0.05, 0.05
+
             result.append({
                 "id": child.shape_id if hasattr(child, 'shape_id') else 0,
                 "name": f"{group_shape.name}::{child.name}",
@@ -440,7 +462,12 @@ def extract_group_children(group_shape):
                 "color": font_color, "bold": bold, "italic": italic,
                 "align": align, "original_text": text,
                 "paragraphs": paragraphs_cfg,
-                "is_flow": (top_in <= 11.0)
+                "is_flow": (top_in <= 11.0),
+                "vertical_anchor": v_align,
+                "margin_left": m_left,
+                "margin_right": m_right,
+                "margin_top": m_top,
+                "margin_bottom": m_bottom
             })
         return result
     except Exception as e:
@@ -588,6 +615,27 @@ async def get_or_create_html_template(batch_id: str, cert_type: str, template_by
                         "runs": runs_cfg
                     })
                     
+                try:
+                    from pptx.enum.text import MSO_ANCHOR
+                    anchor = shape.text_frame.vertical_anchor
+                    if anchor == MSO_ANCHOR.MIDDLE:
+                        v_align = "middle"
+                    elif anchor == MSO_ANCHOR.BOTTOM:
+                        v_align = "bottom"
+                    else:
+                        v_align = "top"
+                except Exception:
+                    v_align = "top"
+                    
+                try:
+                    tf = shape.text_frame
+                    m_left = tf.margin_left.inches if tf.margin_left is not None else 0.1
+                    m_right = tf.margin_right.inches if tf.margin_right is not None else 0.1
+                    m_top = tf.margin_top.inches if tf.margin_top is not None else 0.05
+                    m_bottom = tf.margin_bottom.inches if tf.margin_bottom is not None else 0.05
+                except Exception:
+                    m_left, m_right, m_top, m_bottom = 0.1, 0.1, 0.05, 0.05
+
                 is_flow = is_body_text_shape(shape)
                 shape_cfg = {
                     "id": shape.shape_id,
@@ -604,7 +652,12 @@ async def get_or_create_html_template(batch_id: str, cert_type: str, template_by
                     "align": align,
                     "original_text": shape.text_frame.text,
                     "paragraphs": paragraphs_cfg,
-                    "is_flow": is_flow
+                    "is_flow": is_flow,
+                    "vertical_anchor": v_align,
+                    "margin_left": m_left,
+                    "margin_right": m_right,
+                    "margin_top": m_top,
+                    "margin_bottom": m_bottom
                 }
                 layout_data["shapes"].append(shape_cfg)
                 shapes_to_clear.append(shape)

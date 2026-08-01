@@ -136,6 +136,146 @@ def export_pptx_to_pdf(pptx_path: str, output_dir: str) -> str:
 
 
     
+def get_shape_fill_color(shape):
+    """Extract the dominant fill color from a shape (including groups)."""
+    try:
+        a_ns = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+        for srgb in shape._element.iter(f'{{{a_ns}}}srgbClr'):
+            val = (srgb.get('val') or '').lower()
+            if val and val != 'ffffff':
+                return f'#{val}'
+    except Exception:
+        pass
+    return '#000000'
+
+_EMU_PER_INCH = 914400
+
+def extract_group_children(group_shape):
+    """
+    Extract text shapes and horizontal line shapes from inside a GROUP shape,
+    computing absolute slide coordinates via group coordinate transform.
+    Returns list of shape_cfg dicts and shapes to clear.
+    """
+    try:
+        a_ns = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+        el = group_shape._element
+        grp_sp_pr = next((c for c in el if c.tag.endswith('}grpSpPr')), None)
+        if grp_sp_pr is None:
+            return [], []
+        xfrm = next((c for c in grp_sp_pr if c.tag.endswith('}xfrm')), None)
+        if xfrm is None:
+            return [], []
+        ns = f'{{{a_ns}}}'
+        def _i(element, attr, d=0):
+            return int(element.get(attr, d))
+        off   = xfrm.find(f'{ns}off');   ext  = xfrm.find(f'{ns}ext')
+        chOff = xfrm.find(f'{ns}chOff'); chExt = xfrm.find(f'{ns}chExt')
+        if any(x is None for x in [off, ext, chOff, chExt]):
+            return [], []
+        gx = _i(off, 'x'); gy = _i(off, 'y')
+        gcx = _i(ext, 'cx'); gcy = _i(ext, 'cy')
+        cox = _i(chOff, 'x'); coy = _i(chOff, 'y')
+        ccx = _i(chExt, 'cx', 1) or 1; ccy = _i(chExt, 'cy', 1) or 1
+        sx = gcx / ccx; sy = gcy / ccy
+        try:
+            child_shapes = group_shape.shapes
+        except Exception:
+            return [], []
+            
+        result = []
+        to_clear = []
+        for child in child_shapes:
+            has_tf = False
+            try:
+                has_tf = child.has_text_frame
+            except Exception:
+                pass
+            if not has_tf:
+                continue
+                
+            try:
+                text = child.text_frame.text.strip()
+            except Exception:
+                text = ""
+                
+            # Only extract child shapes that contain dynamic placeholders
+            if not text or not any(p in text for p in ["<<", ">>", "«", "»", "{{", "}}"]):
+                continue
+                
+            left_in = (gx + (child.left - cox) * sx) / _EMU_PER_INCH
+            top_in  = (gy + (child.top  - coy) * sy) / _EMU_PER_INCH
+            width_in = max(child.width  * sx / _EMU_PER_INCH, 0.05)
+            height_in = max(child.height * sy / _EMU_PER_INCH, 0.01)
+            
+            font_name = "Calibri"; font_size = 14
+            font_color = "#000000"; bold = False; italic = False; align = "left"
+            if child.text_frame.paragraphs:
+                p0 = child.text_frame.paragraphs[0]
+                align = get_alignment_str(p0)
+                if p0.runs:
+                    r0 = p0.runs[0]
+                    if r0.font.name:  font_name = r0.font.name
+                    if r0.font.size:  font_size = r0.font.size.pt
+                    c = get_color_hex(r0)
+                    if c: font_color = c
+                    bold = bool(r0.font.bold); italic = bool(r0.font.italic)
+            paragraphs_cfg = []
+            for p in child.text_frame.paragraphs:
+                runs_cfg = []
+                for r in p.runs:
+                    r_color = get_color_hex(r) or font_color
+                    runs_cfg.append({
+                        "text": r.text,
+                        "font_name": r.font.name or font_name,
+                        "font_size": r.font.size.pt if r.font.size else font_size,
+                        "bold": bool(r.font.bold), "italic": bool(r.font.italic),
+                        "underline": bool(r.font.underline), "color": r_color
+                    })
+                paragraphs_cfg.append({"align": get_alignment_str(p), "runs": runs_cfg})
+                
+            try:
+                from pptx.enum.text import MSO_ANCHOR
+                anchor = child.text_frame.vertical_anchor
+                if anchor == MSO_ANCHOR.MIDDLE:
+                    v_align = "middle"
+                elif anchor == MSO_ANCHOR.BOTTOM:
+                    v_align = "bottom"
+                else:
+                    v_align = "top"
+            except Exception:
+                v_align = "top"
+                
+            try:
+                tf = child.text_frame
+                m_left = tf.margin_left.inches if tf.margin_left is not None else 0.1
+                m_right = tf.margin_right.inches if tf.margin_right is not None else 0.1
+                m_top = tf.margin_top.inches if tf.margin_top is not None else 0.05
+                m_bottom = tf.margin_bottom.inches if tf.margin_bottom is not None else 0.05
+            except Exception:
+                m_left, m_right, m_top, m_bottom = 0.1, 0.1, 0.05, 0.05
+
+            result.append({
+                "id": child.shape_id if hasattr(child, 'shape_id') else 0,
+                "name": f"{group_shape.name}::{child.name}",
+                "left": left_in, "top": top_in,
+                "width": width_in, "height": height_in,
+                "font_name": font_name, "font_size": font_size,
+                "color": font_color, "bold": bold, "italic": italic,
+                "align": align, "original_text": text,
+                "paragraphs": paragraphs_cfg,
+                "is_flow": (top_in <= 11.0),
+                "vertical_anchor": v_align,
+                "margin_left": m_left,
+                "margin_right": m_right,
+                "margin_top": m_top,
+                "margin_bottom": m_bottom
+            })
+            to_clear.append(child)
+        return result, to_clear
+    except Exception as e:
+        print(f"[Warning] extract_group_children failed for {group_shape.name}: {e}")
+        return [], []
+
 def get_or_create_html_template(template_pptx_path: str, cert_type: str) -> str:
     """Generates layout.json and background.png locally for CLI execution cache."""
     template_name = safe_filename(os.path.splitext(os.path.basename(template_pptx_path))[0])
@@ -162,9 +302,30 @@ def get_or_create_html_template(template_pptx_path: str, cert_type: str) -> str:
     
     shapes_to_clear = []
     for shape in slide.shapes:
+        h_in = shape.height.inches if hasattr(shape, "height") else 0
+        w_in = shape.width.inches if hasattr(shape, "width") else 0
+        l_in = shape.left.inches if hasattr(shape, "left") else 0
+        t_in = shape.top.inches if hasattr(shape, "top") else 0
+        
+        # If it's a group shape, extract its dynamic children
+        if shape.shape_type == 6:
+            if 0.5 <= t_in <= 11.0:
+                group_children, child_to_clear = extract_group_children(shape)
+                for child_cfg in group_children:
+                    layout_data["shapes"].append(child_cfg)
+                shapes_to_clear.extend(child_to_clear)
+            continue
+            
+        # If it doesn't have a text frame, ignore it (static decorations/lines)
         if not shape.has_text_frame:
             continue
-        if not is_body_text_shape(shape):
+            
+        text = shape.text_frame.text.strip()
+        if not text:
+            continue
+            
+        # Only extract if it contains dynamic placeholders (<<...>>, {{...}})
+        if not any(p in text for p in ["<<", ">>", "«", "»", "{{", "}}"]):
             continue
             
         left_in = shape.left.inches
@@ -205,6 +366,7 @@ def get_or_create_html_template(template_pptx_path: str, cert_type: str) -> str:
                     "font_size": r.font.size.pt if r.font.size else font_size,
                     "bold": bool(r.font.bold),
                     "italic": bool(r.font.italic),
+                    "underline": bool(r.font.underline),
                     "color": r_color
                 })
             paragraphs_cfg.append({
@@ -212,6 +374,28 @@ def get_or_create_html_template(template_pptx_path: str, cert_type: str) -> str:
                 "runs": runs_cfg
             })
             
+        try:
+            from pptx.enum.text import MSO_ANCHOR
+            anchor = shape.text_frame.vertical_anchor
+            if anchor == MSO_ANCHOR.MIDDLE:
+                v_align = "middle"
+            elif anchor == MSO_ANCHOR.BOTTOM:
+                v_align = "bottom"
+            else:
+                v_align = "top"
+        except Exception:
+            v_align = "top"
+            
+        try:
+            tf = shape.text_frame
+            m_left = tf.margin_left.inches if tf.margin_left is not None else 0.1
+            m_right = tf.margin_right.inches if tf.margin_right is not None else 0.1
+            m_top = tf.margin_top.inches if tf.margin_top is not None else 0.05
+            m_bottom = tf.margin_bottom.inches if tf.margin_bottom is not None else 0.05
+        except Exception:
+            m_left, m_right, m_top, m_bottom = 0.1, 0.1, 0.05, 0.05
+
+        is_flow = is_body_text_shape(shape)
         shape_cfg = {
             "id": shape.shape_id,
             "name": shape.name,
@@ -226,7 +410,13 @@ def get_or_create_html_template(template_pptx_path: str, cert_type: str) -> str:
             "italic": italic,
             "align": align,
             "original_text": shape.text_frame.text,
-            "paragraphs": paragraphs_cfg
+            "paragraphs": paragraphs_cfg,
+            "is_flow": is_flow,
+            "vertical_anchor": v_align,
+            "margin_left": m_left,
+            "margin_right": m_right,
+            "margin_top": m_top,
+            "margin_bottom": m_bottom
         }
         layout_data["shapes"].append(shape_cfg)
         shapes_to_clear.append(shape)

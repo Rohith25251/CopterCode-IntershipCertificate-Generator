@@ -157,7 +157,7 @@ def generate_font_face_rules():
                 style = "normal"
                 
                 name_lower = font_name.lower()
-                if "bold" in name_lower or ",bold" in name_lower:
+                if "bold" in name_lower or ",bold" in name_lower or name_lower.endswith("bd") or " bd" in name_lower or "-bd" in name_lower or "_bd" in name_lower:
                     weight = "bold"
                 if "italic" in name_lower:
                     style = "italic"
@@ -258,10 +258,10 @@ class LayoutEngine:
             
             # 3. Autofit scale calculation
             # Get text padding margins
-            margin_l = MARGIN_LEFT_DEFAULT
-            margin_r = MARGIN_RIGHT_DEFAULT
-            margin_t = MARGIN_TOP_DEFAULT
-            margin_b = MARGIN_BOTTOM_DEFAULT
+            margin_l = shape.get("margin_left", MARGIN_LEFT_DEFAULT)
+            margin_r = shape.get("margin_right", MARGIN_RIGHT_DEFAULT)
+            margin_t = shape.get("margin_top", MARGIN_TOP_DEFAULT)
+            margin_b = shape.get("margin_bottom", MARGIN_BOTTOM_DEFAULT)
             
             usable_w = shape["width"] - (margin_l + margin_r)
             declared_h = shape["height"]
@@ -281,8 +281,8 @@ class LayoutEngine:
                 
                 while scale >= 0.6:
                     # Estimate text block height at this scaled font size
-                    # Use a safety factor (68% of width) to account for bold character expansion, kerning, and WeasyPrint margins
-                    est_h = estimate_text_height(shape["resolved_text"], font_path, original_size * scale, usable_w * 0.68)
+                    # Use a safety factor (95% of width) to account for WeasyPrint margins/padding
+                    est_h = estimate_text_height(shape["resolved_text"], font_path, original_size * scale, usable_w * 0.95)
                     total_h = est_h + margin_t + margin_b
                     if total_h <= declared_h:
                         best_scale = scale
@@ -291,7 +291,7 @@ class LayoutEngine:
                     
                 shape["best_scale"] = best_scale
                 # Required height at the scaled font size (at least 60% readability floor)
-                est_h = estimate_text_height(shape["resolved_text"], font_path, original_size * best_scale, usable_w * 0.68)
+                est_h = estimate_text_height(shape["resolved_text"], font_path, original_size * best_scale, usable_w * 0.95)
                 shape["required_height"] = est_h + margin_t + margin_b
             
         # 4. Vertical layout shifting & Clearance propagation
@@ -496,6 +496,11 @@ class LayoutEngine:
                 shape_font_name = shape.get("font_name", "Arial")
                 clean_family = clean_font_family(shape_font_name)
                 
+                margin_l = shape.get("margin_left", MARGIN_LEFT_DEFAULT)
+                margin_r = shape.get("margin_right", MARGIN_RIGHT_DEFAULT)
+                margin_t = shape.get("margin_top", MARGIN_TOP_DEFAULT)
+                margin_b = shape.get("margin_bottom", MARGIN_BOTTOM_DEFAULT)
+                
                 # Apply custom fonts and text sizing styles
                 style_str = (
                     f"left: {l}in; "
@@ -505,12 +510,20 @@ class LayoutEngine:
                     f"font-family: '{clean_family}', Arial, Calibri, sans-serif; "
                     f"font-size: {default_size}pt; "
                     f"color: {shape['color']}; "
+                    f"padding: {margin_t:.3f}in {margin_r:.3f}in {margin_b:.3f}in {margin_l:.3f}in; "
                 )
+                # Support vertical alignment
+                anchor = shape.get("vertical_anchor", "top")
+                if anchor == "middle":
+                    style_str += "display: flex; flex-direction: column; align-items: stretch; justify-content: center; "
+                elif anchor == "bottom":
+                    style_str += "display: flex; flex-direction: column; align-items: stretch; justify-content: flex-end; "
+                    
                 # Prevent wrapping for short headings/labels and off-flow text boxes
                 # Use resolved_text length so we don't nowrap long replaced placeholder values
                 resolved_txt = shape.get("resolved_text", "")
                 if not shape.get("is_flow", True) or (len(resolved_txt) < 50 and "\n" not in resolved_txt):
-                    style_str += "overflow: visible; padding-top: 0; padding-bottom: 0; "
+                    style_str += "overflow: visible; "
                     if "\n" not in resolved_txt:
                         style_str += "white-space: nowrap; "
                 
