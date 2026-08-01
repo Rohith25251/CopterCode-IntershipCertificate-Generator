@@ -233,7 +233,10 @@ def export_pptx_to_pdf(pptx_path: str, output_dir: str) -> str:
 
     # Isolated profile dir per invocation — prevents concurrent
     # soffice processes from fighting over the same lock file
-    profile_dir = f"/tmp/lo_profile_{uuid.uuid4().hex}"
+    import tempfile
+    temp_dir = tempfile.gettempdir()
+    profile_dir = os.path.join(temp_dir, f"lo_profile_{uuid.uuid4().hex}")
+    profile_url = "file:///" + profile_dir.replace("\\", "/")
 
     cmd = [
         soffice_cmd,
@@ -245,14 +248,17 @@ def export_pptx_to_pdf(pptx_path: str, output_dir: str) -> str:
         "--invisible",
         "--convert-to", "pdf",
         "--outdir", output_dir,
-        f"-env:UserInstallation=file://{profile_dir}",
+        f"-env:UserInstallation={profile_url}",
         pptx_path,
     ]
 
     # Explicitly set HOME environment variable to /tmp to prevent LibreOffice
     # from failing when trying to write to non-writable Nixpacks/Dokploy directories.
     env = os.environ.copy()
-    env["HOME"] = "/tmp"
+    if os.name == "nt":
+        env["HOME"] = temp_dir
+    else:
+        env["HOME"] = "/tmp"
 
     try:
         subprocess.run(
@@ -1503,6 +1509,39 @@ def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, 
         prs = Presentation(temp_pptx.name)
         slide = prs.slides[0]
         
+        # Walk through ALL shapes to normalize fonts, regardless of whether they have placeholders
+        for shape in list(slide.shapes):
+            if shape.has_text_frame:
+                text_frame = shape.text_frame
+                
+                # Check if this text box is wide (takes up significant part of slide width)
+                # and adjust its width and horizontal position to avoid borders.
+                # Safe center text area width = 8.5 inches.
+                width_in = shape.width / 914400
+                slide_width_in = prs.slide_width / 914400
+                if shape.shape_type == 17 and width_in > 8.0 and text_frame_has_placeholders(text_frame, replacements):
+                    target_width_in = 8.5
+                    target_left_in = (slide_width_in - target_width_in) / 2
+                    shape.width = Inches(target_width_in)
+                    shape.left = Inches(target_left_in)
+                    print(f"[pdf] Adjusted text box '{shape.name}' width to 8.5 in, left to {target_left_in:.3f} in")
+                
+                for paragraph in text_frame.paragraphs:
+                    for run in paragraph.runs:
+                        font = run.font
+                        if font.name:
+                            name_lower = font.name.lower()
+                            # Normalize Playfair Display variants
+                            if "playfair" in name_lower:
+                                font.name = "Playfair Display"
+                                if "bold" in name_lower:
+                                    font.bold = True
+                            # Normalize Times New Roman variants
+                            elif "times new roman" in name_lower or "timesnr" in name_lower:
+                                font.name = "Times New Roman"
+                                if "bold" in name_lower:
+                                    font.bold = True
+
         # Fields that should WRAP to next line instead of shrinking font
         WRAP_FIELDS = {"<<INTERNSHIP & LIVE PROJECT AREA>>", "<<PROJECT>>", "<<DOMAIN>>", "<<ROLE>>"}
 
@@ -1582,9 +1621,6 @@ def generate_certificate_from_pptx_bytes(pptx_bytes: bytes, replacements: dict, 
                                     actual_key = guill_key
 
                             if has_match:
-                                # Standardize to Arial to prevent system font substitutions
-                                run.font.name = "Arial"
-                                
                                 # For body/area fields: keep font size and let text wrap
                                 # For short label fields (name, institution): allow mild shrinking
                                 is_wrap_field = key in WRAP_FIELDS
