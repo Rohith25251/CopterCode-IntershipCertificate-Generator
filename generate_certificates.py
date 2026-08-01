@@ -408,17 +408,28 @@ def main():
         # Setup replacements dictionary
         replacements = {
             "<<NAME>>": name_val,
+            "<<Name>>": name_val,
             "<<INSTITUTION>>": college_val,
+            "<<Institution>>": college_val,
             "<<COLLEGE>>": college_val,
+            "<<College>>": college_val,
             "<<YEAR>>": year_val,
+            "<<Year>>": year_val,
             "<<DEPARTMENT>>": department_val,
+            "<<Department>>": department_val,
             "<<DOMAIN>>": role_val,
+            "<<Domain>>": role_val,
             "<<ROLE>>": role_val,
+            "<<Role>>": role_val,
             "<<PROJECT>>": project_val,
+            "<<Project>>": project_val,
             "<<INTERNSHIP & LIVE PROJECT AREA>>": project_val,
+            "<<Internship & Live Project Area>>": project_val,
             "<<BATCH>>": month_val,
+            "<<Batch>>": month_val,
             "<<BATCH >>": month_val,
             "<<DATE>>": date_val,
+            "<<Date>>": date_val,
             "<<DT>>": date_val
         }
         
