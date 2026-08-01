@@ -2936,6 +2936,14 @@ async def get_pdf_bytes_for_event_certificate(cert_code: str) -> bytes:
     college_name = cert_data.get("college_name") or ""
     event_name = cert_data.get("event_name")
     event_date = cert_data.get("event_date") or ""
+    if event_date:
+        for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d-%m-%Y", "%d/%m/%Y"):
+            try:
+                from datetime import datetime
+                event_date = datetime.strptime(str(event_date).strip(), fmt).strftime("%d-%m-%Y")
+                break
+            except Exception:
+                continue
     template_path = cert_data.get("template_path")
     roll_no = cert_data.get("roll_no") or ""
     year = cert_data.get("year") or ""
@@ -3109,6 +3117,14 @@ async def send_event_email_endpoint(cert_code: str):
         college_name = cert_data.get("college_name") or ""
         event_name = cert_data.get("event_name")
         event_date = cert_data.get("event_date") or ""
+        if event_date:
+            for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d-%m-%Y", "%d/%m/%Y"):
+                try:
+                    from datetime import datetime
+                    event_date = datetime.strptime(str(event_date).strip(), fmt).strftime("%d-%m-%Y")
+                    break
+                except Exception:
+                    continue
 
         # Update local status in database to sending
         supabase.table("event_certificates").update({"email_status": "sending"}).eq("cert_code", cert_code).execute()
