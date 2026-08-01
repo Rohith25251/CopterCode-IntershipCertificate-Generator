@@ -2951,6 +2951,8 @@ async def get_pdf_bytes_for_event_certificate(cert_code: str) -> bytes:
         "<<College>>": college_name or "",
         "<<COLLEGE_NAME>>": college_name or "",
         "<<College_Name>>": college_name or "",
+        "<<INSTITUTION>>": college_name or "",
+        "<<Institution>>": college_name or "",
         "<<EVENT_NAME>>": event_name or "",
         "<<Event_Name>>": event_name or "",
         "<<event_name>>": event_name or "",
@@ -2973,6 +2975,7 @@ async def get_pdf_bytes_for_event_certificate(cert_code: str) -> bytes:
         
         "{{recipient_name}}": recipient_name or "",
         "{{college_name}}": college_name or "",
+        "{{institution}}": college_name or "",
         "{{event_name}}": event_name or "",
         "{{event_date}}": event_date or "",
         "{{roll_no}}": roll_no,

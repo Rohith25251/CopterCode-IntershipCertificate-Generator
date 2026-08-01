@@ -134,9 +134,12 @@ def export_pptx_to_pdf(pptx_path: str, output_dir: str) -> str:
         raise RuntimeError(f"Conversion reported success but output PDF not found: {expected_pdf}")
     return expected_pdf
 
+
+    
 def get_or_create_html_template(template_pptx_path: str, cert_type: str) -> str:
     """Generates layout.json and background.png locally for CLI execution cache."""
-    cache_dir = os.path.abspath(f"templates_cache/cli_{cert_type}")
+    template_name = safe_filename(os.path.splitext(os.path.basename(template_pptx_path))[0])
+    cache_dir = os.path.abspath(f"templates_cache/cli_{template_name}")
     layout_json_path = os.path.join(cache_dir, "layout.json")
     bg_png_path = os.path.join(cache_dir, "background.png")
     
@@ -144,7 +147,7 @@ def get_or_create_html_template(template_pptx_path: str, cert_type: str) -> str:
         return cache_dir
         
     os.makedirs(cache_dir, exist_ok=True)
-    print(f"  [CLI] Exporting template layout & background for {cert_type}...")
+    print(f"  [CLI] Exporting template layout & background for {template_name}...")
     
     # 1. Parse shapes layout
     prs = Presentation(template_pptx_path)
@@ -364,6 +367,10 @@ def main():
             col_mapping["month"] = col
         elif "date" in col_lower or "dt" in col_lower:
             col_mapping["date"] = col
+        elif "roll" in col_lower or "reg" in col_lower:
+            col_mapping["roll_no"] = col
+        elif "event" in col_lower or "workshop" in col_lower:
+            col_mapping["event_name"] = col
 
     # Check for name column
     if "name" not in col_mapping:
@@ -393,6 +400,8 @@ def main():
         project_val = _get_row_val(row, "project")
         month_val = _get_row_val(row, "month")
         date_val = _get_row_val(row, "date")
+        roll_val = _get_row_val(row, "roll_no")
+        event_val = _get_row_val(row, "event_name")
         
         # Clean date format if parsed
         if date_val:
@@ -430,7 +439,14 @@ def main():
             "<<BATCH >>": month_val,
             "<<DATE>>": date_val,
             "<<Date>>": date_val,
-            "<<DT>>": date_val
+            "<<DT>>": date_val,
+            "<<ROLLNO>>": roll_val,
+            "<<RollNo>>": roll_val,
+            "<<ROLL_NO>>": roll_val,
+            "<<Roll_No>>": roll_val,
+            "<<EVENT_NAME>>": event_val,
+            "<<Event_Name>>": event_val,
+            "<<event_name>>": event_val
         }
         
         # Generate QR code bytes
