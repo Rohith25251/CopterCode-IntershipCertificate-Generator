@@ -1116,7 +1116,7 @@ async def send_registration_email(
               <tr>
                 <td>
                   <ul style="margin: 0; padding-left: 20px; font-size: 14.5px; line-height: 1.8; color: #475569;">
-                    <li style="color: #475569;"><strong style="color: #0f172a;">IIT Madras Research Park</strong> &mdash; RAMAN, EG 10, E Block, Ground Floor, Chennai, Tamil Nadu</li>
+                    <li style="color: #475569;"><strong style="color: #0f172a;">IIT Madras Research Park</strong> &mdash; E Block, Ground Floor, Chennai, Tamil Nadu</li>
                   </ul>
                 </td>
               </tr>
@@ -1165,7 +1165,7 @@ async def send_registration_email(
               <tr>
                 <td>
                   <div style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.55); font-weight: 700;">Internship Fee</div>
-                  <div style="font-size: 24px; font-weight: 700; margin-top: 6px; color: #ffffff;">₹6,990 <span style="font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.55);">+ 18% tax</span></div>
+                  <div style="font-size: 24px; font-weight: 700; margin-top: 6px; color: #ffffff;">₹8,240 <span style="font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.55);">(inclusive of taxes)</span></div>
                 </td>
               </tr>
             </table>
@@ -1273,23 +1273,50 @@ async def send_registration_email(
                 <td valign="middle" align="right" style="padding: 13px 22px 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; color: #475569; white-space: nowrap;">HR Team Head &mdash; Houston</td>
               </tr>
               <tr>
-                <td valign="middle" style="padding: 13px 22px 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; font-weight: 600; color: #0f172a;">Naveen Kumar</td>
-                <td valign="middle" align="right" style="padding: 13px 22px 13px 22px; border-bottom: 1px solid #e7eaf3; font-size: 13.5px; color: #475569; white-space: nowrap;">Tech HR &mdash; Netherlands</td>
-              </tr>
-              <tr>
-                <td valign="middle" style="padding: 13px 22px 13px 22px; font-size: 13.5px; font-weight: 600; color: #0f172a;">Jayasurya Gnanavel</td>
-                <td valign="middle" align="right" style="padding: 13px 22px 13px 22px; font-size: 13.5px; color: #475569; white-space: nowrap;">Associate Technical Lead &mdash; Chennai</td>
+                <td valign="middle" style="padding: 13px 22px 13px 22px; font-size: 13.5px; font-weight: 600; color: #0f172a;">Naveen Kumar</td>
+                <td valign="middle" align="right" style="padding: 13px 22px 13px 22px; font-size: 13.5px; color: #475569; white-space: nowrap;">Tech HR &mdash; Netherlands</td>
               </tr>
             </table>
             
-            <!-- Notice Section -->
-            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #fff9f0; border: 1px solid #f5e4c8; border-left: 3px solid #e8a83c; border-radius: 12px; padding: 18px 22px; margin-bottom: 22px;">
+            <!-- Mandatory Disclosures & Terms Section -->
+            <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6c5ce7; margin: 34px 0 10px;">Mandatory Disclosures &amp; Terms</div>
+            
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8f9fc; border: 1px solid #e7eaf3; border-left: 3px solid #6c5ce7; border-radius: 12px; padding: 16px 20px; margin-bottom: 12px;">
               <tr>
-                <td>
-                  <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #b9791c; margin-bottom: 6px;">Please note</div>
-                  <div style="font-size: 14px; line-height: 1.75; color: #0f172a;">
-                    Food and accommodation are <strong style="color: #0f172a;">not provided</strong> by CopterCode &mdash; students must make their own arrangements. Mandatory daily orientation and technical sessions (approx. 3 hours/day) will be conducted by HR teams, technical leads, and mentors. Batch-change requests must be made privately via WhatsApp and are subject to slot availability.
-                  </div>
+                <td style="font-size: 13.5px; line-height: 1.6; color: #475569;">
+                  I understand and agree to pay INR <strong style="color: #0f172a;">₹8,240</strong> towards the CopterCode International Live Project Internship &amp; Training, which includes credentials and participation in the program.
+                </td>
+              </tr>
+            </table>
+
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8f9fc; border: 1px solid #e7eaf3; border-left: 3px solid #6c5ce7; border-radius: 12px; padding: 16px 20px; margin-bottom: 12px;">
+              <tr>
+                <td style="font-size: 13.5px; line-height: 1.6; color: #475569;">
+                  I acknowledge that the internship will be conducted in hybrid mode (online and offline) under CopterCode at the venue <strong style="color: #0f172a;">IIT Madras Research Park (RP)</strong>.
+                </td>
+              </tr>
+            </table>
+
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8f9fc; border: 1px solid #e7eaf3; border-left: 3px solid #6c5ce7; border-radius: 12px; padding: 16px 20px; margin-bottom: 12px;">
+              <tr>
+                <td style="font-size: 13.5px; line-height: 1.6; color: #475569;">
+                  <strong style="color: #0f172a;">Health, Safety &amp; Personal Responsibility Declaration</strong> By submitting this registration, I voluntarily agree to participate in the CopterCode Internship Program and acknowledge the following: I confirm that I am physically and mentally fit to participate in the internship. If I have any existing medical condition, mental health condition, disability, allergy, or other health concern, I am responsible for taking appropriate precautions and obtaining any necessary medical advice before and during the internship. I understand that internship activities may involve learning under deadlines, project work, technical challenges, presentations, teamwork, travel, and professional responsibilities, which may result in normal academic or professional pressure, fatigue, or mental stress. I acknowledge that I am solely responsible for my personal health, mental well-being, safety, medication, accommodation, food, transportation, hygiene, and personal belongings throughout the internship unless otherwise expressly agreed by CopterCode in writing. I understand that CopterCode does not provide accommodation, food, medical treatment, counselling services, medical insurance, or personal accident insurance unless specifically stated in writing. In the event of illness, injury, accident, food-related illness, allergic reaction, hospitalization, mental stress, emotional distress, or any other medical or personal emergency, I agree to seek appropriate medical or professional assistance without delay and understand that any related expenses shall be my responsibility unless otherwise required by applicable law. I agree to comply with all instructions, safety guidelines, policies, and reasonable directions issued by CopterCode during the internship. I acknowledge that CopterCode, its directors, employees, mentors, trainers, partners, clients, and associated organizations shall not be liable for any personal illness, injury, medical expenses, accommodation-related issues, food-related issues, travel-related incidents, mental stress arising from the normal conduct of the internship, or other personal losses, except to the extent such liability arises from CopterCode's negligence, willful misconduct, or where liability cannot be excluded under applicable law. I confirm that I have carefully read, understood, and voluntarily accepted this declaration and all applicable internship terms and conditions.
+                </td>
+              </tr>
+            </table>
+
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8f9fc; border: 1px solid #e7eaf3; border-left: 3px solid #6c5ce7; border-radius: 12px; padding: 16px 20px; margin-bottom: 12px;">
+              <tr>
+                <td style="font-size: 13.5px; line-height: 1.6; color: #475569;">
+                  I agree that the fee is <strong style="color: #0f172a;">non-refundable</strong> under any circumstances.
+                </td>
+              </tr>
+            </table>
+
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8f9fc; border: 1px solid #e7eaf3; border-left: 3px solid #6c5ce7; border-radius: 12px; padding: 16px 20px; margin-bottom: 22px;">
+              <tr>
+                <td style="font-size: 13.5px; line-height: 1.6; color: #475569;">
+                  <strong style="color: #0f172a;">For the 3-Month Hybrid Internship:</strong> Based on performance, attendance, and project evaluation during the initial one-month internship phase, candidates may be considered for extension to the 3-month hybrid internship program.
                 </td>
               </tr>
             </table>
