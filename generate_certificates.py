@@ -478,7 +478,7 @@ def get_or_create_html_template(template_pptx_path: str, cert_type: str) -> str:
 
 def detect_certificate_title(template_path):
     text_lower = template_path.lower()
-    if "recommendation" in text_lower or "recomandation" in text_lower:
+    if "recommendation" in text_lower or "recomandation" in text_lower or "lor" in text_lower:
         return "Letter Of Recomandation"
     elif "experience" in text_lower:
         return "Experience Letter"

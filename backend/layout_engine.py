@@ -256,8 +256,10 @@ class LayoutEngine:
                     resolved_runs.append(runs_copy)
                     p_text_list.append(r_text)
                     
+                orig_p_text = "".join(r["text"] for r in p["runs"])
                 p_copy = dict(p)
                 p_copy["resolved_runs"] = resolved_runs
+                p_copy["starts_with_upper"] = bool(orig_p_text and orig_p_text[0].isupper())
                 resolved_paragraphs.append(p_copy)
                 full_text_list.append("".join(p_text_list))
                 
@@ -553,7 +555,10 @@ class LayoutEngine:
                     # Check if paragraph is empty (no runs or all runs have empty text)
                     has_content = any(r.get("resolved_text", "").strip() for r in p.get("resolved_runs", []))
                     if shape.get("is_bullet", False):
-                        html_parts.append(f"      <p style='text-align: {align}; padding-left: 0.25in; text-indent: -0.25in;'>")
+                        if p.get("starts_with_upper", True):
+                            html_parts.append(f"      <p style='text-align: {align}; padding-left: 0.25in; text-indent: -0.25in;'>")
+                        else:
+                            html_parts.append(f"      <p style='text-align: {align}; padding-left: 0.25in;'>")
                     else:
                         html_parts.append(f"      <p style='text-align: {align};'>")
                     
@@ -581,7 +586,7 @@ class LayoutEngine:
                             class_str = f"class='{' '.join(classes)}'" if classes else ""
                             text_escaped = r["resolved_text"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br/>")
                             
-                            if shape.get("is_bullet", False) and is_first_run:
+                            if shape.get("is_bullet", False) and p.get("starts_with_upper", True) and is_first_run:
                                 text_escaped = "&bull;&nbsp;&nbsp;" + text_escaped
                                 is_first_run = False
                                 
