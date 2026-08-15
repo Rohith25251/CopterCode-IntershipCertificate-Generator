@@ -222,9 +222,9 @@ class LayoutEngine:
                 
             shape["is_qr"] = False
             
-            # Detect if it should be bulleted (experience template responsibilities text box)
+            # Detect if it should be bulleted (experience/lor template responsibilities text box)
             is_bullet = False
-            if self.layout.get("template") == "experience":
+            if self.layout.get("template") in ["experience", "lor"]:
                 has_placeholders = any(p in text_str for p in ["<<", ">>", "«", "»"])
                 if not has_placeholders and len(shape.get("paragraphs", [])) >= 3 and shape.get("is_flow", True):
                     is_bullet = True
