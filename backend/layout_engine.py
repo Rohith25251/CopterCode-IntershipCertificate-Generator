@@ -276,6 +276,17 @@ class LayoutEngine:
                 shape["required_height"] = shape["height"]
             else:
                 original_size = shape["font_size"]
+                
+                # Estimate height of original template text at scale 1.0
+                orig_text = shape.get("original_text", "")
+                if orig_text:
+                    orig_est_h = estimate_text_height(orig_text, font_path, original_size, usable_w * 0.95)
+                    template_required_h = orig_est_h + margin_t + margin_b
+                    # Allow up to 0.35 inches of vertical growth buffer before scaling down
+                    target_h = max(declared_h, template_required_h) + 0.35
+                else:
+                    target_h = declared_h
+                
                 scale = 1.0
                 best_scale = 0.6
                 
@@ -284,7 +295,7 @@ class LayoutEngine:
                     # Use a safety factor (95% of width) to account for WeasyPrint margins/padding
                     est_h = estimate_text_height(shape["resolved_text"], font_path, original_size * scale, usable_w * 0.95)
                     total_h = est_h + margin_t + margin_b
-                    if total_h <= declared_h:
+                    if total_h <= target_h:
                         best_scale = scale
                         break
                     scale -= 0.05
