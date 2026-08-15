@@ -540,6 +540,12 @@ async def get_or_create_html_template(batch_id: str, cert_type: str, template_by
                 w_in = shape.width.inches if hasattr(shape, "width") else 0
                 l_in = shape.left.inches if hasattr(shape, "left") else 0
                 t_in = shape.top.inches if hasattr(shape, "top") else 0
+                
+                # Check if it's a tiny manually drawn bullet shape first!
+                if w_in < 0.15 and h_in < 0.15 and 0.2 <= l_in <= 1.5 and 2.2 <= t_in <= 9.0:
+                    shapes_to_clear.append(shape)
+                    continue
+                    
                 if not shape.has_text_frame:
                     if shape.shape_type != 6 and h_in < 0.25 and w_in > 1.0 and l_in >= 0:
                         line_color = get_shape_fill_color(shape)
@@ -665,18 +671,20 @@ async def get_or_create_html_template(batch_id: str, cert_type: str, template_by
             with open(layout_json_path, "w", encoding="utf-8") as f:
                 json.dump(layout_data, f, indent=2)
                 
-            # 3. Clear text runs or move shapes off-slide for background export
-            from pptx.util import Inches
+            # 3. Delete cleared shapes from slide for background export so they do not render in the background image
             for shape in shapes_to_clear:
-                if shape.has_text_frame:
-                    for p in shape.text_frame.paragraphs:
-                        for r in p.runs:
-                            r.text = ""
-                else:
+                try:
+                    shape._element.getparent().remove(shape._element)
+                except Exception:
+                    # Fallback to moving off-slide or clearing runs
                     try:
+                        from pptx.util import Inches
                         shape.left = Inches(-20)
                     except Exception:
-                        pass
+                        if shape.has_text_frame:
+                            for p in shape.text_frame.paragraphs:
+                                for r in p.runs:
+                                    r.text = ""
                         
             temp_cleared_pptx = os.path.join(cache_dir, "temp_cleared.pptx")
             prs.save(temp_cleared_pptx)

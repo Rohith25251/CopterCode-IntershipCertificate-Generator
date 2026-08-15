@@ -307,6 +307,11 @@ def get_or_create_html_template(template_pptx_path: str, cert_type: str) -> str:
         l_in = shape.left.inches if hasattr(shape, "left") else 0
         t_in = shape.top.inches if hasattr(shape, "top") else 0
         
+        # Check if it's a tiny manually drawn bullet shape first!
+        if w_in < 0.15 and h_in < 0.15 and 0.2 <= l_in <= 1.5 and 2.2 <= t_in <= 9.0:
+            shapes_to_clear.append(shape)
+            continue
+            
         # If it's a group shape, extract its dynamic children
         if shape.shape_type == 6:
             if 0.5 <= t_in <= 11.0:
@@ -322,10 +327,6 @@ def get_or_create_html_template(template_pptx_path: str, cert_type: str) -> str:
             
         text = shape.text_frame.text.strip()
         if not text:
-            continue
-            
-        # Only extract if it contains dynamic placeholders (<<...>>, {{...}})
-        if not any(p in text for p in ["<<", ">>", "«", "»", "{{", "}}"]):
             continue
             
         left_in = shape.left.inches
@@ -424,11 +425,20 @@ def get_or_create_html_template(template_pptx_path: str, cert_type: str) -> str:
     with open(layout_json_path, "w", encoding="utf-8") as f:
         json.dump(layout_data, f, indent=2)
         
-    # 2. Clear text runs for background export
+    # 2. Delete cleared shapes from slide for background export so they do not render in the background image
     for shape in shapes_to_clear:
-        for p in shape.text_frame.paragraphs:
-            for r in p.runs:
-                r.text = ""
+        try:
+            shape._element.getparent().remove(shape._element)
+        except Exception:
+            # Fallback to moving off-slide or clearing runs
+            try:
+                from pptx.util import Inches
+                shape.left = Inches(-20)
+            except Exception:
+                if shape.has_text_frame:
+                    for p in shape.text_frame.paragraphs:
+                        for r in p.runs:
+                            r.text = ""
                 
     temp_cleared_pptx = os.path.join(cache_dir, "temp_cleared.pptx")
     prs.save(temp_cleared_pptx)

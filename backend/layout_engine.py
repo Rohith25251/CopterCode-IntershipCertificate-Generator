@@ -222,6 +222,14 @@ class LayoutEngine:
                 
             shape["is_qr"] = False
             
+            # Detect if it should be bulleted (experience template responsibilities text box)
+            is_bullet = False
+            if self.layout.get("template") == "experience":
+                has_placeholders = any(p in text_str for p in ["<<", ">>", "«", "»"])
+                if not has_placeholders and len(shape.get("paragraphs", [])) >= 3 and shape.get("is_flow", True):
+                    is_bullet = True
+            shape["is_bullet"] = is_bullet
+            
             # Resolve placeholders in paragraph and run texts
             resolved_paragraphs = []
             full_text_list = []
@@ -544,12 +552,16 @@ class LayoutEngine:
                     align = p["align"]
                     # Check if paragraph is empty (no runs or all runs have empty text)
                     has_content = any(r.get("resolved_text", "").strip() for r in p.get("resolved_runs", []))
-                    html_parts.append(f"      <p style='text-align: {align};'>")
+                    if shape.get("is_bullet", False):
+                        html_parts.append(f"      <p style='text-align: {align}; padding-left: 0.25in; text-indent: -0.25in;'>")
+                    else:
+                        html_parts.append(f"      <p style='text-align: {align};'>")
                     
                     if not has_content:
                         # Empty paragraph — render non-breaking space so it gets full line-height
                         html_parts.append(f"        <span>&nbsp;</span>")
                     else:
+                        is_first_run = True
                         for r in p["resolved_runs"]:
                             span_style = f"color: {r['color']}; "
                             if r["font_size"] != shape["font_size"]:
@@ -569,6 +581,10 @@ class LayoutEngine:
                             class_str = f"class='{' '.join(classes)}'" if classes else ""
                             text_escaped = r["resolved_text"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br/>")
                             
+                            if shape.get("is_bullet", False) and is_first_run:
+                                text_escaped = "&bull;&nbsp;&nbsp;" + text_escaped
+                                is_first_run = False
+                                
                             html_parts.append(f'        <span {class_str} style="{span_style}">{text_escaped}</span>')
                     
                     html_parts.append("      </p>")
